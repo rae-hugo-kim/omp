@@ -40,8 +40,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const GATES = ['acceptance-gate.mjs', 'backpressure-gate.mjs', 'review-gate.mjs'];
 
 // Each child gets its own ~3s budget (matching the old per-gate timeout) so one slow/hung gate can't
-// starve the others or blow the dispatcher's outer budget; settings.json gives the dispatcher 10s to
-// cover the three sequential runs.
+// starve the others or blow the dispatcher's outer budget; the harness extension (index.ts) gives the
+// dispatcher 10s (COMMIT_GATES_TIMEOUT_MS) to cover the three sequential runs.
 const CHILD_TIMEOUT_MS = 3000;
 
 let blocked = false;

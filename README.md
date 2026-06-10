@@ -119,7 +119,7 @@ kickoff → startdev 흐름에서 자동으로 작동하는 장치들. 게이트
 - **glossary** — 프로젝트 용어 정의 (`docs/glossary.yaml`)
 - 런타임 상태는 `.omp/harness-state/`(gitignored), 게이트 단독 실행·테스트는 `node --test tests/`
 
-Claude Code 원본과 달리, 실패한 bash 검증도 기록됩니다 — OMP는 도구 실패 시에도 `tool_result`(isError)를 발화하므로 원본의 PostToolUseFailure 한계가 해소됐습니다.
+Claude Code 원본과 달리, 실패한 bash 검증도 기록됩니다 — 어댑터가 비정상 종료(`details.exitCode`≠0) 또는 도구 오류(`isError`)인 bash `tool_result`를 failure-tracker로 라우팅해, 원본의 PostToolUseFailure 한계가 해소됐습니다.
 
 ## 하네스 버전 관리
 

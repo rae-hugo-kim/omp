@@ -17,7 +17,7 @@ The following controls are required when harness is available:
    - `write-tracker` — records files written for context-gate so a file created this session can be edited without re-reading (`tool_result`: edit|write|ast_edit)
 3. `acceptance-gate` — blocks commits with unmet acceptance criteria (`tool_call`: bash, via commit-gates)
 4. `backpressure-gate` — blocks commits if build/test/lint failed (`tool_call`: bash, via commit-gates)
-5. `backpressure-tracker` — records build/test/lint successes (`tool_result`: bash, success); `backpressure-failure-tracker` records failures (`tool_result`: bash with `isError`)
+5. `backpressure-tracker` — records build/test/lint successes (`tool_result`: bash, exit 0); `backpressure-failure-tracker` records failures (`tool_result`: bash with `isError` or non-zero `details.exitCode`)
 6. `kickoff-detector` — reminds about kickoff for new work (`before_agent_start`, message injection)
 7. Architect verification — independent completion verification (oh-my-claudecode agent, via OMP's task tool)
 
@@ -57,7 +57,7 @@ Use concrete checks, not assumptions.
 - Files: `.omp/extensions/harness/gates/backpressure-gate.mjs`, `.omp/extensions/harness/gates/backpressure-tracker.mjs`, `.omp/extensions/harness/gates/backpressure-failure-tracker.mjs`
 - Log: `.omp/harness-state/hook-debug.log` (written only when `HARNESS_DEBUG` is set)
 - State: `.omp/harness-state/backpressure-status`, `.omp/harness-state/test-history.json`
-- **Failure recording**: the OMP adapter routes a failed bash `tool_result` (`isError: true`) to `backpressure-failure-tracker`, so failed build/test/lint runs ARE recorded — `backpressure-gate` sees explicit FAIL state, not just absence of recent success. Residual dependence: this relies on OMP setting the `isError` flag for non-zero exit codes; a failing command that still exits 0 (or a runner that swallows the exit code) is recorded as success.
+- **Failure recording**: the OMP adapter routes a failed bash `tool_result` to `backpressure-failure-tracker`, so failed build/test/lint runs ARE recorded — `backpressure-gate` sees explicit FAIL state, not just absence of recent success. Failure means `isError: true` OR non-zero `details.exitCode` (OMP keeps `isError` false for non-zero command exits and reports the code in `details.exitCode`; verified empirically). Residual dependence: a failing command that still exits 0 (a runner that swallows the exit code) is recorded as success.
 
 ### 4) `kickoff-detector`
 

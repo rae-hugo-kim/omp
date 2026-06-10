@@ -139,7 +139,7 @@ MCP 필요 시:
    → [tool_result] backpressure-tracker가 성공 기록
      → backpressure-status = "PASS"
      → test-history.json에 추가
-   → 실패하면 [tool_result, isError] backpressure-failure-tracker가 FAIL 기록
+   → 실패하면 [tool_result, exitCode≠0/isError] backpressure-failure-tracker가 FAIL 기록
 
 2. reviewer 호출 (코드 변경 ≥10줄 or 로직 변경)
    → Pass 1: reviewer 자체 분석 (Opus)

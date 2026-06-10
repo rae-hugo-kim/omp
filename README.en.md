@@ -109,7 +109,7 @@ Mechanisms that operate automatically in the kickoff → startdev flow. Gates ar
 - **glossary** — project terms (`docs/glossary.yaml`)
 - Runtime state lives in `.omp/harness-state/` (gitignored); gates run standalone via `node --test tests/`
 
-Unlike the Claude Code original, failed bash verifications ARE recorded — OMP emits `tool_result` with `isError` on tool failure, resolving the original PostToolUseFailure limitation.
+Unlike the Claude Code original, failed bash verifications ARE recorded — the adapter routes bash `tool_result`s with a non-zero `details.exitCode` (or `isError`) to the failure tracker, resolving the original PostToolUseFailure limitation.
 
 ## Harness Versioning
 

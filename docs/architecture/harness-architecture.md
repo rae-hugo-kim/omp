@@ -107,7 +107,7 @@ flowchart LR
 | **read-tracker** | read (성공) | 열람 파일 경로 기록 | read-log.txt에 append |
 | **write-tracker** | edit\|write\|ast_edit (성공) | 작성/편집 파일 경로 기록 (세션 내 작성 파일 재열람 불필요) | read-log.txt에 append |
 | **backpressure-tracker** | bash (성공) | 빌드/테스트/린트 성공 기록 | backpressure-status, test-history.json |
-| **backpressure-failure-tracker** | bash (실패, `isError`) | 빌드/테스트/린트 실패 기록 | backpressure-status=FAIL, backpressure-last-fail |
+| **backpressure-failure-tracker** | bash (실패: `isError` 또는 `details.exitCode`≠0) | 빌드/테스트/린트 실패 기록 | backpressure-status=FAIL, backpressure-last-fail |
 
 ```mermaid
 flowchart LR
@@ -123,7 +123,7 @@ flowchart LR
     BT -->|append| TH[(test-history.json)]
     BS -.->|공급| BG[backpressure-gate]
 
-    F[bash 실패<br/>isError] --> BFT[backpressure-failure-tracker]
+    F[bash 실패<br/>exitCode 비-0 / isError] --> BFT[backpressure-failure-tracker]
     BFT -->|write FAIL| BS
 ```
 
@@ -208,7 +208,7 @@ sequenceDiagram
 |-----------|--------|------|
 | 미확인 파일 편집 | context-gate + read-tracker | **Hard block** (exit 2) |
 | 미검증 커밋 (빌드/테스트) | backpressure-gate + tracker | **Hard block** (exit 2) |
-| 빌드/테스트 실패 기록 | backpressure-failure-tracker (`tool_result` bash, `isError`) | Tracking (게이트에 FAIL 공급) |
+| 빌드/테스트 실패 기록 | backpressure-failure-tracker (`tool_result` bash, `isError`/`exitCode`≠0) | Tracking (게이트에 FAIL 공급) |
 | 수락 기준 미달 커밋 | acceptance-gate | **Hard block** (exit 2) |
 | 새 작업 시 킥오프 누락 | kickoff-detector | Advisory (non-blocking) |
 | 하네스 버전 드리프트 | harness-version-check | Advisory (non-blocking) |
@@ -237,7 +237,7 @@ flowchart TB
 
     subgraph partial["⚠️ 부분 커버"]
         P1["킥오프 감지 — advisory만<br/>(차단하지 않음)"]
-        P2["backpressure 실패 감지 —<br/>OMP isError 플래그 의존<br/>(exit 0인 실패는 미기록)"]
+        P2["backpressure 실패 감지 —<br/>isError·details.exitCode 의존<br/>(exit 0인 실패는 미기록)"]
     end
 
     subgraph decided["🟦 의도적 미채택 (결정)"]
@@ -255,8 +255,8 @@ flowchart TB
 
 #### G1. 빌드/테스트 실패 기록 — 해소됨 (OMP 포트)
 - **과거 원인**: Claude Code의 `PostToolUse`는 도구가 **성공**했을 때만 트리거되어, 실패한 빌드/테스트가 기록되지 않았다.
-- **현재**: OMP 어댑터가 실패한 bash `tool_result`(`isError: true`)를 `backpressure-failure-tracker`로 라우팅 → `backpressure-status=FAIL` + `backpressure-last-fail` 기록 → 실패 후 커밋이 차단된다.
-- **잔존 의존성**: OMP가 non-zero exit에 `isError`를 세팅하는 것에 의존. 실패해도 exit 0으로 끝나는 명령(러너가 exit code를 삼키는 경우)은 성공으로 기록됨 (§4.2 P2).
+- **현재**: OMP 어댑터가 실패한 bash `tool_result`(`isError: true` 또는 `details.exitCode`≠0)를 `backpressure-failure-tracker`로 라우팅 → `backpressure-status=FAIL` + `backpressure-last-fail` 기록 → 실패 후 커밋이 차단된다.
+- **잔존 의존성**: OMP는 non-zero exit에 `isError`를 세우지 않고 `details.exitCode`로 보고하므로 어댑터는 둘 다 검사한다 (실측 검증됨). 실패해도 exit 0으로 끝나는 명령(러너가 exit code를 삼키는 경우)은 성공으로 기록됨 (§4.2 P2).
 
 #### G2. 서브에이전트 도구 호출 미추적
 - **원인**: OMC가 executor/architect 등 서브에이전트를 생성할 때, 서브에이전트의 Edit/Write는 별도 컨텍스트에서 실행됨.
@@ -305,7 +305,7 @@ graph LR
         E5["before_agent_start"]
         E6["session_start"]
         E10["tool_result<br/>(edit|write|ast_edit)"]
-        E11["tool_result<br/>(bash, isError)"]
+        E11["tool_result<br/>(bash, exitCode≠0/isError)"]
         E12["tool_call<br/>(mcp__*)"]
     end
 
@@ -377,7 +377,7 @@ flowchart LR
 
 | 우선순위 | Gap | 제안 | 복잡도 |
 |----------|-----|------|--------|
-| ~~P0~~ | G1: 실패 미기록 | **해소됨 (OMP 포트)** — 어댑터가 실패 bash `tool_result`(isError)를 backpressure-failure-tracker로 라우팅 (§4.3 G1) | — |
+| ~~P0~~ | G1: 실패 미기록 | **해소됨 (OMP 포트)** — 어댑터가 실패 bash `tool_result`(isError·exitCode≠0)를 backpressure-failure-tracker로 라우팅 (§4.3 G1) | — |
 | **P0** | G6: 시크릿 커밋 방지 | `tool_call`(bash)에 `git add`/`git commit` 시 `.env`, `*credential*`, `*secret*` 패턴 검사 추가 | Low |
 | **P1** | G4: 파괴적 명령 차단 | `tool_call`(bash)에서 `rm -rf`, `git checkout --`, `git clean`, `git reset --hard` 패턴을 차단으로 승격 | Low |
 | **P1** | G3: MCP 게이팅 | `tool_call` 핸들러 `mcp__*` 분기에 scope 검사 연동 (`mcp__supabase*` 등) | Medium |

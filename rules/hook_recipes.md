@@ -27,7 +27,8 @@ An OMP extension is a TypeScript module under `.omp/extensions/` that exports a 
 {
   toolName: "edit" | "write" | "bash" | "read" | ...,
   input: { command?, file_path?, content?, ... },
-  isError?: boolean   // tool_result only: true when the tool failed
+  isError?: boolean,  // tool_result only: true when the TOOL failed — bash reports a non-zero command exit via details.exitCode with isError still false
+  details?: object    // tool_result only: structured result data (e.g. bash details.exitCode)
 }
 ```
 

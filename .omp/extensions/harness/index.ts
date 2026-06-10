@@ -55,6 +55,19 @@ interface ToolCallEvent {
 interface ToolResultEvent extends ToolCallEvent {
 	content?: ContentChunk[];
 	isError?: boolean;
+	details?: { exitCode?: number } & Record<string, unknown>;
+}
+
+/**
+ * OMP's bash tool reports a non-zero command exit as a SUCCESSFUL tool result
+ * (isError stays false) and carries the code in `details.exitCode` — the field
+ * is absent entirely on exit 0. Treat either signal as a failed run so failing
+ * verifications route to backpressure-failure-tracker, never to a false PASS.
+ */
+function bashRunFailed(event: ToolResultEvent): boolean {
+	if (event.isError) return true;
+	const exitCode = event.details?.exitCode;
+	return typeof exitCode === "number" && exitCode !== 0;
 }
 
 interface ToolCallBlock {
@@ -167,12 +180,16 @@ function editTargets(toolName: string, input: Record<string, unknown> | undefine
 		return typeof path === "string" && path ? [resolve(cwd, path)] : [];
 	}
 	if (toolName === "edit") {
+		const targets = new Set<string>();
+		// Direct path field (find/replace-style edit tools)...
+		const direct = input.path ?? input.file_path ?? input.filePath;
+		if (typeof direct === "string" && direct) targets.add(resolve(cwd, direct));
+		// ...and hashline patch headers `[path#TAG]` (hashline-style edit tools).
 		const patch = typeof input.input === "string" ? input.input : "";
-		const targets: string[] = [];
 		for (const match of patch.matchAll(HASHLINE_HEADER)) {
-			targets.push(resolve(cwd, match[1]));
+			targets.add(resolve(cwd, match[1]));
 		}
-		return targets;
+		return [...targets];
 	}
 	if (toolName === "ast_edit") {
 		const paths = Array.isArray(input.paths) ? input.paths : [];
@@ -267,7 +284,7 @@ export default function harness(pi: HarnessExtensionApi): void {
 				const command = String(event.input?.command ?? "");
 				if (!command) return;
 				const payload: GatePayload = { tool_name: "Bash", tool_input: { command }, session_state };
-				const tracker = event.isError ? "backpressure-failure-tracker.mjs" : "backpressure-tracker.mjs";
+				const tracker = bashRunFailed(event) ? "backpressure-failure-tracker.mjs" : "backpressure-tracker.mjs";
 				await runGate(tracker, payload);
 				return;
 			}
