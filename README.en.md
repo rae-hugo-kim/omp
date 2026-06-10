@@ -1,0 +1,185 @@
+**[한국어](README.md)**
+
+# omp — OMP Harness Template
+
+A policy framework that makes the OMP (Oh My Pi) coding agent behave consistently and safely.
+
+Copy this repository and you get rules, checklists, skills, and gates (extension) as one set.
+Delete what you don't need; adapt the rest to your project.
+
+> This template is the OMP-native port of the Claude Code harness template (`claude`, harness/2026.49).
+> Gate logic is identical; only the wiring moved from Claude Code hooks (settings.json) to an OMP extension.
+
+## Requirements
+
+- [OMP (Oh My Pi)](https://github.com/oh-my-pi) — the coding agent harness
+- Node.js — gates are spawned with `node` (must be on PATH)
+- (Optional) oh-my-claudecode — if installed under `~/.claude`, OMP auto-discovers OMC agents/skills
+
+## Getting Started
+
+### 1. Environment setup (once per machine)
+
+```
+/skill:bootstrap
+```
+
+Installs MCP servers (registered in OMP's MCP config) and docs viewer tooling (mdBook + mdbook-mermaid + mmdc).
+
+### 2. Create a project
+
+```
+/skill:init my-project          # public
+/skill:init my-project --private # private
+```
+
+Creates a new GitHub repository based on this template.
+
+### 3. Start developing
+
+```
+/skill:brainstorm  →  (optional) divergent thinking; captures auto-saved to docs/brainstorming/
+/skill:kickoff     →  define scope (goals, constraints, acceptance criteria)
+/skill:startdev    →  TDD-based implementation
+/skill:compr       →  create a PR
+```
+
+Skills also trigger from natural language ("let's kick off", "brainstorm this", ...).
+
+## Structure
+
+```
+.
+├── AGENTS.md              agent policy entry point (auto-loaded by OMP)
+├── rules/                 behavior rules (one file per rule, INDEX.md lists all)
+├── checklists/            task checklists
+├── templates/             reusable templates
+├── .omp/
+│   ├── skills/            skill definitions (OMP-native discovery, 12 skills)
+│   ├── agents/            reviewer / verifier agents (delegated via the task tool)
+│   └── extensions/harness/
+│       ├── index.ts       gate-wiring extension (tool_call/tool_result/before_agent_start/session_start)
+│       ├── gates/         gate scripts — stdin JSON CLIs, covered by tests/
+│       └── harness-meta.json  harness version metadata
+├── tests/                 gate unit tests (node --test)
+├── docs/                  mdBook sources + harness runtime files (seed.yaml, ...)
+├── book.toml              mdBook config (mermaid preprocessor)
+├── scripts/               docs build / drift audit / version management
+└── claudedocs/            reference docs (incl. Claude Code era history)
+```
+
+## Skills
+
+In OMP, invoke skills as `/skill:<name>` or trigger them with natural language matching their descriptions.
+
+| Command | What it does |
+|---------|--------------|
+| `/skill:bootstrap` | Set up dev environment (MCP servers + docs tooling) |
+| `/skill:init <name>` | Create a new project from this template |
+| `/skill:brainstorm [topic]` | Divergent thinking mode; verbatim capture to `docs/brainstorming/` |
+| `/skill:kickoff` | Define goals, constraints, acceptance criteria |
+| `/skill:startdev` | Start TDD implementation from seed.yaml |
+| `/skill:sum` | Summarize current session to `docs/sum/` |
+| `/skill:compr` | Branch → commit → push → PR |
+| `/skill:compush` | Commit → push (no PR) |
+| `/skill:receiving-code-review` | Verify and apply received review feedback |
+| `/skill:harness-check` | Harness version drift check + remote sync (`--audit` for quality score) |
+| `/skill:design-mockup` | Generate a single-file HTML mockup with tunable sliders/knobs |
+| `/skill:grepai-search` | Semantic code search (cold-start exploration) |
+
+## Harness
+
+Mechanisms that operate automatically in the kickoff → startdev flow. Gates are stdin-JSON CLI scripts in `.omp/extensions/harness/gates/` (17), wired to events by the OMP extension `index.ts`:
+
+| OMP event | Gate | Role |
+|-----------|------|------|
+| `tool_call` (edit/write/ast_edit) | context-gate | Block edits to unread files |
+| `tool_call` (bash) | destructive-guard | Warn on dangerous commands (rm -rf, force push, ...) |
+| `tool_call` (bash, on commit) | commit-gates → acceptance/backpressure/review | Block commits with unmet AC, failed verification, or unreviewed high risk |
+| `tool_call` (mcp__*) | mcp-gate | Warn on destructive MCP calls |
+| `tool_result` (read) | read-tracker | Record files read |
+| `tool_result` (edit/write success) | write-tracker + backpressure-invalidator | Record written files; invalidate verification state on code edits |
+| `tool_result` (bash) | backpressure-tracker / failure-tracker | Record verification PASS/FAIL |
+| `before_agent_start` | kickoff-detector | Inject kickoff reminder when new work is detected |
+| `session_start` | harness-version-check | Remote harness drift notice (24h cache) |
+
+- **seed.yaml** — structured kickoff output (goals, constraints, AC, risks)
+- **rubric** — 4-dimension clarity gate (HIGH/MED/LOW)
+- **audit log** — event tracking (append-only JSONL)
+- **glossary** — project terms (`docs/glossary.yaml`)
+- Runtime state lives in `.omp/harness-state/` (gitignored); gates run standalone via `node --test tests/`
+
+Unlike the Claude Code original, failed bash verifications ARE recorded — OMP emits `tool_result` with `isError` on tool failure, resolving the original PostToolUseFailure limitation.
+
+## Harness Versioning
+
+This repository is the **harness source** other OMP projects sync from.
+
+### This repo (source) — version bump (deliberate, once)
+
+```bash
+bash scripts/harness-version-bump.sh --dry-run   # preview what bumps to .N+1
+bash scripts/harness-version-bump.sh             # one bump + tag for changes since the last harness/* tag
+git push --follow-tags
+```
+
+### Other projects (consumers) — `/skill:harness-check`
+
+Projects created via `/skill:init` get a `session_start` gate that checks remote harness tags every 24h. To sync explicitly:
+
+```bash
+/skill:harness-check              # overwrite-sync to latest harness/* tag
+/skill:harness-check --dry-run    # preview changed paths only
+/skill:harness-check --audit      # 7-category (0-70) quality score after sync
+```
+
+`--audit` runs `scripts/harness-audit.sh` (rubric v3); on version bumps results accumulate in `.omp/state/harness-scores.jsonl`.
+
+## Docs Viewer (mdBook)
+
+```bash
+bash scripts/docs-build.sh   # build static site to book/ + Mermaid syntax validation (mmdc)
+mdbook serve                 # http://127.0.0.1:3000 hot reload
+```
+
+- Writing standard: [`rules/doc_standards.md`](rules/doc_standards.md)
+- One-off human-facing HTML goes to `artifacts/` (gitignored except READMEs)
+- `docs/brainstorming/`, `docs/sum/`, `docs/reviews/` are local-only archives
+
+## How It Works Under OMP
+
+| Layer | Mechanism |
+|-------|-----------|
+| `AGENTS.md` | Auto-loaded by OMP as a context file (when cwd is this repo) |
+| `rules/` etc. | Linked from AGENTS.md — agent opens them on demand via `read` |
+| `.omp/skills/` | OMP-native skill discovery (priority 100 — wins over same-named OMC skills) |
+| `.omp/agents/` | Discovered as task-tool delegation targets |
+| `.omp/extensions/harness/` | Extension auto-loaded at startup — wires the gates |
+| `.omp/harness-state/` | Gate runtime state (gitignored) |
+
+Claude Code's `settings.json` hook registration is not interpreted by OMP, so this template has none — the same gates are wired by a single extension.
+
+## Rule Customization
+
+Each file under `rules/` is an independent rule.
+Delete what you don't need — the rest keeps working.
+
+| Category | Rules |
+|----------|-------|
+| **Safety** | safety_security, agent_security, anti_hallucination, repo_command_discovery |
+| **Quality** | coding_standards, verification_tests_and_evals, change_control, tdd_policy, code_review_policy, quality_gates |
+| **Tools** | mcp_policy, context7_policy, hook_recipes |
+| **Process** | assetization, commit_and_pr, harness_integration_contract |
+| **Docs** | documentation_policy, doc_standards |
+| **Ops** | context_management, session_persistence, cost_awareness, learning_policy |
+
+## Core Principles
+
+1. **Think before coding** — state assumptions; ask when uncertain
+2. **Simplicity first** — implement only what was asked; no over-engineering
+3. **Surgical changes** — touch only related code; keep existing style
+4. **Goal-driven execution** — turn vague requests into verifiable goals
+
+## License
+
+Check the repository license.

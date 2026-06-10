@@ -1,0 +1,199 @@
+**[English](README.en.md)**
+
+# omp — OMP 하네스 템플릿
+
+OMP(Oh My Pi) 코딩 에이전트가 일관되고 안전하게 동작하도록 만드는 정책 프레임워크입니다.
+
+이 저장소를 복사하면 규칙, 체크리스트, 스킬, 게이트(확장)가 한 세트로 적용됩니다.
+필요 없는 건 지우고, 프로젝트에 맞게 고쳐 쓰세요.
+
+> 이 템플릿은 Claude Code용 하네스 템플릿(`claude`, harness/2026.49)을 OMP 네이티브로 포팅한 것입니다.
+> 게이트 로직은 동일하고, 배선만 Claude Code 훅(settings.json)에서 OMP 확장으로 교체됐습니다.
+
+## 필요한 것
+
+- [OMP (Oh My Pi)](https://github.com/oh-my-pi) — 코딩 에이전트 하네스
+- Node.js — 게이트 스크립트 실행용 (`node`가 PATH에 있어야 함)
+- (선택) oh-my-claudecode — `~/.claude`에 설치돼 있으면 OMP가 OMC 에이전트/스킬을 자동 발견
+
+## 시작하기
+
+### 1. 환경 구축 (머신당 1회)
+
+```
+/skill:bootstrap
+```
+
+MCP 서버(OMP 설정에 등록), docs 뷰어 도구(mdBook + mdbook-mermaid + mmdc)를 설치합니다.
+
+### 2. 프로젝트 생성
+
+```
+/skill:init my-project          # public
+/skill:init my-project --private # private
+```
+
+이 템플릿을 기반으로 새 GitHub 저장소를 만듭니다.
+
+### 3. 개발 시작
+
+```
+/skill:brainstorm  →  (선택) 사고 발산, 캡처는 docs/brainstorming/에 자동 저장
+/skill:kickoff     →  스코프 정의 (목표, 제약, 수락 기준) — brainstorm 캡처 있으면 자동 인식
+/skill:startdev    →  TDD 기반 구현
+/skill:compr       →  PR 생성
+```
+
+스킬은 자연어로도 트리거됩니다 ("킥오프 하자", "브레인스토밍" 등).
+
+## 구조
+
+```
+.
+├── AGENTS.md              에이전트 정책 진입점 (OMP가 자동 로드)
+├── rules/                 행동 규칙
+│   ├── safety_security    안전/보안
+│   ├── anti_hallucination 증거 기반 동작
+│   ├── change_control     최소 변경 원칙
+│   ├── tdd_policy         RED → GREEN → TIDY
+│   ├── doc_standards      마크다운 SST + Mermaid 표준
+│   ├── ...                각 파일에 한 줄 설명 포함
+│   └── INDEX.md           전체 목록
+├── checklists/            작업별 체크리스트
+├── templates/             재사용 템플릿
+├── .omp/
+│   ├── skills/            스킬 정의 (OMP 네이티브 발견, 12개)
+│   ├── agents/            reviewer / verifier 에이전트 (task 도구로 위임)
+│   └── extensions/harness/
+│       ├── index.ts       게이트 배선 확장 (tool_call/tool_result/before_agent_start/session_start)
+│       ├── gates/         게이트 스크립트 — stdin JSON CLI, 테스트로 커버됨
+│       └── harness-meta.json  하네스 버전 메타
+├── tests/                 게이트 단위 테스트 (node --test)
+├── docs/
+│   ├── SUMMARY.md         mdBook 뷰어 인덱스
+│   ├── brainstorming/     발산 캡처 (gitignored)
+│   └── harness/           하네스 런타임 파일 (seed.yaml 등)
+├── book.toml              mdBook 설정 (mermaid preprocessor)
+├── scripts/               docs 빌드/드리프트 감사/버전 관리
+└── claudedocs/            참조 문서 (Claude Code 시절 이력 포함)
+```
+
+## 스킬
+
+OMP에서 스킬은 `/skill:<이름>`으로 호출하거나, 설명에 매칭되는 자연어 요청으로 자동 발동됩니다.
+
+| 명령어 | 하는 일 |
+|--------|---------|
+| `/skill:bootstrap` | 개발 환경 구축 (MCP 서버 + docs 도구) |
+| `/skill:init <name>` | 이 템플릿에서 새 프로젝트 생성 |
+| `/skill:brainstorm [주제]` | 사고 발산 모드. `docs/brainstorming/`에 verbatim 캡처 |
+| `/skill:kickoff` | 목표, 제약, 수락 기준 정의 (brainstorm 캡처를 soft context로 활용) |
+| `/skill:startdev` | seed.yaml 기반 TDD 구현 시작 |
+| `/skill:sum` | 현재 세션을 `docs/sum/`에 요약 저장 |
+| `/skill:compr` | 브랜치 → 커밋 → 푸시 → PR |
+| `/skill:compush` | 커밋 → 푸시 (PR 없이) |
+| `/skill:receiving-code-review` | 받은 리뷰 의견 검증·반영 |
+| `/skill:harness-check` | 하네스 버전 드리프트 체크 + 원격 sync (`--audit`로 품질 점수) |
+| `/skill:design-mockup` | 슬라이더/노브로 파라미터 튜닝 가능한 단일 HTML mockup 생성 |
+| `/skill:grepai-search` | 의미 기반 코드 검색 (콜드스타트 탐색) |
+
+## 하네스
+
+kickoff → startdev 흐름에서 자동으로 작동하는 장치들. 게이트는 `.omp/extensions/harness/gates/` (17)의 stdin-JSON CLI 스크립트이고, OMP 확장 `index.ts`가 이벤트에 배선합니다:
+
+| OMP 이벤트 | 게이트 | 역할 |
+|-----------|--------|------|
+| `tool_call` (edit/write/ast_edit) | context-gate | 읽지 않은 파일 수정 차단 |
+| `tool_call` (bash) | destructive-guard | 위험 명령(rm -rf, 강제 푸시 등) 경고 |
+| `tool_call` (bash, 커밋 시) | commit-gates → acceptance/backpressure/review | 수락 기준 미충족·검증 실패·고위험 무리뷰 커밋 차단 |
+| `tool_call` (mcp__*) | mcp-gate | 파괴적 MCP 호출 경고 |
+| `tool_result` (read) | read-tracker | 읽은 파일 기록 |
+| `tool_result` (edit/write 성공) | write-tracker + backpressure-invalidator | 작성 파일 기록, 코드 수정 시 검증 상태 무효화 |
+| `tool_result` (bash) | backpressure-tracker / failure-tracker | 검증 명령 PASS/FAIL 기록 |
+| `before_agent_start` | kickoff-detector | 새 작업 감지 시 킥오프 리마인더 주입 |
+| `session_start` | harness-version-check | 원격 하네스 드리프트 알림 (24h 캐시) |
+
+- **seed.yaml** — 킥오프 결과를 구조화 (목표, 제약, 수락 기준, 리스크)
+- **rubric** — 4차원 명확도 게이트 (HIGH/MED/LOW)
+- **audit log** — 이벤트 추적 (append-only JSONL)
+- **glossary** — 프로젝트 용어 정의 (`docs/glossary.yaml`)
+- 런타임 상태는 `.omp/harness-state/`(gitignored), 게이트 단독 실행·테스트는 `node --test tests/`
+
+Claude Code 원본과 달리, 실패한 bash 검증도 기록됩니다 — OMP는 도구 실패 시에도 `tool_result`(isError)를 발화하므로 원본의 PostToolUseFailure 한계가 해소됐습니다.
+
+## 하네스 버전 관리
+
+이 저장소는 다른 OMP 프로젝트들이 동기화 대상으로 삼는 **하네스 원본**입니다.
+
+### 이 저장소 (source) — 버전 bump (의도적 1회)
+
+`rules/`, `checklists/`, `.omp/`, `AGENTS.md`, `scripts/harness-*.sh`, `templates/` 등 하네스 자산 변경이 main에 머지되면, **머지 후 한 번** 버전을 올립니다:
+
+```bash
+bash scripts/harness-version-bump.sh --dry-run   # 무엇이 .N+1로 올라갈지 미리 보기
+bash scripts/harness-version-bump.sh             # 마지막 harness/* 태그 이후 변경분에 대해 1회 bump + 태그
+git push --follow-tags
+```
+
+### 다른 프로젝트 (consumer) — `/skill:harness-check`
+
+`/skill:init`으로 만든 프로젝트는 `session_start` 게이트가 24시간마다 원격 하네스 태그를 확인하고 드리프트가 있으면 알립니다. 명시적으로 동기화하려면:
+
+```bash
+/skill:harness-check              # 최신 harness/* 태그로 덮어쓰기 sync
+/skill:harness-check --dry-run    # 변경될 경로만 미리 보기
+/skill:harness-check --audit      # sync 후 7-카테고리(0~70) 품질 점수 출력
+```
+
+`--audit`은 `scripts/harness-audit.sh`(rubric v3)를 호출하며, 버전 bump 시 결과가 `.omp/state/harness-scores.jsonl`에 누적됩니다.
+
+## Docs 뷰어 (mdBook)
+
+마크다운(SST)을 사람 친화적 HTML로 렌더링하는 로컬 뷰어.
+
+```bash
+bash scripts/docs-build.sh   # book/에 정적 사이트 빌드 + Mermaid syntax 검증 (mmdc)
+mdbook serve                 # http://127.0.0.1:3000 hot reload
+```
+
+- 작성 표준: [`rules/doc_standards.md`](rules/doc_standards.md)
+- 1회성 사람용 HTML은 `artifacts/`로 (gitignored, README 제외)
+- `docs/brainstorming/`, `docs/sum/`, `docs/reviews/`는 로컬 전용 아카이브
+
+## OMP에서의 동작 방식
+
+| 레이어 | 메커니즘 |
+|--------|----------|
+| `AGENTS.md` | OMP가 컨텍스트 파일로 자동 로드 (cwd가 이 레포일 때) |
+| `rules/` 등 | AGENTS.md에서 링크 — 에이전트가 필요 시 `read`로 열람 |
+| `.omp/skills/` | OMP 네이티브 스킬 발견 (우선순위 100 — 동명 OMC 스킬보다 우선) |
+| `.omp/agents/` | task 도구의 위임 대상으로 발견 |
+| `.omp/extensions/harness/` | 시작 시 자동 로드되는 확장 — 게이트 배선 |
+| `.omp/harness-state/` | 게이트 런타임 상태 (gitignored) |
+
+Claude Code의 `settings.json` 훅 등록은 OMP에서 해석되지 않으므로 이 템플릿에는 존재하지 않습니다 — 같은 게이트가 확장 한 개로 배선됩니다.
+
+## 규칙 커스터마이징
+
+`rules/` 아래 각 파일이 독립된 규칙입니다.
+필요 없는 파일은 삭제하세요 — 나머지는 그대로 동작합니다.
+
+| 분류 | 포함 규칙 |
+|------|----------|
+| **안전** | safety_security, agent_security, anti_hallucination, repo_command_discovery |
+| **품질** | coding_standards, verification_tests_and_evals, change_control, tdd_policy, code_review_policy, quality_gates |
+| **도구** | mcp_policy, context7_policy, hook_recipes |
+| **프로세스** | assetization, commit_and_pr, harness_integration_contract |
+| **문서** | documentation_policy, doc_standards |
+| **운영** | context_management, session_persistence, cost_awareness, learning_policy |
+
+## 핵심 원칙
+
+1. **코딩 전에 생각하기** — 가정을 명시하고, 불확실하면 질문
+2. **단순함 우선** — 요청된 것만 구현, 과도한 설계 금지
+3. **외과적 변경** — 관련 코드만 수정, 기존 스타일 유지
+4. **목표 중심 실행** — 모호한 요청을 검증 가능한 목표로 전환
+
+## 라이선스
+
+저장소 라이선스를 확인하세요.

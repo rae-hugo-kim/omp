@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# pre-push: run docs-drift and block the push on FAIL-severity issues
+# (broken markdown links, a reference doc that claims status:synced while its
+# stamped hash lags AGENTS.md, or a wired gate whose file is missing).
+# WARNING-severity issues — e.g. a genuinely orphaned gate — do NOT block.
+#
+# Both this hook and scripts/docs-drift are source-repo-only: harness-sync ships
+# .githooks/post-commit but not this pre-push, and docs-drift is not on the sync
+# whitelist either. The [[ -f ]] guard below additionally makes it a clean no-op
+# if the script is ever absent. Emergency bypass: git push --no-verify.
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+drift="$repo_root/scripts/docs-drift"
+
+if [[ -f "$drift" ]]; then
+  if ! node "$drift"; then
+    {
+      echo ""
+      echo "pre-push blocked: docs-drift reported FAIL-severity issues (above)."
+      echo "Re-sync and re-stamp the reference docs (or mark them status: stale),"
+      echo "fix any broken links, then retry. Emergency bypass: git push --no-verify."
+    } >&2
+    exit 1
+  fi
+fi
+exit 0
