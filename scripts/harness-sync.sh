@@ -130,6 +130,18 @@ if [[ $DRY_RUN -eq 1 ]]; then
   exit 0
 fi
 
+# --- 5.6 Capture bootstrapped_at BEFORE the copy overwrites META_FILE ---
+# Step 6 replaces .omp/extensions/harness/ wholesale, and META_FILE lives
+# inside it. The source repo's meta has no bootstrapped_at (source self-skips
+# sync), so reading after the copy always hits the date fallback and resets
+# the first-registration timestamp on every sync.
+bootstrapped_at=""
+if [[ -f "$META_FILE" ]]; then
+  bootstrapped_at=$(grep -o '"bootstrapped_at"[[:space:]]*:[[:space:]]*"[^"]*"' "$META_FILE" \
+    | sed 's/.*"bootstrapped_at"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
+fi
+[[ -z "$bootstrapped_at" ]] && bootstrapped_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
 # --- 6. Copy (remote wins) ---
 for p in "${PATHS[@]}"; do
   [[ -e "$tmp/$p" ]] || continue
@@ -142,13 +154,7 @@ for p in "${PATHS[@]}"; do
   fi
 done
 
-# --- 7. Rewrite harness-meta.json (preserve bootstrapped_at) ---
-bootstrapped_at=""
-if [[ -f "$META_FILE" ]]; then
-  bootstrapped_at=$(grep -o '"bootstrapped_at"[[:space:]]*:[[:space:]]*"[^"]*"' "$META_FILE" \
-    | sed 's/.*"bootstrapped_at"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)
-fi
-[[ -z "$bootstrapped_at" ]] && bootstrapped_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+# --- 7. Rewrite harness-meta.json (bootstrapped_at captured in step 5.6) ---
 
 src_desc=$(grep -o '"description"[[:space:]]*:[[:space:]]*"[^"]*"' "$tmp/.omp/extensions/harness/harness-meta.json" \
   | sed 's/.*"description"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || echo "")
