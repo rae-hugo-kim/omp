@@ -114,6 +114,7 @@ PATHS=(
   ".omp/skills/brainstorm"
   ".omp/skills/design-mockup"
   ".omp/skills/grepai-search"
+  ".omp/agents"
 )
 
 if [[ $DRY_RUN -eq 1 ]]; then
