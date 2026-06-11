@@ -7,8 +7,22 @@ OMP(Oh My Pi) 코딩 에이전트가 일관되고 안전하게 동작하도록 �
 이 저장소를 복사하면 규칙, 체크리스트, 스킬, 게이트(확장)가 한 세트로 적용됩니다.
 필요 없는 건 지우고, 프로젝트에 맞게 고쳐 쓰세요.
 
-> 이 템플릿은 Claude Code용 하네스 템플릿(`claude`, harness/2026.49)을 OMP 네이티브로 포팅한 것입니다.
-> 게이트 로직은 동일하고, 배선만 Claude Code 훅(settings.json)에서 OMP 확장으로 교체됐습니다.
+## 포팅 고지 (Porting Notice)
+
+이 저장소는 Claude Code용 하네스 템플릿 **`rae-hugo-kim/claude`** (harness/2026.49)를 **OMP 네이티브로 포팅**한 것입니다 (2026-06-10).
+
+| | 원본 (Claude Code) | 이 저장소 (OMP) |
+|---|---|---|
+| 정책 진입점 | `CLAUDE.md` | `AGENTS.md` |
+| 게이트 배선 | `.claude/settings.json` 훅 등록 11종 | `.omp/extensions/harness/index.ts` 확장 1개 |
+| 게이트 스크립트 | `.claude/hooks/harness/` | `.omp/extensions/harness/gates/` — **로직 무변경** (테스트 177개 그대로 통과) |
+| 런타임 상태 | `.omc/harness-state/` | `.omp/harness-state/` |
+| 스킬 · 에이전트 | `.claude/skills/`, `.claude/agents/` | `.omp/skills/`, `.omp/agents/` |
+| 훅 이벤트 | PreToolUse / PostToolUse / UserPromptSubmit / SessionStart | `tool_call` / `tool_result` / `before_agent_start` / `session_start` |
+
+원본 대비 개선 1건: 실패한 bash 검증도 FAIL로 기록됩니다 (원본의 PostToolUseFailure 한계 해소 — 아래 [하네스](#하네스) 절 참고).
+
+> **이 저장소는 Claude Code에서 동작하지 않습니다.** Claude Code 훅 등록(settings.json)이 의도적으로 제거되었으므로, Claude Code 사용자는 원본 템플릿을 사용하세요.
 
 ## 필요한 것
 

@@ -7,8 +7,22 @@ A policy framework that makes the OMP (Oh My Pi) coding agent behave consistentl
 Copy this repository and you get rules, checklists, skills, and gates (extension) as one set.
 Delete what you don't need; adapt the rest to your project.
 
-> This template is the OMP-native port of the Claude Code harness template (`claude`, harness/2026.49).
-> Gate logic is identical; only the wiring moved from Claude Code hooks (settings.json) to an OMP extension.
+## Porting Notice
+
+This repository is the **OMP-native port** of the Claude Code harness template **`rae-hugo-kim/claude`** (harness/2026.49), ported on 2026-06-10.
+
+| | Original (Claude Code) | This repo (OMP) |
+|---|---|---|
+| Policy entry point | `CLAUDE.md` | `AGENTS.md` |
+| Gate wiring | 11 hook registrations in `.claude/settings.json` | one extension: `.omp/extensions/harness/index.ts` |
+| Gate scripts | `.claude/hooks/harness/` | `.omp/extensions/harness/gates/` — **logic unchanged** (all 177 tests still pass) |
+| Runtime state | `.omc/harness-state/` | `.omp/harness-state/` |
+| Skills · agents | `.claude/skills/`, `.claude/agents/` | `.omp/skills/`, `.omp/agents/` |
+| Hook events | PreToolUse / PostToolUse / UserPromptSubmit / SessionStart | `tool_call` / `tool_result` / `before_agent_start` / `session_start` |
+
+One improvement over the original: failed bash verifications are recorded as FAIL (resolves the original PostToolUseFailure limitation — see [Harness](#harness) below).
+
+> **This repository does not work under Claude Code.** The Claude Code hook registration (settings.json) was deliberately removed — Claude Code users should use the original template.
 
 ## Requirements
 
