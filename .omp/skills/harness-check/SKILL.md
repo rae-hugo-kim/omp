@@ -52,7 +52,7 @@ The script:
 - Falls back to `git@github.com:rae-hugo-kim/omp.git` if no `source_remote` (unregistered case)
 - Fetches the latest `harness/*` tag from remote
 - Shallow-clones that tag into a temp dir
-- Overwrites whitelist paths (`rules/`, `checklists/`, `templates/`, `AGENTS.md`, `.omp/extensions/harness/`, `.githooks/post-commit`, `scripts/harness-*.sh`, harness skill dirs)
+- Overwrites whitelist paths (`rules/`, `checklists/`, `templates/`, `AGENTS.md`, `.omp/extensions/harness/`, `.omp/agents/`, `.githooks/post-commit`, `scripts/harness-*.sh`, harness skill dirs)
 - Rewrites `harness-meta.json` with new version/SHA + preserved `bootstrapped_at`
 - Clears the `session_start` cache
 

@@ -45,6 +45,7 @@ HARNESS_PATHS=(
   "scripts/harness-audit.sh"
   "scripts/test-harness-audit.sh"
   ".omp/skills/"
+  ".omp/agents/"
 )
 
 # Literal path match (no regex): exact for file entries, prefix for "dir/" entries.
