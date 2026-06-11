@@ -69,7 +69,7 @@ Skills also trigger from natural language ("let's kick off", "brainstorm this", 
 ├── checklists/            task checklists
 ├── templates/             reusable templates
 ├── .omp/
-│   ├── skills/            skill definitions (OMP-native discovery, 12 skills)
+│   ├── skills/            skill definitions (OMP-native discovery, 13 skills)
 │   ├── agents/            reviewer / verifier agents (delegated via the task tool)
 │   └── extensions/harness/
 │       ├── index.ts       gate-wiring extension (tool_call/tool_result/before_agent_start/session_start)
@@ -98,8 +98,20 @@ In OMP, invoke skills as `/skill:<name>` or trigger them with natural language m
 | `/skill:compush` | Commit → push (no PR) |
 | `/skill:receiving-code-review` | Verify and apply received review feedback |
 | `/skill:harness-check` | Harness version drift check + remote sync (`--audit` for quality score) |
+| `/skill:migrate` | Cut over an existing Claude Code project (.claude/CLAUDE.md) to OMP (insurance tag + harness port) |
 | `/skill:design-mockup` | Generate a single-file HTML mockup with tunable sliders/knobs |
 | `/skill:grepai-search` | Semantic code search (cold-start exploration) |
+
+## Migrating an existing Claude Code project
+
+For a project already running on Claude Code (`.claude/` + `CLAUDE.md`), skip the bulk migration — cut it over **once, when you decide to work on it in OMP**:
+
+```
+cd <existing-project>
+/skill:migrate        # or "migrate this to omp"
+```
+
+`migrate` ① drops a `pre-omp-migration` insurance tag first (revert with one line: `git checkout pre-omp-migration -- .claude CLAUDE.md`) → ② ports harness assets via `harness-sync.sh` → ③ removes `.claude/` and `CLAUDE.md`. If the project has custom policy it stops for confirmation before syncing. After migration, update with `/skill:harness-check`.
 
 ## Harness
 

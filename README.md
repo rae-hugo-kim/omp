@@ -76,7 +76,7 @@ MCP 서버(OMP 설정에 등록), docs 뷰어 도구(mdBook + mdbook-mermaid + m
 ├── checklists/            작업별 체크리스트
 ├── templates/             재사용 템플릿
 ├── .omp/
-│   ├── skills/            스킬 정의 (OMP 네이티브 발견, 12개)
+│   ├── skills/            스킬 정의 (OMP 네이티브 발견, 13개)
 │   ├── agents/            reviewer / verifier 에이전트 (task 도구로 위임)
 │   └── extensions/harness/
 │       ├── index.ts       게이트 배선 확장 (tool_call/tool_result/before_agent_start/session_start)
@@ -108,8 +108,20 @@ OMP에서 스킬은 `/skill:<이름>`으로 호출하거나, 설명에 매칭되
 | `/skill:compush` | 커밋 → 푸시 (PR 없이) |
 | `/skill:receiving-code-review` | 받은 리뷰 의견 검증·반영 |
 | `/skill:harness-check` | 하네스 버전 드리프트 체크 + 원격 sync (`--audit`로 품질 점수) |
+| `/skill:migrate` | 기존 Claude Code 프로젝트(.claude/CLAUDE.md)를 OMP로 컷오버 (보험 태그 + 하네스 이식) |
 | `/skill:design-mockup` | 슬라이더/노브로 파라미터 튜닝 가능한 단일 HTML mockup 생성 |
 | `/skill:grepai-search` | 의미 기반 코드 검색 (콜드스타트 탐색) |
+
+## 기존 Claude Code 프로젝트 이주
+
+이미 Claude Code(`.claude/` + `CLAUDE.md`)로 작업하던 프로젝트는, 일괄 이주 대신 **그 프로젝트에서 omp로 작업하고 싶어진 시점에** 1회 컷오버합니다:
+
+```
+cd <기존-프로젝트>
+/skill:migrate        # 또는 "omp로 이주해줘"
+```
+
+`migrate`는 ① `pre-omp-migration` 보험 태그를 먼저 박고(복귀는 `git checkout pre-omp-migration -- .claude CLAUDE.md` 1줄) → ② `harness-sync.sh`로 하네스 자산을 이식 → ③ `.claude/`·`CLAUDE.md`를 제거합니다. 프로젝트 고유 커스텀이 있으면 sync 전에 멈추고 확인을 받습니다. 이주 후 갱신은 `/skill:harness-check`.
 
 ## 하네스
 

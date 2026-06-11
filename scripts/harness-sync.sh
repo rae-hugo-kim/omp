@@ -104,6 +104,7 @@ PATHS=(
   "scripts/test-harness-audit.sh"
   ".omp/skills/bootstrap"
   ".omp/skills/init"
+  ".omp/skills/migrate"
   ".omp/skills/kickoff"
   ".omp/skills/startdev"
   ".omp/skills/sum"
