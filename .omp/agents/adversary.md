@@ -2,6 +2,7 @@
 name: adversary
 description: Heterogeneous-model adversarial code reviewer (GPT family) — independent second-model review pass with severity-rated, file:line-evidenced findings. Read-only.
 model: gpt-5.5
+thinkingLevel: high
 tools: read, bash, grep, find
 ---
 
