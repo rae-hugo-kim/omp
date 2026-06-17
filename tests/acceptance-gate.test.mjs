@@ -31,11 +31,12 @@ function withDir(files, fn) {
   try { return fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 
-function runGate(dir, command = 'git commit -m x') {
+function runGate(dir, command = 'git commit -m x', env = {}) {
   return spawnSync('node', [GATE], {
     input: JSON.stringify({ tool_input: { command }, session_state: { cwd: dir } }),
     cwd: dir,
     encoding: 'utf-8',
+    env: { ...process.env, ...env },
   });
 }
 
@@ -151,5 +152,74 @@ test('commented / indented status does NOT close an active seed (fail-closed)', 
   });
   withDir({ 'seed.yaml': `meta:\n  status: done\nstatus: approved\n${AC_BLOCK}`, 'current-scope.md': UNCHECKED_SCOPE }, (dir) => {
     assert.equal(runGate(dir).status, 2);
+  });
+});
+
+// --- L2 backstop (seed AC6): a CODE change with no active acceptance criteria must not
+// pass silently. Risk is injected via TEST_RISK_LEVEL (test seam); real runs use assessRisk. ---
+
+test('backstop: closed (done) seed + CODE change (no scope) -> BLOCK', () => {
+  withDir({ 'seed.yaml': `status: done\n${AC_BLOCK}` }, (dir) => {
+    const r = runGate(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /HARNESS BACKSTOP/);
+  });
+});
+
+test('backstop: closed seed + DOCS-only change -> allow (no friction)', () => {
+  withDir({ 'seed.yaml': `status: done\n${AC_BLOCK}` }, (dir) => {
+    assert.equal(runGate(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low' }).status, 0);
+  });
+});
+
+test('backstop: closed seed + CODE + `wip:` -> allow (intentional checkpoint)', () => {
+  withDir({ 'seed.yaml': `status: done\n${AC_BLOCK}` }, (dir) => {
+    assert.equal(runGate(dir, 'git commit -m "wip: x"', { TEST_RISK_LEVEL: 'medium' }).status, 0);
+  });
+});
+
+test('backstop: NO seed at all + CODE change -> allow (no tracking intent)', () => {
+  withDir({}, (dir) => {
+    assert.equal(runGate(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'high' }).status, 0);
+  });
+});
+
+test('backstop: approved seed with AC but no current-scope + CODE -> BLOCK', () => {
+  withDir({ 'seed.yaml': `status: approved\n${AC_BLOCK}` }, (dir) => {
+    const r = runGate(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /HARNESS BACKSTOP/);
+  });
+});
+
+test('backstop: unknown risk (cannot assess) -> allow (fail-open)', () => {
+  withDir({ 'seed.yaml': `status: done\n${AC_BLOCK}` }, (dir) => {
+    assert.equal(runGate(dir, 'git commit -m x').status, 0);
+  });
+});
+
+test('backstop: acceptance-done flag overrides before backstop', () => {
+  withDir({ 'seed.yaml': `status: done\n${AC_BLOCK}`, 'acceptance-done': 'x' }, (dir) => {
+    assert.equal(runGate(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'critical' }).status, 0);
+  });
+});
+
+// --- backstop recovery-message branch (finding B): closed seed must not advertise
+// `thread-scope open` (which refuses closed seeds); active-seed paths still do. ---
+
+test('backstop: closed-seed block suggests /kickoff, not thread-scope open', () => {
+  withDir({ 'seed.yaml': `status: done\n${AC_BLOCK}` }, (dir) => {
+    const r = runGate(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /kickoff/);
+    assert.doesNotMatch(r.stderr, /thread-scope/);
+  });
+});
+
+test('backstop: active-seed (no current-scope) block suggests thread-scope open', () => {
+  withDir({ 'seed.yaml': `status: approved\n${AC_BLOCK}` }, (dir) => {
+    const r = runGate(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /thread-scope/);
   });
 });

@@ -6,7 +6,8 @@
 
 import { readFileSync, existsSync, appendFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import { isGitCommit, isWipCommit } from './git-commit-detect.mjs';
+import { isGitCommit, isWipCommit, parseCommitForm } from './git-commit-detect.mjs';
+import { assessRisk } from './risk-assess.mjs';
 
 // Use project-local state directory
 function getStateDir(cwd) {
@@ -61,6 +62,43 @@ const seedPath = isTestMode
   ? process.env.TEST_SEED_FILE
   : join(cwd, 'docs', 'harness', 'seed.yaml');
 
+// L2 backstop (analysis Q6.2 / seed AC6): when a commit reaches a "no active acceptance
+// criteria" allow-path (closed/empty seed, or seed-with-AC but no current-scope), a CODE
+// change must not pass silently — surface it so the iteration (P2) gets a thread-scope.
+// Doc/config-only commits (risk=low) and WIP/override pass unchanged. Risk can't be assessed
+// without git (tests, detached): fail OPEN (unknown -> allow) so the backstop never blocks
+// blindly and the existing active-seed gating is untouched.
+function backstop(reason, opts = {}) {
+  let level;
+  if (process.env.TEST_RISK_LEVEL) {
+    level = process.env.TEST_RISK_LEVEL;        // test seam: deterministic risk without a git repo
+  } else {
+    // Scope risk to the diff the commit actually captures (--cached for plain, HEAD for -a),
+    // not the staged∪unstaged union — unrelated unstaged code must not over-count a docs commit.
+    try { level = assessRisk(cwd, parseCommitForm(command)).level; } catch { level = 'unknown'; }
+  }
+  const codeTouching = level === 'medium' || level === 'high' || level === 'critical';
+  if (!codeTouching) {
+    log(`backstop(${reason}): risk=${level} not code-touching -> allow`);
+    process.exit(0);
+  }
+  if (isWipCommit(command)) {
+    log(`backstop(${reason}): wip marker -> allow`);
+    process.exit(0);
+  }
+  log(`BACKSTOP BLOCK: code change with no active AC (${reason}), risk=${level}`);
+  console.error('HARNESS BACKSTOP: 코드 변경인데 이를 추적할 active acceptance criteria가 없습니다.');
+  console.error(`  reason: ${reason}`);
+  console.error('  반복(P2) 작업이 충실도 추적 없이 커밋되려 합니다. 다음 중 하나:');
+  if (opts.closed) {
+    console.error('  1. /kickoff로 새 seed 시작 (완료된 seed 재개는 미지원 — 새 작업은 새 seed)');
+  } else {
+    console.error('  1. thread-scope 열기: node .omp/extensions/harness/thread-scope.mjs open');
+  }
+  console.error('  2. trivial이면 `wip:` 커밋, 또는 docs/harness/acceptance-done 생성(override)');
+  process.exit(2);
+}
+
 // Check 1: Flag file exists (manual override)
 if (existsSync(flagFilePath)) {
   log('acceptance-done flag exists, allowing (manual override)');
@@ -69,7 +107,9 @@ if (existsSync(flagFilePath)) {
 
 // Check 2: seed.yaml AC existence check
 if (existsSync(seedPath)) {
-  const seedContent = readFileSync(seedPath, 'utf-8');
+  let seedContent;
+  try { seedContent = readFileSync(seedPath, 'utf-8'); }
+  catch { log('seed.yaml read failed (race), allowing'); process.exit(0); }
   // A CLOSED seed carries no ACTIVE acceptance criteria: `done` = the task completed
   // (closeout), `superseded` = replaced by a newer seed. Either way its criteria belong
   // to a finished/obsolete task and must not gate new, unrelated work. (cf. seed_contract.md)
@@ -77,7 +117,7 @@ if (existsSync(seedPath)) {
   const status = statusMatch ? statusMatch[1].toLowerCase() : null;
   if (status === 'done' || status === 'superseded') {
     log(`seed.yaml status=${status} (closed), no active AC, allowing`);
-    process.exit(0);
+    backstop(`closed seed (status:${status})`, { closed: true });
   }
   const hasAC = /^acceptance_criteria:\s*\n\s+-/m.test(seedContent);
   if (hasAC) {
@@ -85,7 +125,7 @@ if (existsSync(seedPath)) {
   } else {
     log('seed.yaml exists but no AC defined, allowing with warning');
     console.error('HARNESS WARNING: seed.yaml has no acceptance_criteria. Run /kickoff to define them.');
-    process.exit(0);
+    backstop('seed has no acceptance_criteria');
   }
 }
 
@@ -94,7 +134,7 @@ if (!existsSync(scopeFilePath)) {
   if (existsSync(seedPath)) {
     log('seed.yaml has AC but no current-scope.md for checkbox tracking, allowing with warning');
     console.error('HARNESS WARNING: AC defined in seed.yaml but no current-scope.md for completion tracking.');
-    process.exit(0);
+    backstop('seed defines AC but no current-scope.md');
   }
   log('No current-scope.md found, allowing with warning');
   console.error('HARNESS WARNING: No scope file. Run /kickoff to define acceptance criteria.');
@@ -102,7 +142,9 @@ if (!existsSync(scopeFilePath)) {
 }
 
 // Read scope file
-const scopeContent = readFileSync(scopeFilePath, 'utf-8');
+let scopeContent;
+try { scopeContent = readFileSync(scopeFilePath, 'utf-8'); }
+catch { log('current-scope.md read failed (race), allowing'); process.exit(0); }
 
 // Extract Acceptance Criteria section
 const acceptanceMatch = scopeContent.match(/## Acceptance Criteria\s*\n([\s\S]*?)(?=\n##|\n*$)/i);
@@ -123,7 +165,7 @@ log(`Checkboxes: total=${checkboxes.length}, checked=${checked.length}, unchecke
 
 if (checkboxes.length === 0) {
   log('No checkboxes defined, allowing');
-  process.exit(0);
+  backstop('current-scope has no acceptance-criteria checkboxes');
 }
 
 if (unchecked.length === 0) {

@@ -1,0 +1,4 @@
+{"ts":"2026-06-17T14:58:52+09:00","event":"seed_superseded","actor":"assistant","meta":{"task_id":"agent-first-docs-pipeline","prior_status":"done","prior_completed":"2026-05-21","reason":"seed slot reused for intent-ingest-fidelity-framework; prior content preserved in git history"}}
+{"ts":"2026-06-17T14:58:52+09:00","event":"kickoff_completed","actor":"assistant","meta":{"topic":"intent-ingest-fidelity-framework","mode":"doc-ingest(dogfood)","ingest_source":"claudedocs/harness-auto-capture-analysis.md"}}
+{"ts":"2026-06-17T14:58:52+09:00","event":"seed_generated","actor":"assistant","meta":{"seed_path":"docs/harness/seed.yaml","status":"draft","version":1,"task_id":"20260617-145852-04c2"}}
+{"ts":"2026-06-17T14:58:52+09:00","event":"rubric_evaluated","actor":"assistant","meta":{"goal":"HIGH","constraints":"HIGH","success":"HIGH","context":"HIGH","coverage":"HIGH","unmapped_residual":0}}
