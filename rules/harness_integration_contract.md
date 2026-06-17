@@ -68,6 +68,7 @@ Use concrete checks, not assumptions.
 
 - Provided by oh-my-claudecode `architect` agent (discovered via OMP's task tool)
 - Not a file gate — invoked via agent delegation
+- **Async delegation**: the `task` spawn is non-blocking — verdicts arrive via async job delivery. Spawning a verification agent (architect/verifier/reviewer) is **not** completion; the main agent MUST receive the verdict before claiming the task done.
 - **Extended by completion-attack gate** (see [`rules/adversarial_review.md`](adversarial_review.md)):
   - architect (기존 역할 유지) + security-reviewer + test-engineer 병렬 실행
   - 불일치 시 critic이 합의 판정
