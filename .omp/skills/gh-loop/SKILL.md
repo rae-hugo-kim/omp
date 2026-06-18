@@ -49,24 +49,27 @@ gh repo view --json nameWithOwner -q .nameWithOwner
    gh issue list --state open --label gh-loop --json number,title,labels,body --limit 100
    ```
    새 repo엔 라벨이 없어 `--label gh-loop` 조회가 곧장 실패하므로 **먼저 보장**한다 (라이브 검증에서 확인된 게이트).
-2. 생성 여부를 **헬퍼**로 판정한다 (gh 호출은 seam, 결정은 테스트된 로직). finding 텍스트는 **변수로** 넘기고 쉘 라인에 직접 보간하지 않는다. `--out`으로 결과를 파일로 받아 **jq 없이**(node만) 소비한다:
+2. 생성 여부를 **헬퍼**로 판정한다 (gh 호출은 seam, 결정은 테스트된 로직). finding 텍스트는 **변수로** 넘기고 쉘 라인에 보간하지 않는다. `--out`은 **호출마다 임시 디렉터리**로 받아(공유 `/tmp/ghloop` 레이스·심링크 회피) **jq 없이**(node만) 소비한다:
    ```bash
+   GHLOOP_OUT=$(mktemp -d); trap 'rm -rf "$GHLOOP_OUT"' EXIT
+   gh issue list --state open --label gh-loop --json number,title,labels,body --limit 100 > "$GHLOOP_OUT/existing.json" \
+     || { echo "gh issue list failed — abort (헬퍼에 손상된 입력 금지)"; exit 1; }
    node .omp/extensions/harness/gh-loop-issue.mjs decide --kind finding \
      --title "$FINDING_TITLE" --body "$FINDING_BODY" --label "$SEV" \
-     --cap 5 --created "$CREATED" --existing-json "$EXISTING_JSON" \
-     --out /tmp/ghloop > /dev/null
-   action=$(cat /tmp/ghloop/action)
+     --cap 5 --created "$CREATED" --existing-json "$(cat "$GHLOOP_OUT/existing.json")" \
+     --out "$GHLOOP_OUT" > /dev/null
+   action=$(cat "$GHLOOP_OUT/action")
    ```
-   - `action == "skip"` → 중복. 기존 이슈에 코멘트만 남기고 종료.
-   - `action == "block"` → 상한 도달(런당 `--created` 또는 열린 루프 이슈 수). 멈추고 사용자에게 보고.
-   - `action == "create"` → payload 파일로 생성한다. **finding 텍스트를 쉘 명령줄에 보간하지 말 것** — `$(...)`·백틱·따옴표가 그대로 실행된다:
+   - `action == "skip"` → 중복. **`$GHLOOP_OUT/dup`(중복 이슈 번호)** 와 `reason`을 읽어 그 이슈에 코멘트만 남기고 종료.
+   - `action == "block"` → `$GHLOOP_OUT/reason` 보고 멈춤 (상한 도달, 또는 **손상된 `--existing-json`** = fail-closed).
+   - `action == "create"` → payload 파일로 생성. **finding 텍스트를 쉘 명령줄에 보간하지 말 것** — `$(...)`·백틱이 그대로 실행된다:
      ```bash
      label_args=()
-     while IFS= read -r l; do label_args+=(--label "$l"); done < /tmp/ghloop/labels
-     gh issue create --title "$(cat /tmp/ghloop/title)" \
-       --body-file /tmp/ghloop/body.md "${label_args[@]}"
+     while IFS= read -r l; do label_args+=(--label "$l"); done < "$GHLOOP_OUT/labels"
+     gh issue create --title "$(cat "$GHLOOP_OUT/title")" \
+       --body-file "$GHLOOP_OUT/body.md" "${label_args[@]}"
      ```
-     `"$(cat …/title)"` 전개 결과는 재스캔되지 않아 finding의 `$(...)`/백틱이 무력화되고, `--body-file`은 본문을 명령줄 밖으로 빼며, 배열 `"${label_args[@]}"`는 각 라벨을 한 인자로 안전 전달한다(공백 라벨 포함). `body.md`엔 dedup 마커가 박혀 다음 런이 같은 finding을 재검출한다.
+     `"$(cat …/title)"` 전개 결과는 재스캔되지 않아 finding의 `$(...)`/백틱이 무력화되고, `--body-file`은 본문을 명령줄 밖으로 빼며, 배열은 각 라벨을 한 인자로 안전 전달한다. `body.md`엔 dedup 마커가 박힌다.
 
 ### Stage 2 — Issue → Fix (재사용, 신규 구현 없음)
 
@@ -87,30 +90,28 @@ PR에 대해 교차검증을 1패스 돌린다 — 결과는 **참고용**이지
 
 판단이 필요하면 (예: 교차검증이 HIGH+ 이슈 제기 / 스키마·API 파괴 변경 / 머지 직전 / 파괴 작업) **자동 진행하지 않는다**:
 
-1. 구조화 질문을 **기존 finding 이슈에 코멘트로** 게시하고 `needs-decision` 라벨을 단다. (독립 결정 이슈가 필요하면 헬퍼 `--kind decision`으로 생성 — `needs-decision` 라벨·마커 자동 부여.) 질문 본문은 **파일로** 써서 보간을 피한다:
+1. 구조화 질문을 **파일**로 작성하고(보간 회피) 끝에 **고유 nonce 마커** `<!-- gh-loop:decision:<nonce> -->`(nonce 예: `$(date +%s)-$RANDOM`)를 붙인다 — 이 마커가 *이 결정점*을 식별해 재개가 stale 댓글을 재사용하지 못하게 한다. 그 뒤 코멘트 게시 + `needs-decision` 라벨:
    ```
    ## Decision needed
-   **Context**: <무엇을, 왜 멈췄는지 — PR/이슈 링크>
+   **Context**: <무엇을/왜 멈췄나 — PR·이슈 링크; 머지 질문이면 현재 PR head SHA도>
    **Question**: <하나의 명확한 질문>
-   **Options**:
-   - A) <…> — tradeoff
-   - B) <…> — tradeoff
+   **Options**: A) … (tradeoff) / B) … (tradeoff)
    **Recommendation**: <기본안 + 근거>
-   <!-- gh-loop:agent -->
+   <!-- gh-loop:decision:<nonce> -->
    ```
    ```bash
    gh issue comment <issue> --body-file /tmp/ghloop-question.md
    gh issue edit <issue> --add-label needs-decision
    ```
-2. **턴을 종료**한다 (option D: 프로세스를 붙잡지 않음). 사용자에게: "이슈 #N에 결정 요청을 남겼습니다. 답을 댓글로 남기신 뒤 `/gh-loop N`으로 재개하세요."
+2. **턴을 종료**한다 (option D: 프로세스 안 붙잡음). 사용자에게: "이슈 #N에 결정 요청을 남겼습니다. 댓글로 답한 뒤 `/gh-loop N`으로 재개하세요."
 
-**재개** (트리거 = `needs-decision` 이슈에 **권한 있는 사람**의 새 댓글. option-A: `issue_comment` webhook; option-D: 수동 핑 / `/gh-loop N`):
-1. `issue://<n>` 로 이슈+댓글을 읽는다 (author 포함).
-2. **권한자(write 권한 이상)의 댓글만** 본다. **에이전트 자신의 댓글은 제외** — 전용 bot 토큰이면 author로, 사용자 PAT 모드면 댓글의 `<!-- gh-loop:agent -->` 마커로 식별해 거른다.
-3. **owner 댓글이 있으면 우선, 없으면 최신 권한자 댓글**을 **LLM으로 해석**한다 — **고정 키워드/`grep` 매칭 금지**. 자연어로 충분하다 (예: `"B, 검증까지 해야지"` → 옵션 B + 검증; `approve|merge` grep이었으면 놓쳤을 결정). 권한자 간 **명시적 이견**이면 자동결정 말고 되묻기(parked). 결정을 memory/이전 계획보다 우선한다.
-4. **모호하면 행동 금지** — 질문·미결정·딴소리면 명확화 댓글을 달고 parked 유지(그 자체가 HITL). 명확한 결정일 때만 진행.
-5. 멱등: 결정당 **1회만** 행동. 행동이 **성공한 뒤** `needs-decision` 제거(`gh issue edit <n> --remove-label needs-decision`); 재라벨 전엔 추가 댓글 무시.
-6. 머지 결정이면: PR별 명시적 인간 승인이 있을 때만 그 지시로 `gh pr merge`. 자율 단계로는 절대 머지하지 않는다.
+**재개** (트리거 = `needs-decision` 이슈에 **권한자(write+)**의 새 댓글. option-A: `issue_comment` webhook; option-D: 수동 핑 / `/gh-loop N`):
+1. `issue://<n>` 로 이슈+댓글(author·createdAt 포함)을 읽는다.
+2. **가장 최근 에이전트 질문 마커**(`<!-- gh-loop:decision:<nonce> -->`)를 찾고, **그 이후에 달린 댓글만** 후보로 본다 — 그 전 댓글은 *이전 결정용 stale*이라 무시. 에이전트 자기 댓글 제외(bot author / `gh-loop:` 마커).
+3. 후보 중 **권한자(write+) 댓글만**; **owner 우선, 없으면 최신**. 권한자 간 **명시적 이견**이면 자동결정 말고 되묻기(parked).
+4. 그 댓글을 **LLM으로 해석**한다 — **고정 키워드/`grep` 금지**. 자연어로 충분(예: `"B, 검증까지 해야지"` → 옵션 B+검증; grep이었으면 놓쳤다). **모호하면 행동 금지** → 명확화 댓글 + parked 유지.
+5. 머지 결정이면: 승인 댓글이 **현재 PR head SHA 이후**여야 하고, **머지 직전 PR head를 다시 읽어** 승인 시점 SHA와 일치할 때만 머지 — `gh pr merge --match-head-commit <approved-sha>`(원자적 head 가드; 그 사이 새 커밋이 들어오면 머지 중단). 자율 단계로는 절대 머지 안 함.
+6. 멱등: 행동 **성공 후** `<!-- gh-loop:acted:<nonce> -->` 기록 + `needs-decision` 제거; acted된 nonce면 재실행 무시. acted/라벨 쓰기가 **실패하면 park**(모호하게 두지 말 것). 재개 시엔 마커뿐 아니라 **실제 상태를 재확인**(PR 이미 머지됨 등)해 멱등 보장 — stateless 마커는 원자적이지 않다(Guard policy 직렬화·멱등 참조).
 
 ## Loop Safety
 
@@ -122,9 +123,10 @@ PR에 대해 교차검증을 1패스 돌린다 — 결과는 **참고용**이지
 
 option-A에서 "권한자 댓글 = 트리거"의 안전 정책:
 - **권한 임계값**: **write 권한 이상**만 루프를 조종할 수 있다 (그 미만 댓글은 무시).
-- **봇 아이덴티티**: 전용 **bot 토큰**으로 식별; PAT 모드면 에이전트 댓글의 `<!-- gh-loop:agent -->` **마커 fallback**으로 자기 댓글 제외.
+- **봇 아이덴티티**: 전용 **bot 토큰**으로 식별; PAT 모드면 에이전트 댓글의 `<!-- gh-loop:* -->` **마커 prefix fallback**으로 자기 댓글 제외.
 - **다중 응답 충돌**: **owner 우선, 없으면 최신** 권한자; 명시적 이견이면 **되묻기**(자동결정 금지).
 - **모호성 에스컬레이션**: 명확화 후에도 미결이면 **무기한 parked** — 자동결정하지 않는다 (선택적 리마인더만).
+- **동시성·멱등 (option-A)**: runner는 **이슈별 concurrency group**으로 직렬화(동시 `issue_comment` 워커 금지)하고 행동은 **멱등**이어야 한다(이미 머지된 PR 재머지=no-op 등). stateless `acted` 마커만으론 원자성이 보장되지 않으므로 직렬화가 1차 방어, 멱등이 2차.
 
 ## Reuse Map (stage → asset → 위치 / provenance)
 

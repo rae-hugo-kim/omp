@@ -20,9 +20,10 @@
 // CLI (for the skill):
 //   node gh-loop-issue.mjs decide --kind finding --title "..." [--body "..."] \
 //        [--label x]... [--cap N] [--created N] [--existing-json '<json array>'] [--out <dir>]
-//   -> prints the decision JSON on stdout (exit 0). With --out, ALSO writes <dir>/{action,title,
-//      body.md,labels} (node-only, NO jq) so the skill reads fields from files. Malformed input ->
-//      a fail-safe {action:"block"} decision (exit 0): the loop degrades to "do nothing", never crashes.
+//   -> prints the decision JSON on stdout (exit 0). With --out, ALSO writes <dir>/{action,title,body.md,
+//      labels,reason,dup} (node-only, NO jq; `action` written LAST so readers never see a half-written set).
+//      A SUPPLIED but unparseable/non-array --existing-json -> fail-CLOSED block (an empty `existing` would
+//      silently disable dedup + the open-count throttle); an OMITTED --existing-json is fine (empty list).
 
 // 32-bit FNV-1a -> 8-char hex. Stable, dependency-free; only needs to be collision-resistant
 // enough to disambiguate finding titles within one repo (not a security hash).
@@ -53,7 +54,7 @@ export function assembleLabels(kind, extra = []) {
   const base = kind === 'decision' ? ['gh-loop', 'needs-decision'] : ['gh-loop'];
   const out = [];
   for (const l of [...base, ...(Array.isArray(extra) ? extra : [])]) {
-    const v = String(l == null ? '' : l).trim();
+    const v = String(l == null ? '' : l).replace(/[\r\n]+/g, ' ').trim();
     if (v && !out.includes(v)) out.push(v);
   }
   return out;
@@ -66,16 +67,20 @@ export function decideIssue({ kind = 'finding', title, body = '', labels = [], e
 
   if (!cleanTitle) return { action: 'block', reason: 'empty title', marker };
 
-  // 1. dedup — marker match (exact, survives human edits) or normalized-title match.
+  // 1. dedup — exact kind-keyed marker (survives human edits) OR same-kind normalized-title match.
+  //    The title fallback is scoped to the SAME kind, else a finding would dedup a decision of equal title.
   const norm = normalizeTitle(cleanTitle);
+  // Kind is determined by the issue's MARKER, never by `needs-decision` (that is a transient STATE the
+  // skill also adds to paused findings — using it as kind would conflate a paused finding with a decision).
+  const existingKind = (e) => (typeof e.body === 'string' && e.body.includes('<!-- gh-loop:decision:')) ? 'decision' : 'finding';
   const dup = (Array.isArray(existing) ? existing : []).find((e) => {
     if (!e) return false;
     if (typeof e.body === 'string' && e.body.includes(marker)) return true;
-    return normalizeTitle(e.title) === norm;
+    return existingKind(e) === k && normalizeTitle(e.title) === norm;
   });
   if (dup) {
     const ref = dup.number != null ? `#${dup.number}` : `"${dup.title}"`;
-    return { action: 'skip', reason: `duplicate of open issue ${ref}`, marker };
+    return { action: 'skip', reason: `duplicate of open issue ${ref}`, marker, dup: dup.number != null ? dup.number : null };
   }
 
   // 2. throttle — block when the per-run create budget (caller-supplied `created`) OR the OBSERVED
@@ -111,7 +116,7 @@ function parseArgs(argv) {
     else if (a === '--label') opts.label.push(argv[++i]);
     else if (a === '--cap') opts.cap = Number(argv[++i]);
     else if (a === '--created') opts.created = Number(argv[++i]);
-    else if (a === '--existing-json') opts.existingJson = argv[++i];
+    else if (a === '--existing-json') { opts.existingJsonSeen = true; opts.existingJson = argv[++i]; }
     else if (a === '--out') opts.out = argv[++i];
   }
   return opts;
@@ -135,9 +140,18 @@ if (isMain) {
   }
   const o = parseArgs(process.argv.slice(2));
   let existing = [];
-  if (o.existingJson) {
-    try { const p = JSON.parse(o.existingJson); if (Array.isArray(p)) existing = p; }
-    catch { /* fail-safe: treat unparseable list as empty -> may re-create, never crash */ }
+  if (o.existingJsonSeen) {
+    let parsed;
+    try { parsed = JSON.parse(o.existingJson); } catch { parsed = undefined; }
+    if (!Array.isArray(parsed)) {
+      // Supplied but invalid -> fail CLOSED. An empty `existing` would silently disable dedup AND the
+      // open-count throttle backstop, so a corrupt/error `gh issue list` must NOT lead to a create.
+      const blocked = { action: 'block', reason: 'invalid --existing-json (supplied but not a JSON array)', marker: '' };
+      if (o.out) { mkdirSync(o.out, { recursive: true }); writeFileSync(join(o.out, 'reason'), `${blocked.reason}\n`); writeFileSync(join(o.out, 'action'), `${blocked.action}\n`); }
+      process.stdout.write(JSON.stringify(blocked));
+      process.exit(0);
+    }
+    existing = parsed;
   }
   const decision = decideIssue({
     kind: o.kind, title: o.title, body: o.body || '', labels: o.label,
@@ -145,14 +159,16 @@ if (isMain) {
     cap: Number.isFinite(o.cap) ? o.cap : Infinity,
   });
   if (o.out) {
-    // Serialize the decision to files so the skill consumes it with zero JSON parsing in shell
-    // (no jq dependency): `--title "$(cat <dir>/title)"`, `--body-file <dir>/body.md`, labels via read.
+    // Serialize the decision to files so the skill consumes it with no shell JSON parsing (no jq).
+    // `action` is written LAST so a reader gating on it never sees a half-written payload set.
     mkdirSync(o.out, { recursive: true });
     const p = decision.payload || {};
-    writeFileSync(join(o.out, 'action'), `${decision.action}\n`);
     writeFileSync(join(o.out, 'title'), `${p.title || ''}\n`);
     writeFileSync(join(o.out, 'body.md'), p.body || '');
     writeFileSync(join(o.out, 'labels'), (p.labels || []).map((l) => `${l}\n`).join(''));
+    writeFileSync(join(o.out, 'reason'), `${decision.reason || ''}\n`);
+    writeFileSync(join(o.out, 'dup'), decision.dup != null ? `${decision.dup}\n` : '');
+    writeFileSync(join(o.out, 'action'), `${decision.action}\n`);
   }
   process.stdout.write(JSON.stringify(decision));
   process.exit(0);
