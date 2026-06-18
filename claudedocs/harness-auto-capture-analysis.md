@@ -483,7 +483,7 @@ P2 thread-goal 복원(current-scope 재생성) + audit provenance/verdict + L2 b
 ### Q10.1 surface된 결정 — closed-seed reopen (정책 충돌)
 - 슬라이스1은 **active(draft/approved) seed 한정**. 사용자 주 시나리오(완료 후 부분추가)는 seed가 `done`이라 backstop은 차단하되 thread-scope는 reopen을 거부.
 - reopen = `done→approved`+version+1 = `seed_evolution_policy.md`("done 종료상태, 재개=새 kickoff")·`closeout_contract.md`와 **충돌하는 terminal-state 변경**. (가)는 "반복은 revise"라 reopen 지지하나, 구체적 terminal-state mutation은 정책 doc 갱신 필요 → 단독 결정 금지, surface.
-- **결정 필요**: closed-seed 반복을 (i) thread-scope가 reopen(정책 doc 갱신) / (ii) 새 kickoff(현 정책 유지) / (iii) 경량 reopen 스킬.
+- **결정: (i) 제자리 편집 채택** (사용자 확정 2026-06-17 — "SSOT는 Single Source of Truth라 여러개면 곤란"). closed-seed 반복 = `thread-scope open`이 제자리 reopen(done→approved, version+1, `completed` 제거, audit `seed_reopened`; 종료 이력은 audit+git 보존). `seed_evolution_policy`·`closeout_contract` 갱신 완료. **slice-2로 SHIPPED** (be5e45c).
 
 ## Q11+. 추가 질문 (사용자 입력 대기)
 - (대기) Q11: …
@@ -493,7 +493,8 @@ P2 thread-goal 복원(current-scope 재생성) + audit provenance/verdict + L2 b
 ## 종합 결정 (보류 — 북극성 확정)
 
 **북극성(Q4)**: 목적 = "포괄적 상위 문서 → 충실 구현 틀". **두 위상(Q5)**: P1 초기화·P2 반복(현재 게이트 0). **동작(설계 v1)**: 입력 2신호 모드 자동결정, coverage 불변식, **P2=자가감지 2층(L1 in-agent + L2 commit backstop) + push→pull 질문-back**(Q6). **아티팩트 역할(Q8)**: `seed`=durable SSOT(체크대상)·`current-scope`=스레드 작업목표·`audit`=provenance/satisfaction 원장(유일 성장; Q7). 갭=P2 스레드 scope 부재(G-scope)+커밋별 provenance/verdict 부재(G-trace). "kickoff 확장"은 P1만 — P2는 신규 자가감지 amend. 빌드 착수 미결(슬라이스1: P2 scope 복원+audit trace+L2 backstop).
-- **슬라이스1 SHIPPED(Q10)**: AC6 L2 backstop + AC4/AC7 thread-scope(active-seed 한정) 구현·테스트(189/189)·dogfood. 남은 결정 = closed-seed reopen 정책(Q10.1).
+- **슬라이스1 SHIPPED** (ece3202): AC6 L2 backstop + AC4/AC7 thread-scope(active-seed). reviewer/verifier PASS, 9 findings 수정, dogfood(게이트 통과 커밋).
+- **슬라이스2 SHIPPED** (be5e45c): closed-seed reopen((i) 제자리 편집) + 정책 doc 갱신. 테스트 194/194. 남은 = 틀 AC1·2·3·5·8·9(후속 슬라이스, task 병렬 적합).
 
 지원 관심사 (북극성 종속):
 - **Q1**: breadcrumb = 틀의 재개/seed 씨앗 보조. 3분할(A=auto-memory, B=breadcrumb, C=내러티브 수동) 유효, 구현 범위 미결.
