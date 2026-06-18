@@ -299,6 +299,21 @@ test('--amend -> fail-closed BLOCK even when a review matches the staged hash', 
   });
 });
 
+test('output-capture redirection `git commit … 2>&1` -> BLOCK with a standalone hint (agent footgun)', () => {
+  withCommitted((dir, git) => {
+    writeFileSync(join(dir, 'src/big.ts'), BIG);
+    git(['add', 'src/big.ts']);
+    // staged diff IS reviewed (matching hash) ...
+    writeReview(dir, `review-${TODAY}-f.md`, `diff-hash: ${diffHash(dir, '--cached')}\nVerdict: PASS\n`);
+    // ... but appending `2>&1` to capture output makes the form unverifiable: an
+    // &-bearing redirection segment-splits the line, so the staged-hash review cannot
+    // vouch for it -> fail closed. The message must point at the standalone-commit fix.
+    const r = runGate(dir, 'git commit -m x 2>&1');
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /unverifiable|standalone/i);
+  });
+});
+
 test('option-abbreviation --inc (=--include) smuggling the index -> BLOCK', () => {
   withCommitted((dir, git) => {
     writeFileSync(join(dir, 'src/big.ts'), BIG);           // staged + reviewed

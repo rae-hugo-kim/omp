@@ -163,7 +163,9 @@ if (hasFail) {
 if (matchedCurrent !== true) {
   const detail = currentHash
     ? 'no review matches the current changes'
-    : 'could not compute the diff hash to verify review coverage';
+    : (form.verifiable
+        ? 'could not compute the diff hash (git/shasum error)'
+        : 'the commit form is unverifiable (an output redirection like `2>&1`, a compound `&&`/`;` line, a pathspec, --amend, or -a with unstaged changes) — run a STANDALONE `git commit` (no trailing `2>&1`/`; …`, no `cd … &&` prefix) so the staged diff can be hashed');
   if (risk.level === 'critical' || risk.level === 'high') {
     log(`BLOCKED: ${detail}`);
     console.error(`HARNESS BLOCK: ${detail}. Re-run reviewer agent, or create docs/harness/review-skip to override.`);
