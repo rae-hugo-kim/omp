@@ -15,3 +15,9 @@
 {"ts":"2026-06-18T17:17:28+09:00","event":"kickoff_completed","actor":"assistant","meta":{"topic":"autonomy-github-hitl-loop","mode":"doc-ingest(real)","ingest_source":"claudedocs/harness-auto-capture-analysis.md#Q2"}}
 {"ts":"2026-06-18T17:17:28+09:00","event":"seed_generated","actor":"assistant","meta":{"seed_path":"docs/harness/seed.yaml","status":"draft","version":1,"task_id":"20260618-171252-5e29"}}
 {"ts":"2026-06-18T17:17:28+09:00","event":"rubric_evaluated","actor":"assistant","meta":{"goal":"HIGH","constraints":"HIGH","success":"HIGH","context":"HIGH","coverage":"HIGH","unmapped_residual":0,"open_decisions":0}}
+{"ts":"2026-06-18T21:29:40+09:00","event":"task_closed","actor":"assistant","meta":{"task_id":"20260618-171252-5e29","name":"autonomy-github-hitl-loop","note":"Q2 PoC shipped + adversarially hardened (5e0bc4b..32fc26a); het-gate A+C (bd04724); v2026.56 pushed"}}
+{"ts":"2026-06-18T21:29:40+09:00","event":"seed_superseded","actor":"assistant","meta":{"task_id":"autonomy-github-hitl-loop","prior_status":"draft-complete","reason":"seed slot reused for autonomy-github-runtime (option-A runtime authoring)"}}
+{"ts":"2026-06-18T21:32:15+09:00","event":"doc_ingested","actor":"assistant","meta":{"path":"claudedocs/harness-auto-capture-analysis.md#Q2.7-3,Q2.9","requirements":6,"mapped":6,"unmapped_residual":0,"out_of_scope":6,"open_decisions":0}}
+{"ts":"2026-06-18T21:32:15+09:00","event":"kickoff_completed","actor":"assistant","meta":{"topic":"autonomy-github-runtime","mode":"doc-ingest","ingest_source":"analysis#Q2.7-3,Q2.9"}}
+{"ts":"2026-06-18T21:32:15+09:00","event":"seed_generated","actor":"assistant","meta":{"seed_path":"docs/harness/seed.yaml","status":"draft","version":1,"task_id":"20260618-212940-642a"}}
+{"ts":"2026-06-18T21:32:15+09:00","event":"rubric_evaluated","actor":"assistant","meta":{"goal":"HIGH","constraints":"HIGH","success":"HIGH","context":"HIGH","coverage":"HIGH","unmapped_residual":0,"open_decisions":0}}

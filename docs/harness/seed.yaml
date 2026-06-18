@@ -1,153 +1,141 @@
-name: autonomy-github-hitl-loop
+name: autonomy-github-runtime
 status: draft
 version: 1
-task_id: "20260618-171252-5e29"
+task_id: "20260618-212940-642a"
 goal: >
-  발견사항→이슈→수정→PR→교차검증→HITL 루프(자율화 Q2)의 **재사용 하네스 자산**을 option-D PoC
-  티어로 저작한다: 단일세션·수동 재호출형 루프 스킬(gh issue create + autopilot/ralph + gh pr create +
-  교차검증 + needs-decision HITL 컨벤션)과 dedup/throttle 헬퍼를 만들고 harness-sync로 전파한다.
-  머지는 절대 자동화하지 않으며(교차검증 advisory, 머지는 인간 승인), 결정점은 이슈에 질문 게시 후
-  세션 종료(stateless-resumable)한다. 저작·배포는 이 템플릿 레포, 실행 런타임은 프로젝트별 GitHub
-  Actions(옵션 A, 검증 후) — 본 PoC의 out_of_scope. (자율화 레이어 Q2)
+  option-A 런타임 저작 — 검증된 gh-loop을 **자율 실행**하는 재사용 하네스 자산: (1) `templates/` 아래
+  GitHub Actions 워크플로 템플릿(issue_comment=resume / issues=start 트리거 → runner 결정 헬퍼 →
+  에이전트 CLI 헤드리스 호출), (2) **테스트가능 runner-decision 헬퍼**(이벤트+권한+라벨 → start/resume/
+  ignore; gh 호출 seam; guard policy의 실행체), (3) runner+secrets 셋업 가이드, (4) 전파 배선. 저작·배포는
+  이 레포; 실제 자율 실행(runner·secrets)은 각 프로젝트 몫(Q2.1 축 분리). self-hosted runner 미설치라
+  **라이브 구동은 out_of_scope** — 로직(헬퍼) 단위테스트 + 워크플로 구조 검증까지. (자율화 Q2 → 옵션 A)
 
 context:
-  source: claudedocs/harness-auto-capture-analysis.md#Q2  # L108-165 = doc-ingest 원본 상위문서
+  source: claudedocs/harness-auto-capture-analysis.md#Q2.7-3,Q2.9   # 옵션 A 승급 + 배포 메커니즘
   date_locked: 2026-06-18
   related_docs:
-    - claudedocs/harness-auto-capture-analysis.md          # Q2.0-Q2.10 결정/근거 SSOT
-    - .omp/skills/compr/SKILL.md                            # gh pr create + closeout 선례(L90)
-    - scripts/harness-sync.sh                               # PATHS 전파 메커니즘(L92-119)
-    - .omp/skills/sum/SKILL.md                              # 스킬 포맷 선례
-
-# 스키마: intent-ingest-fidelity-framework/breadcrumb seed 선례의 richer 스키마(per-AC must/verify/source).
+    - claudedocs/harness-auto-capture-analysis.md          # Q2.7 staging, Q2.9 전파 경로(L167-178)
+    - .omp/skills/gh-loop/SKILL.md                          # 루프 절차 + 확정 guard policy (실행체로 옮김)
+    - .omp/extensions/harness/gh-loop-issue.mjs             # 테스트가능 헬퍼 + gh-seam 선례
+    - scripts/harness-sync.sh                               # templates/ 전파(통째), .github/ 미전파
+    - scripts/harness-version-bump.sh                       # templates/ 변경 = bump 대상
 
 constraints:
-  - 저작·배포만 — PoC는 재사용 자산(스킬/컨벤션/헬퍼)만 만든다; 런타임(GitHub Actions/runner)은 옵션 A로 검증 후(out_of_scope). (Q2.1·Q2.7)
-  - 머지 절대 자동 금지 — 교차검증은 advisory, 머지는 인간 승인 (Q2.5 the crux)
-  - 결정점 → 이슈/댓글에 구조화 질문 + needs-decision 라벨 → 세션 종료(stateless-resumable); 프로세스 블로킹 대기 금지 (Q2.2)
-  - 사용자 이슈 댓글 = 최우선 (CLAUDE.md "user instruction > memory" 정합) (Q2.2)
-  - finding→issue dedup/throttle/라벨 — 폭주·중복 금지 (Q2.5)
-  - 루프 안전 — 반복 한도 + destructive 작업 advisory (Q2.5)
-  - 기존 자산 재사용 — issue→fix→PR→cross-verify는 autopilot/ralph + gh pr create + reviewer·adversary·ccg·codex 배선만, 재구현 금지 (Q2.4)
-  - 신규 스킬은 harness-sync.sh PATHS에 등록해 전파 (Q2.8·Q2.9)
+  - 저작·배포만 — 실제 자율 실행(self-hosted runner + secrets)은 각 프로젝트 인프라 (Q2.1)
+  - 워크플로는 `templates/` 아래 — harness-sync가 통째 전파, `.github/`는 미전파; init/migrate가 **instantiate-once** (force-sync 금지) (Q2.9)
+  - runner 결정 로직은 **테스트가능 헬퍼**로 추출(gh 호출 seam) — gh-loop-issue.mjs 선례; 워크플로 YAML은 얇은 글루
+  - guard policy 실행체 — **write+ 권한 / bot 토큰·`gh-loop:` 마커 자기제외 / owner 우선·이견 parked / 모호 parked** (gh-loop seed에서 확정)
+  - **머지 자동 금지** 불변식 유지 — 워크플로/헬퍼가 `gh pr merge` 자동 실행 안 함
+  - 위험 변경(런타임 로직)은 **연속 이종(codex 포함) 리뷰** 후 커밋 (het-gate 정책)
 
 in_scope:
-  - 루프 스킬 `.omp/skills/gh-loop/SKILL.md` 신설 — finding→issue→fix→PR→cross-verify→HITL 절차(option D)
-  - needs-decision HITL 컨벤션(구조화 질문 포맷 + 라벨 + 종료/재개 + 사용자응답 최우선) — 스킬 내 자체수록
-  - finding→issue 헬퍼(dedup/throttle/라벨 결정 로직, gh 호출은 seam) — 라이브 GitHub 없이 단위테스트
-  - scripts/harness-sync.sh PATHS 등록(전파)
-  - AGENTS.md/README 등 신규 스킬 반영(해당 시)
+  - `templates/<gh-loop-workflow>.yml` — issue_comment(resume)+issues(start) 트리거, guard-gated, 에이전트 CLI 헤드리스 호출
+  - `.omp/extensions/harness/gh-loop-runner.mjs` — 이벤트→action(start/resume/ignore) 결정 + 권한/봇/라벨/모호 가드, gh seam, 단위테스트
+  - runner+secrets 셋업 가이드 (per-project 인프라·결정 명시) — `templates/` README 또는 gh-loop SKILL의 option-A 섹션
+  - 전파 확인: 템플릿 `templates/` 통째 sync, 헬퍼 `.omp/extensions/harness/` 통째 sync; instantiate-once 경로 문서화
+  - AGENTS.md/README 반영(해당 시)
 
 out_of_scope:
-  - 옵션 A 런타임 — `.github/workflows/` + self-hosted runner + issue_comment 트리거(검증 후 별도 seed; Q2.7-3)
-  - Codex CI 이식 — 컴패니언은 현재 로컬 플러그인(Q2.5)
-  - finding 자동 탐지 — breadcrumb/리뷰/린트→이슈 자동(옵션 4; Q2.7-4)
-  - 옵션 B 로컬 데몬/컨트롤플레인 — 레포가 기각한 ecc2 패턴(Q2.3-B)
-  - 라이브 GitHub 이슈/PR 생성 실행 — 이 템플릿 레포엔 `.github/`·runner 부재; 라이브 루프는 실작업 레포 필요(Q2.0·Q3.9)
+  - 라이브 runner 실행 / E2E 자율 구동 — self-hosted runner 미설치(각 프로젝트 인프라; Q3.9)
+  - secrets 프로비저닝(GH 토큰 스코프·모델 API 키) — 각 프로젝트
+  - Codex CI 이식 — 컴패니언 로컬 플러그인(Q2.5 deferred)
+  - finding 자동 탐지(리뷰/린트→이슈) (Q2.7-4)
+  - GitHub-hosted runner — 자율 에이전트+repo write는 self-hosted 권장(선택은 프로젝트)
+  - init/migrate의 instantiate 로직 구현 변경 — 템플릿이 `templates/`에 존재하는 것까지(인스턴스화 훅 신설은 별도)
 
 assumptions:
-  - gh CLI 인증됨(Q3.9 실측: gh 인증 rae-hugo-kim, repo scope) — compr이 `gh pr create` 사용하는 선례
-  - 교차검증 자산 존재 — `.omp/agents/`의 reviewer·verifier(+adversary), ccg/codex 스킬(재사용)
-  - autopilot/ralph + 하네스 게이트가 issue→fix→PR 실행 substrate (이미 있음; Q2.4)
+  - templates/는 harness-sync PATHS·version-bump HARNESS_PATHS에 이미 포함(L35-49) — 신규 PATHS 등록 불필요
+  - 실행 에이전트는 OMP/Claude 계열 CLI 헤드리스(스킬이 `issue://` 등 OMP 리소스 사용) — CLI·auth는 per-project
+  - 권한 확인은 `gh api repos/{repo}/collaborators/{user}/permission`(seam) — 헬퍼는 주입된 권한으로 판정
 
 acceptance_criteria:
-  - id: AC1-loop-skill
-    title: 루프 스킬 신설 (option D 절차)
-    source: "analysis Q2.0·Q2.3-D·Q2.7-2 (L113, L129, L154)"
+  - id: AC1-runner-helper
+    title: 이벤트→action 결정 헬퍼 + 단위테스트
+    source: "analysis Q2.7-3 (L155); gh-loop-issue.mjs 선례"
     must:
-      - "`.omp/skills/gh-loop/SKILL.md` 신설 — finding→issue→fix→PR→cross-verify→HITL 5단계 절차"
-      - 각 단계가 사용하는 자산을 명시 인용(gh issue create / autopilot·ralph / gh pr create / reviewer·adversary·ccg·codex)
-      - 단일세션·수동 재호출(option D); 프로세스 블로킹 대기 없음
+      - "`.omp/extensions/harness/gh-loop-runner.mjs` — 입력(event kind, labels, actor, actor permission, bot-identity/marker) → {action: start|resume|ignore, reason}"
+      - gh/agent 호출은 seam(주입) — 라이브 GitHub 없이 결정 로직 단위테스트
     verify:
-      - SKILL.md frontmatter(name/description) 유효 + 5단계 절차 존재; 기존 스킬 포맷 부합
-  - id: AC2-hitl-convention
-    title: needs-decision HITL 컨벤션 (the crux)
-    source: "analysis Q2.2·Q2.4 (L120-123, L137)"
+      - start(라벨된 새 이슈)·resume(needs-decision 댓글)·ignore(무관/봇자기/권한미달) 단위테스트 통과
+  - id: AC2-workflow-template
+    title: templates/ 워크플로 템플릿
+    source: "analysis Q2.7-3·Q2.9 (L155, L175)"
     must:
-      - 결정점 도달 → 구조화 질문을 이슈/댓글에 게시 + `needs-decision` 라벨 → 세션 종료(stateless-resumable)
-      - 재개 = 다음 이벤트(라벨된 댓글/이슈) → 에이전트가 `issue://` 댓글 read → 최우선 취급
-      - 컨벤션은 스킬에 자체수록(docs/는 harness-sync 미전파 → 스킬이 전파 vehicle)
+      - "`templates/` 아래 워크플로(issue_comment+issues 트리거) — runner 헬퍼 호출 후 에이전트 CLI 헤드리스 실행"
+      - "`.github/`가 아닌 `templates/`에 둠(전파 가능); 인스턴스화는 init/migrate 1회"
     verify:
-      - 스킬에 needs-decision 라벨·질문 포맷·종료/재개·사용자응답-최우선 절차 명시
-  - id: AC3-finding-issue-helper
-    title: finding→issue dedup/throttle 헬퍼
-    source: "analysis Q2.4·Q2.5 (L134, L143)"
+      - YAML 파싱 유효; (actionlint 설치 시) lint 통과; 트리거·가드 단계 존재
+  - id: AC3-guard-executable
+    title: guard policy 실행체화
+    source: ".omp/skills/gh-loop/SKILL.md Guard policy (확정)"
     must:
-      - finding→issue 변환 헬퍼 — dedup(기존 열린 이슈 제목/라벨 대조), throttle(런당 생성 상한), 라벨 부여
-      - gh 호출은 seam(주입 가능) — 라이브 GitHub 없이 결정 로직 단위테스트
+      - write+ 권한 미달 actor 무시 / 봇 자기 댓글 제외(토큰 or `gh-loop:` 마커) / 모호하면 ignore(parked)
+      - 헬퍼가 prose 컨벤션을 실행 코드로 강제
     verify:
-      - dedup(중복 finding→skip)·throttle(상한 초과→block)·라벨 포맷 단위테스트 통과
-  - id: AC4-merge-safety
-    title: 머지 안전 불변식
-    source: "analysis Q2.5 (L142, L146)"
+      - 권한미달→ignore, 봇자기→ignore, 비결정 댓글→ignore 단위테스트
+  - id: AC4-setup-guide
+    title: runner+secrets 셋업 가이드
+    source: "analysis Q2.1·Q2.7-3 (per-project 인프라)"
     must:
-      - 머지 자동 금지 — 교차검증 advisory, 머지는 인간 승인(스킬에 명시 불변식)
-      - 루프 반복 한도 + destructive 작업 advisory
+      - self-hosted runner 프로비저닝 + 필요한 secrets(GH 토큰 스코프, 모델 키) + 에이전트 CLI 설치 명시
+      - per-project **결정**(트리거 범위·권한 임계값·CLI) 명시
     verify:
-      - 스킬에 "머지 자동 금지/인간 승인" + 반복 한도 명시; 헬퍼 throttle 테스트가 상한 강제
-  - id: AC5-reuse-documented
-    title: 기존 자산 재사용 명문화 (재구현 금지)
-    source: "analysis Q2.4 (L135-139)"
+      - 가이드 문서 존재 + per-project 인프라/결정/시크릿 항목 포함
+  - id: AC5-propagation
+    title: 전파 + instantiate-once 경로
+    source: "analysis Q2.9 (L175); harness-sync PATHS"
     must:
-      - issue→fix→PR→cross-verify는 신규 구현 없이 기존 자산(autopilot/ralph / gh pr create / reviewer·adversary·ccg·codex) 배선만
-      - 스킬이 그 자산의 위치/호출을 정확히 인용
+      - 템플릿이 `templates/`(sync 통째), 헬퍼가 `.omp/extensions/harness/`(sync 통째)에 위치
+      - instantiate-once 경로(init/migrate가 templates/→.github/ 1회) 문서화
     verify:
-      - 스킬이 인용한 자산이 레포에 실재(에이전트/스킬 파일 존재) 확인
-  - id: AC6-propagation
-    title: 신규 스킬 전파 배선
-    source: "analysis Q2.8·Q2.9 (L165, L167)"
+      - 파일 위치가 synced PATHS에 포함 확인; `node scripts/docs-drift` 0/0
+  - id: AC6-no-auto-merge
+    title: 머지 자동 금지 유지
+    source: ".omp/skills/gh-loop/SKILL.md Non-Negotiables"
     must:
-      - "`scripts/harness-sync.sh` PATHS 배열에 `.omp/skills/gh-loop` 추가"
-      - 신규 스킬 추가에 따른 AGENTS.md/README 카운트·표 갱신(해당 시)
+      - 워크플로/헬퍼 어디서도 `gh pr merge` 자동 실행 안 함; 머지는 인간 승인 경로만
     verify:
-      - PATHS 배열에 신규 스킬 경로 포함(grep/테스트); `node scripts/docs-drift` 0/0
+      - 헬퍼 action에 'merge' 자동 없음(테스트); 템플릿에 `gh pr merge` 무조건 실행 없음(grep)
 
 decisions:
   substrate:
-    value: "option D (하이브리드 PoC)"
-    reason: "Q2.7 권장 시작점 — 단일세션·수동 재호출. 옵션 A(Actions)는 검증 후 승급, 옵션 B(데몬)는 기각."
+    value: "GitHub Actions + self-hosted runner (option A)"
+    reason: "Q2.7-3. GitHub-hosted는 자율 에이전트+repo write 보안상 비권장."
     status: confirmed
-  artifact_store:
-    value: "GitHub 이슈/PR/라벨/댓글 = bus + state machine"
-    reason: "Q2.2·Q2.6 — docs/sum md 대신 GitHub이 곧 트래킹 시스템(라벨·검색·상태·알림). Q1↔Q2 수렴 결정."
+  template_home:
+    value: "`templates/` (init/migrate instantiate-once)"
+    reason: "Q2.9 — `.github/`는 harness-sync 미전파, `templates/`는 통째 전파."
     status: confirmed
-  decision_point_detection:
-    value: "에이전트 자가판단 + needs-decision 라벨 컨벤션 (PoC)"
-    reason: "Q2.8 — 자동탐지(게이트 신호/룰)는 옵션 4로 deferred. 캘리브레이션은 검증 후 튜닝."
+  runtime_logic:
+    value: "테스트가능 헬퍼(gh-loop-runner.mjs)로 추출, YAML은 글루"
+    reason: "라이브 검증 불가(runner 미설치)라도 로직은 단위테스트로 검증; gh-loop-issue.mjs 선례."
     status: confirmed
-  finding_source:
-    value: "수동 킥오프(사용자/에이전트가 finding 지목)"
-    reason: "Q2.3-D — 자동 finding 탐지는 out_of_scope(옵션 4)."
+  agent_cli:
+    value: "per-project (OMP/Claude 헤드리스 기본, 가이드에 명시)"
+    reason: "스킬이 OMP 리소스(`issue://`) 사용 — 실행 에이전트는 OMP 계열; CLI/auth는 프로젝트 인프라."
     status: confirmed
-  hitl_vehicle:
-    value: "스킬 자체수록(별도 docs/rules 계약 신설 안 함)"
-    reason: "docs/는 harness-sync PATHS에 없어 미전파. 스킬은 PATHS 등록 시 전파 → 컨벤션이 스킬과 함께 모든 프로젝트로 상속. 설계 SSOT는 analysis Q2가 이미 담당."
-    status: confirmed
-  target_repo:
-    value: "저작=이 템플릿 레포, 실행=프로젝트별 GitHub Actions"
-    reason: "Q2.1 축 분리 — 런타임은 세션 내 게이트가 아니라 프로젝트별 CI. 본 레포에선 라이브 실행 불가(.github/·runner 부재)."
+  live_exec:
+    value: "out_of_scope (runner 미설치)"
+    reason: "Q3.9 self-hosted runner 미설치 — 라이브 자율 구동은 각 프로젝트가 runner 갖춘 뒤."
     status: confirmed
 
 risks:
   - id: R1
-    desc: 결정점 탐지 캘리브레이션 — 과(過)정지=짜증 / 과소정지=잘못된 자율 머지
-    mitigation: PoC는 에이전트 자가판단 + 머지 인간승인 고정(AC4); 캘리브레이션 튜닝은 검증 후
+    desc: 워크플로 YAML이 라이브 미검증 — 실제 Actions에서만 드러나는 버그
+    mitigation: 결정 로직을 헬퍼로 빼 단위테스트; YAML은 파싱/actionlint + 구조 리뷰; 라이브는 out_of_scope 명시(stub 미배포 — 검증가능 부분만 납품)
   - id: R2
-    desc: finding→issue 폭주/중복(Q1 다대다 우려 재현)
-    mitigation: dedup/throttle/라벨 헬퍼(AC3)
+    desc: 자율 실행이 repo write로 사고(잘못된 머지/푸시)
+    mitigation: 머지 자동 금지 불변식(AC6) + write+ 권한 가드 + self-hosted 권장
   - id: R3
-    desc: 라이브 런타임 미검증 — 이 레포엔 runner·`.github/` 부재
-    mitigation: PoC는 자산+헬퍼 단위테스트만(gh는 seam); 라이브 루프는 옵션 A seed(out_of_scope, R3 수용)
-  - id: R4
-    desc: 머지 자동화 사고(잘못된 자율 머지)
-    mitigation: "머지 절대 자동 금지" 불변식 — 교차검증 advisory, 머지 인간 승인(AC4)
+    desc: instantiate-once가 force-sync로 사용자 워크플로 덮어씀
+    mitigation: 템플릿은 `templates/`에만(force-sync 대상), 인스턴스(.github/)는 1회 복사 후 사용자 소유 — 문서에 명시
 
 references:
   - path: claudedocs/harness-auto-capture-analysis.md
-    reason: Q2 = 본 seed의 원본 상위문서(doc-ingest source, L108-165)
-  - path: .omp/skills/compr/SKILL.md
-    reason: gh pr create(L90) + closeout(L66-69) 선례 — gh issue create 패턴 근거
+    reason: Q2.7-3(옵션 A 승급) + Q2.9(전파 경로) = 본 seed 원본
+  - path: .omp/skills/gh-loop/SKILL.md
+    reason: 루프 절차 + 확정 guard policy(헬퍼로 실행체화)
+  - path: .omp/extensions/harness/gh-loop-issue.mjs
+    reason: 테스트가능 헬퍼 + gh-seam 패턴 선례
   - path: scripts/harness-sync.sh
-    reason: PATHS 전파 메커니즘(L92-119) — AC6 등록 대상
-  - path: .omp/agents
-    reason: reviewer·verifier(+adversary) = cross-verify 재사용 자산(AC5)
+    reason: templates/ 통째 전파 / .github/ 미전파 — template_home 결정 근거
