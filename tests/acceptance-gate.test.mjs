@@ -204,15 +204,15 @@ test('backstop: acceptance-done flag overrides before backstop', () => {
   });
 });
 
-// --- backstop recovery-message branch (finding B): closed seed must not advertise
-// `thread-scope open` (which refuses closed seeds); active-seed paths still do. ---
+// --- backstop recovery-message branch (finding B + slice-2 reopen): a closed seed now offers
+// `thread-scope open` (which REOPENS the closed seed) plus a /kickoff hint for genuinely new work. ---
 
-test('backstop: closed-seed block suggests /kickoff, not thread-scope open', () => {
+test('backstop: closed-seed block offers seed reopen (thread-scope) and /kickoff', () => {
   withDir({ 'seed.yaml': `status: done\n${AC_BLOCK}` }, (dir) => {
     const r = runGate(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
     assert.equal(r.status, 2);
+    assert.match(r.stderr, /thread-scope/);
     assert.match(r.stderr, /kickoff/);
-    assert.doesNotMatch(r.stderr, /thread-scope/);
   });
 });
 

@@ -27,5 +27,5 @@ d. a–c의 변경은 **이 커밋에 함께 포함**되어(스테이징 직전 
 이번 작업이 `.omp/skills/<name>/`를 수정했다면 전역 미러 `~/.claude/skills/<name>/`도 동기화한다 (OMC 스킬은 OMP에서도 `~/.claude`에서 디스커버리됨). **전역이 stale하면 그게 실행될 수 있다**(cf. `seed_evolution_policy.md`는 아니고 skill-sync 메모리). 양쪽이 동일해야 한다.
 
 ## 비고
-- closeout은 **종료상태 전이**이므로 이후 그 seed는 수정 대상이 아니다(재개는 새 `kickoff`).
+- closeout은 **종료상태 전이**다. 같은 기능의 반복은 `thread-scope open`이 그 seed를 제자리 reopen(done→approved, version+1, audit `seed_reopened`); 진짜 새 기능만 새 `kickoff`. 종료 이력은 `task_closed`/`seed_reopened` + git이 보존.
 - 검증 레인(docs-drift, PR-4): `current-scope.md` 전부 `[x]`인데 seed `done` 아님(closeout pending) / seed `done`인데 scope 잔존(half-closed) / scope 있는데 seed `approved` 아님(orphan) → WARNING.

@@ -91,7 +91,8 @@ function backstop(reason, opts = {}) {
   console.error(`  reason: ${reason}`);
   console.error('  반복(P2) 작업이 충실도 추적 없이 커밋되려 합니다. 다음 중 하나:');
   if (opts.closed) {
-    console.error('  1. /kickoff로 새 seed 시작 (완료된 seed 재개는 미지원 — 새 작업은 새 seed)');
+    console.error('  1. 같은 기능 반복이면 seed 재개(reopen): node .omp/extensions/harness/thread-scope.mjs open');
+    console.error('     (genuinely 새 기능이면 /kickoff로 새 seed)');
   } else {
     console.error('  1. thread-scope 열기: node .omp/extensions/harness/thread-scope.mjs open');
   }

@@ -40,9 +40,9 @@ kickoff 재실행 없이도 seed를 진화시킬 수 있되, 무분별한 변경
 | version을 올리지 않는 수정 | 변경 추적 불가 |
 | reason 없는 수정 | audit에 사유가 없으면 되돌릴 근거도 없음 |
 | status를 approved에서 draft로 되돌리기 | 승인 철회는 kickoff 재실행으로 |
-| 종료상태(`done`/`superseded`)를 `draft`/`approved`로 되돌리기 | 작업 재개는 kickoff 재실행으로(새 task_id) |
+| status를 **손으로** 종료상태에서 되돌리기 | 같은-기능 재개는 `thread-scope open`이 수행(done→approved, version+1, audit `seed_reopened`) — 손편집 말 것 |
 
-**종료 전이**: `approved → done`은 작업 완료 시 **closeout 절차**(`closeout_contract.md`)가 마킹한다(`completed: <date>` 동반). 이 종료 전이는 위 "version 안 올리는 수정 금지" 규칙에서 **면제**된다 — 내용 revision이 아니라 생명주기 종료이며 `audit.jsonl`의 `task_closed`가 기록을 남긴다. `done`은 종료상태이므로 이후 수정 대상이 아니다(재개는 새 kickoff).
+**종료 전이**: `approved → done`은 작업 완료 시 **closeout 절차**(`closeout_contract.md`)가 마킹한다(`completed: <date>` 동반). 이 종료 전이는 위 "version 안 올리는 수정 금지" 규칙에서 **면제**된다 — 내용 revision이 아니라 생명주기 종료이며 `audit.jsonl`의 `task_closed`가 기록을 남긴다. `done`/`superseded`는 **쉼 상태**다 — 같은 기능의 반복은 `thread-scope open`이 제자리 reopen(done→approved, version+1, `seed_reopened` 기록 + git이 종료 이력 보존); 진짜 새 기능만 새 kickoff(새 task_id).
 
 ## 예외: out_of_scope 축소가 필요한 경우
 

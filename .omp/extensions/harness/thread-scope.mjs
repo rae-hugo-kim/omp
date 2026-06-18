@@ -9,9 +9,9 @@
 //   node thread-scope.mjs open  [--ac id1,id2] [--name "label"]   regen scope + thread_opened
 //   node thread-scope.mjs close [--verdict PASS|FAIL|...]          thread_closed verdict
 //
-// Active = seed status draft|approved. A closed seed (done|superseded) is terminal; reopening it
-// for iteration is a pending policy decision (seed_evolution_policy.md) and is refused here —
-// genuinely new work uses /kickoff. No git; reads/writes docs/harness/ only.
+// Active = draft|approved. A closed seed (done|superseded) is REOPENED in place for same-feature
+// iteration (status->approved, version+1, audit seed_reopened; closeout history kept in audit + git).
+// Genuinely new work uses /kickoff. No git; reads/writes docs/harness/ only.
 //
 // Test seam: THREAD_SCOPE_CWD overrides cwd, THREAD_ID overrides the generated thread id.
 
@@ -102,17 +102,29 @@ if (mode === 'open') {
   let seed;
   try { seed = readFileSync(seedPath, 'utf-8'); }
   catch (e) { console.error(`thread-scope: cannot read seed.yaml: ${e.message}`); process.exit(1); }
+  let seedSrc = seed;
   const status = (field(seed, 'status') || '').toLowerCase();
   if (status === 'done' || status === 'superseded') {
-    console.error(`thread-scope: seed is closed (status:${status}). Reopening a terminal seed for`);
-    console.error('iteration is a pending policy decision (seed_evolution_policy.md). Use /kickoff for');
-    console.error('new work, or wip:/acceptance-done to bypass a one-off commit.');
-    process.exit(1);
+    // Reopen in place: a feature's seed is a living SSOT, not a terminal record. done/superseded
+    // is a RESTING state — same-feature iteration reactivates it (history stays in audit + git).
+    // Genuinely new work should use /kickoff (a new seed). (analysis Q10/(i); seed_evolution_policy.md)
+    const fromV = field(seed, 'version') || '1';
+    const toV = String((Number(fromV) || 0) + 1);
+    seedSrc = seed
+      .replace(/^status:[^\n]*$/m, 'status: approved')
+      .replace(/^version:[^\n]*$/m, `version: ${toV}`)
+      .replace(/^completed:[^\n]*\n?/m, '');
+    writeFileSync(seedPath, seedSrc);
+    appendAudit('seed_reopened', {
+      seed_task_id: field(seed, 'task_id') || field(seed, 'name') || 'unknown',
+      from_status: status, from_version: Number(fromV) || fromV, to_version: Number(toV) || toV,
+    });
+    console.error(`thread-scope: reopened closed seed (${status} v${fromV} -> approved v${toV}); history in audit.jsonl + git.`);
   }
-  const taskId = field(seed, 'task_id') || field(seed, 'name') || 'unknown';
-  const version = field(seed, 'version') || '1';
-  const seedName = field(seed, 'name') || taskId;
-  const acs = parseAC(seed);
+  const taskId = field(seedSrc, 'task_id') || field(seedSrc, 'name') || 'unknown';
+  const version = field(seedSrc, 'version') || '1';
+  const seedName = field(seedSrc, 'name') || taskId;
+  const acs = parseAC(seedSrc);
   let targeted = acs;
   if (opts.ac && opts.ac.length) targeted = acs.filter((a) => a.id && opts.ac.includes(a.id));
   if (targeted.length === 0) {

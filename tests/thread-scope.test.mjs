@@ -76,15 +76,6 @@ test('open --ac subset -> only selected AC in scope', () => {
   });
 });
 
-test('open: closed (done) seed -> refuse (exit 1), no scope written', () => {
-  withSeed(`status: done\nversion: 1\ntask_id: "T1"\n${AC}`, (dir) => {
-    const r = run(dir, ['open'], { THREAD_ID: 'T-test-3' });
-    assert.equal(r.status, 1);
-    assert.match(r.stderr, /closed \(status:done\)/);
-    assert.equal(existsSync(join(dir, 'docs', 'harness', 'current-scope.md')), false);
-  });
-});
-
 test('open: no seed -> exit 1', () => {
   withSeed(null, (dir) => {
     assert.equal(run(dir, ['open']).status, 1);
@@ -146,6 +137,26 @@ test('open: tab-indented items are normalized, no sibling dropped (D)', () => {
   withSeed(seed, (dir) => {
     const r = run(dir, ['open'], { THREAD_ID: 'T-d' });
     assert.equal(r.status, 0);
+    assert.equal((scope(dir).match(/- \[ \]/g) || []).length, 2);
+  });
+});
+
+// --- slice-2: closed-seed reopen (in-place edit; SSOT stays one living doc) ---
+
+test('open: a closed (done) seed is REOPENED in place (status->approved, v+1, seed_reopened)', () => {
+  withSeed(`name: x\nstatus: done\ncompleted: 2026-05-21\nversion: 2\ntask_id: "T1"\n${AC}`, (dir) => {
+    const r = run(dir, ['open'], { THREAD_ID: 'T-reopen' });
+    assert.equal(r.status, 0);
+    const seedAfter = readFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), 'utf-8');
+    assert.match(seedAfter, /^status: approved$/m);
+    assert.match(seedAfter, /^version: 3$/m);
+    assert.doesNotMatch(seedAfter, /completed:/);
+    const ev = audit(dir);
+    const reopened = ev.find((e) => e.event === 'seed_reopened');
+    assert.ok(reopened, 'seed_reopened event present');
+    assert.equal(reopened.meta.from_version, 2);
+    assert.equal(reopened.meta.to_version, 3);
+    assert.ok(ev.find((e) => e.event === 'thread_opened'), 'thread_opened after reopen');
     assert.equal((scope(dir).match(/- \[ \]/g) || []).length, 2);
   });
 });
