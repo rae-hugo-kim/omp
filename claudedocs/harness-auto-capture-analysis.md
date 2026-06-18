@@ -494,7 +494,8 @@ P2 thread-goal 복원(current-scope 재생성) + audit provenance/verdict + L2 b
 
 **북극성(Q4)**: 목적 = "포괄적 상위 문서 → 충실 구현 틀". **두 위상(Q5)**: P1 초기화·P2 반복(현재 게이트 0). **동작(설계 v1)**: 입력 2신호 모드 자동결정, coverage 불변식, **P2=자가감지 2층(L1 in-agent + L2 commit backstop) + push→pull 질문-back**(Q6). **아티팩트 역할(Q8)**: `seed`=durable SSOT(체크대상)·`current-scope`=스레드 작업목표·`audit`=provenance/satisfaction 원장(유일 성장; Q7). 갭=P2 스레드 scope 부재(G-scope)+커밋별 provenance/verdict 부재(G-trace). "kickoff 확장"은 P1만 — P2는 신규 자가감지 amend. 빌드 착수 미결(슬라이스1: P2 scope 복원+audit trace+L2 backstop).
 - **슬라이스1 SHIPPED** (ece3202): AC6 L2 backstop + AC4/AC7 thread-scope(active-seed). reviewer/verifier PASS, 9 findings 수정, dogfood(게이트 통과 커밋).
-- **슬라이스2 SHIPPED** (be5e45c): closed-seed reopen((i) 제자리 편집) + 정책 doc 갱신. 테스트 194/194. 남은 = 틀 AC1·2·3·5·8·9(후속 슬라이스, task 병렬 적합).
+- **슬라이스2 SHIPPED** (be5e45c): closed-seed reopen((i) 제자리 편집) + 정책 doc 갱신. 테스트 194/194.
+- **슬라이스3 SHIPPED** (59a37a0): AC1/2/3(kickoff doc-ingest+coverage+per-AC source) · AC9(verifier coverage) · AC8(역할 계약) · AC5(L1 자가감지) — **4 task 에이전트 병렬 저작**. → **9/9 AC 구현 완료**(틀 v1 feature-complete). docs-drift OK, 194/194.
 
 지원 관심사 (북극성 종속):
 - **Q1**: breadcrumb = 틀의 재개/seed 씨앗 보조. 3분할(A=auto-memory, B=breadcrumb, C=내러티브 수동) 유효, 구현 범위 미결.
