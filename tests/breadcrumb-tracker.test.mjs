@@ -94,3 +94,17 @@ test('Write to a prefixed *-current-scope.md -> edit, not scope (basename anchor
     assert.equal(log(dir)[0].kind, 'edit');
   });
 });
+
+// --- no-LLM guarantee (AC1/AC5): the breadcrumb gates must never call a model/network.
+// This is what makes AC2/AC5 free — append-per-event to disk (no in-memory state to flush,
+// no shutdown LLM summary). Guards against a future regression adding an LLM call. ---
+
+import { dirname as _dir } from 'node:path';
+const GATES = _dir(GATE);
+
+test('breadcrumb gates make NO LLM/network call (no-LLM guarantee)', () => {
+  for (const g of ['breadcrumb-tracker.mjs', 'breadcrumb-surface.mjs']) {
+    const src = readFileSync(join(GATES, g), 'utf-8');
+    assert.doesNotMatch(src, /fetch\(|https?:\/\/|\bmodel\b|completion|anthropic|openai|sendMessage/i, `${g} must stay no-LLM`);
+  }
+});

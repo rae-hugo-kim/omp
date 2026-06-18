@@ -8,3 +8,4 @@
 {"ts":"2026-06-18T14:24:42+09:00","event":"kickoff_completed","actor":"assistant","meta":{"topic":"session-breadcrumb-capture","mode":"doc-ingest(real)","ingest_source":"claudedocs/harness-auto-capture-analysis.md#Q1"}}
 {"ts":"2026-06-18T14:24:42+09:00","event":"seed_generated","actor":"assistant","meta":{"seed_path":"docs/harness/seed.yaml","status":"draft","version":1,"task_id":"20260618-142442-e610"}}
 {"ts":"2026-06-18T14:24:42+09:00","event":"rubric_evaluated","actor":"assistant","meta":{"goal":"HIGH","constraints":"HIGH","success":"HIGH","context":"HIGH","coverage":"HIGH","unmapped_residual":0,"open_decisions":1}}
+{"ts":"2026-06-18T15:35:00+09:00","event":"seed_revised","actor":"assistant","meta":{"task_id":"20260618-142442-e610","from_version":1,"to_version":2,"change":"AC2/AC5 satisfied by file-based append design (no flush/preserve or shutdown-LLM handlers needed); no-LLM guard test added"}}

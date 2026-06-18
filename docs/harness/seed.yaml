@@ -1,6 +1,6 @@
 name: session-breadcrumb-capture
 status: draft
-version: 1
+version: 2
 task_id: "20260618-142442-e610"
 goal: >
   세션 재개 비용과 sum 호출 비용을 줄이기 위해, turn_end/tool_result에서 변경파일·테스트
@@ -58,9 +58,9 @@ acceptance_criteria:
     title: session.compacting 보존(flush/preserveData)
     source: "analysis Q1.5 (L81)"
     must:
-      - session.compacting에서 breadcrumb 상태를 flush/preserve(preserveData 반환)
+      - breadcrumb은 이벤트마다 `session-log.jsonl`에 디스크 append → context 압축은 대화만 압축하고 이 파일은 안 건드림 → **별도 flush/preserve 핸들러 불요**(보존할 in-memory 상태 없음). file-based 설계가 AC2를 충족.
     verify:
-      - compacting 이벤트 → breadcrumb 보존 확인
+      - append 후 `session-log.jsonl` 디스크 존재(breadcrumb-tracker 테스트) + no-LLM 가드. 압축-시 재표면화(continuity)는 후속 enhancement(live 검증 가능한 OMP compaction API 필요).
   - id: AC3-startup-surface
     title: session_start 관련 docs/sum 표면화
     source: "analysis Q1.5·Q1.2-C (L82, L53)"
@@ -80,9 +80,9 @@ acceptance_criteria:
     title: session_shutdown LLM 요약 금지
     source: "analysis Q1.5 (L84)"
     must:
-      - session_shutdown에서 LLM 요약을 트리거하지 않음(flush 정도만)
+      - session_shutdown에서 LLM 요약 트리거 없음 — index.ts에 shutdown 핸들러 자체가 없고, append-per-event라 flush도 불요(파일 항상 최신).
     verify:
-      - shutdown 경로에 LLM 요약 호출이 없음을 코드로 확인(부재 보장)
+      - breadcrumb 게이트에 LLM/network 호출 없음(no-LLM 가드 테스트) + index.ts에 session_shutdown LLM 핸들러 부재.
   - id: AC6-docs-corrected
     title: stale 문서 정정
     source: "analysis Q1.6 (L88-91)"

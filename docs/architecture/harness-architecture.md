@@ -286,7 +286,7 @@ flowchart TB
 - **현황**: 컨텍스트 압축 전 상태 보존 훅을 두지 않음. **갭이 아니라 결정**임.
 - **근거**: 우리 사용 패턴에서 한 세션이 컨텍스트의 ~50%도 채우는 일이 드물어 압축이 거의 발생하지 않음 → 압축 트리거 훅은 사실상 안 돎. 유지비 대비 가치 낮음.
 - **참조**: `rules/session_persistence.md`의 "Decision: summarization stays manual" 섹션.
-- **갱신(2026-06)**: "이벤트 부재" 전제는 정정됨 — OMP는 `session.compacting`을 노출한다. "압축이 드물다"는 근거는 유효하나, 이제 `breadcrumb-tracker`가 `turn_end`/`tool_result`로 no-LLM 캡처해 압축에 의존하지 않는다(압축 보존 flush는 후속 AC2). 자율화 Q1.
+- **갱신(2026-06)**: "이벤트 부재" 전제는 정정됨 — OMP는 `session.compacting`을 노출한다. 단 `breadcrumb-tracker`가 `tool_result`로 디스크에 no-LLM append하므로 압축에 의존하지 않고, **AC2 "보존"은 file-based `session-log.jsonl`이 충족**(압축은 대화만 압축하고 파일은 불변 → 별도 flush/preserve 핸들러 불요). 자율화 Q1.
 
 #### G8. Stop 훅 (세션 요약 부분) — 의도적 미채택 (결정 2026-05-27)
 - **현황**: 세션 종료 시 **자동 요약**은 두지 않음. **갭이 아니라 결정**임.
