@@ -103,17 +103,27 @@ PR에 대해 교차검증을 1패스 돌린다 — 결과는 **참고용**이지
    ```
 2. **턴을 종료**한다 (option D: 프로세스를 붙잡지 않음). 사용자에게: "이슈 #N에 결정 요청을 남겼습니다. 답을 댓글로 남기신 뒤 `/gh-loop N`으로 재개하세요."
 
-**재개** (`$ARGUMENTS` = 이슈 번호):
-1. `issue://<n>` 로 이슈+댓글을 읽는다 (SQLite 캐시; author 포함).
-2. 에이전트 자신이 단 질문이 아니라 **그 이후의 최신 _사용자_ 코멘트**를 최우선 지시로 취급한다 (memory/이전 계획과 충돌하면 사용자 우선).
-3. 결정에 따라 해당 Stage를 잇는다. 재개 동작이 **성공한 뒤에** `needs-decision` 라벨을 제거한다 (`gh issue edit <n> --remove-label needs-decision`) — 도중 실패 시 라벨이 남아 미결 상태가 보존된다.
-4. 머지 결정이면: PR별 명시적 인간 승인이 있을 때만 그 지시로 `gh pr merge` 실행. 자율 단계로는 절대 머지하지 않는다.
+**재개** (트리거 = `needs-decision` 이슈에 **권한 있는 사람**의 새 댓글. option-A: `issue_comment` webhook; option-D: 수동 핑 / `/gh-loop N`):
+1. `issue://<n>` 로 이슈+댓글을 읽는다 (author 포함).
+2. **에이전트 자신의 댓글은 제외**(author ≠ 에이전트), **권한자**의 댓글만 본다 (정확한 권한 임계값·다중응답 충돌·봇 아이덴티티 = 아래 *Open guard decisions*).
+3. 최신 권한자 댓글을 **LLM으로 해석**한다 — **고정 키워드/`grep` 매칭 금지**. 자연어로 충분하다 (예: `"B, 검증까지 해야지"` → 옵션 B + 검증; `approve|merge` grep이었으면 놓쳤을 결정). 그 결정을 memory/이전 계획보다 우선한다.
+4. **모호하면 행동 금지** — 질문·미결정·딴소리면 명확화 댓글을 달고 parked 유지(그 자체가 HITL). 명확한 결정일 때만 진행.
+5. 멱등: 결정당 **1회만** 행동. 행동이 **성공한 뒤** `needs-decision` 제거(`gh issue edit <n> --remove-label needs-decision`); 재라벨 전엔 추가 댓글 무시.
+6. 머지 결정이면: PR별 명시적 인간 승인이 있을 때만 그 지시로 `gh pr merge`. 자율 단계로는 절대 머지하지 않는다.
 
 ## Loop Safety
 
 - **이슈 상한** = 헬퍼 `--cap`(기본 5). 런당 생성 수(`--created`)가 cap에 도달하거나 **열린 gh-loop 이슈 수가 cap에 도달**하면 `block` — 후자는 호출자 카운팅을 신뢰하지 않는 관측 기반 백스톱.
 - **반복 한도**: 같은 이슈에서 fix→verify가 N회(기본 3) 수렴 실패면 멈추고 `needs-decision`으로 사용자에게.
 - 파괴 작업은 advisory를 넘어 사용자 확인 (Non-Negotiables).
+
+## Open guard decisions (미결 — 확정 후 본 절 갱신)
+
+option-A에서 "권한자 댓글 = 트리거"를 안전하게 하려면 아래 정책을 확정해야 한다 (라이브 검증에서 도출):
+- **권한 임계값**: 누가 루프를 조종할 수 있나 — write / triage / maintain / owner-only? (보안 직결)
+- **봇 아이덴티티**: 에이전트 자기 댓글 제외 기준 — 전용 bot 토큰 vs 사용자 토큰 (option-A 인프라에 종속)
+- **다중 응답 충돌**: 권한자 2인이 다른 답이면 — 최신 / owner 우선 / 합의 요구?
+- **모호성 에스컬레이션**: 명확화 N회 후에도 미결이면 — 권고안 default vs 무기한 parked?
 
 ## Reuse Map (stage → asset → 위치 / provenance)
 
