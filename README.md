@@ -111,6 +111,7 @@ OMP에서 스킬은 `/skill:<이름>`으로 호출하거나, 설명에 매칭되
 | `/skill:migrate` | 기존 Claude Code 프로젝트(.claude/CLAUDE.md)를 OMP로 컷오버 (보험 태그 + 하네스 이식) |
 | `/skill:design-mockup` | 슬라이더/노브로 파라미터 튜닝 가능한 단일 HTML mockup 생성 |
 | `/skill:grepai-search` | 의미 기반 코드 검색 (콜드스타트 탐색) |
+| `/skill:gh-loop` | finding → 이슈 → 수정 → PR → 교차검증 → HITL 루프 (머지 자동 안 함) |
 
 ## 기존 Claude Code 프로젝트 이주
 

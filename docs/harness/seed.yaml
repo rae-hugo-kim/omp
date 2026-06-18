@@ -1,129 +1,153 @@
-name: session-breadcrumb-capture
+name: autonomy-github-hitl-loop
 status: draft
-version: 2
-task_id: "20260618-142442-e610"
+version: 1
+task_id: "20260618-171252-5e29"
 goal: >
-  세션 재개 비용과 sum 호출 비용을 줄이기 위해, turn_end/tool_result에서 변경파일·테스트
-  PASS/FAIL·커밋·AC토글을 no-LLM으로 자동 캡처(breadcrumb)하고, session.compacting에서 보존,
-  session_start에서 관련 docs/sum을 표면화하며, 수동 sum이 breadcrumb을 seed로 소비한다.
-  영속 사실(auto-memory)은 이미 자동이므로 재구축하지 않는다. (자율화 레이어 Q1)
+  발견사항→이슈→수정→PR→교차검증→HITL 루프(자율화 Q2)의 **재사용 하네스 자산**을 option-D PoC
+  티어로 저작한다: 단일세션·수동 재호출형 루프 스킬(gh issue create + autopilot/ralph + gh pr create +
+  교차검증 + needs-decision HITL 컨벤션)과 dedup/throttle 헬퍼를 만들고 harness-sync로 전파한다.
+  머지는 절대 자동화하지 않으며(교차검증 advisory, 머지는 인간 승인), 결정점은 이슈에 질문 게시 후
+  세션 종료(stateless-resumable)한다. 저작·배포는 이 템플릿 레포, 실행 런타임은 프로젝트별 GitHub
+  Actions(옵션 A, 검증 후) — 본 PoC의 out_of_scope. (자율화 레이어 Q2)
 
 context:
-  source: claudedocs/harness-auto-capture-analysis.md  # Q1 (L23-107) = doc-ingest 원본 상위문서
+  source: claudedocs/harness-auto-capture-analysis.md#Q2  # L108-165 = doc-ingest 원본 상위문서
   date_locked: 2026-06-18
   related_docs:
-    - claudedocs/harness-auto-capture-analysis.md       # Q1.1-Q1.7
-    - rules/session_persistence.md                       # stale 전제 정정 대상
-    - docs/architecture/harness-architecture.md          # G7/G8 정정 대상
-    - .omp/extensions/harness/gates/backpressure-tracker.mjs  # append-log 패턴 선례
+    - claudedocs/harness-auto-capture-analysis.md          # Q2.0-Q2.10 결정/근거 SSOT
+    - .omp/skills/compr/SKILL.md                            # gh pr create + closeout 선례(L90)
+    - scripts/harness-sync.sh                               # PATHS 전파 메커니즘(L92-119)
+    - .omp/skills/sum/SKILL.md                              # 스킬 포맷 선례
 
-# 스키마: intent-ingest-fidelity-framework seed 선례의 richer 스키마(per-AC must/verify/source).
+# 스키마: intent-ingest-fidelity-framework/breadcrumb seed 선례의 richer 스키마(per-AC must/verify/source).
 
 constraints:
-  - no-LLM 캡처 — breadcrumb append에 LLM 호출 금지(턴마다 비용/노이즈 금지)
-  - session_shutdown에서 LLM 요약 금지 — 프로세스 종료 시점, 비동기 LLM 신뢰 불가(flush만)
-  - auto-memory(영속 사실 A) 재구축 금지 — 이미 자동(`<memories>` 주입), 상호보완
-  - 기존 tracker/append-log 패턴 재사용(`backpressure-tracker`→`test-history.json` 선례), 신규 발명 최소
-  - 노이즈 최소 — 미완 스레드의 저품질 자동요약 양산 금지(Q1.4)
-  - 풀 내러티브(C)는 수동 sum 유지 — 자동화하지 않음(인간 판단 필요)
+  - 저작·배포만 — PoC는 재사용 자산(스킬/컨벤션/헬퍼)만 만든다; 런타임(GitHub Actions/runner)은 옵션 A로 검증 후(out_of_scope). (Q2.1·Q2.7)
+  - 머지 절대 자동 금지 — 교차검증은 advisory, 머지는 인간 승인 (Q2.5 the crux)
+  - 결정점 → 이슈/댓글에 구조화 질문 + needs-decision 라벨 → 세션 종료(stateless-resumable); 프로세스 블로킹 대기 금지 (Q2.2)
+  - 사용자 이슈 댓글 = 최우선 (CLAUDE.md "user instruction > memory" 정합) (Q2.2)
+  - finding→issue dedup/throttle/라벨 — 폭주·중복 금지 (Q2.5)
+  - 루프 안전 — 반복 한도 + destructive 작업 advisory (Q2.5)
+  - 기존 자산 재사용 — issue→fix→PR→cross-verify는 autopilot/ralph + gh pr create + reviewer·adversary·ccg·codex 배선만, 재구현 금지 (Q2.4)
+  - 신규 스킬은 harness-sync.sh PATHS에 등록해 전파 (Q2.8·Q2.9)
 
 in_scope:
-  - turn_end/tool_result breadcrumb append (no-LLM)
-  - session.compacting flush/preserve(preserveData)
-  - session_start 관련 docs/sum 표면화(고아 해소)
-  - sum 스킬이 breadcrumb seed 소비
-  - stale 문서 정정(session_persistence/harness-architecture/ecc/AGENTS)
+  - 루프 스킬 `.omp/skills/gh-loop/SKILL.md` 신설 — finding→issue→fix→PR→cross-verify→HITL 절차(option D)
+  - needs-decision HITL 컨벤션(구조화 질문 포맷 + 라벨 + 종료/재개 + 사용자응답 최우선) — 스킬 내 자체수록
+  - finding→issue 헬퍼(dedup/throttle/라벨 결정 로직, gh 호출은 seam) — 라이브 GitHub 없이 단위테스트
+  - scripts/harness-sync.sh PATHS 등록(전파)
+  - AGENTS.md/README 등 신규 스킬 반영(해당 시)
 
 out_of_scope:
-  - auto-memory 재구축(영속 사실 A — 이미 자동; Q1.2)
-  - session.compacting sum 자동초안 생성(option 3 — 노이즈 위험, 잠정 제외; Q1.7)
-  - 풀 트러블슈팅 내러티브 자동화(C는 수동 유지; Q1.4)
+  - 옵션 A 런타임 — `.github/workflows/` + self-hosted runner + issue_comment 트리거(검증 후 별도 seed; Q2.7-3)
+  - Codex CI 이식 — 컴패니언은 현재 로컬 플러그인(Q2.5)
+  - finding 자동 탐지 — breadcrumb/리뷰/린트→이슈 자동(옵션 4; Q2.7-4)
+  - 옵션 B 로컬 데몬/컨트롤플레인 — 레포가 기각한 ecc2 패턴(Q2.3-B)
+  - 라이브 GitHub 이슈/PR 생성 실행 — 이 템플릿 레포엔 `.github/`·runner 부재; 라이브 루프는 실작업 레포 필요(Q2.0·Q3.9)
 
 assumptions:
-  - OMP가 turn_end/tool_result/session.compacting/session_start/session_shutdown 이벤트를 노출(Q1.1 확인)
-  - `.omp/harness-state/`가 runtime append-log의 표준 위치(gitignored)
-  - auto-memory(`memory.backend: local`) 활성 — 영속 사실 축 담당
+  - gh CLI 인증됨(Q3.9 실측: gh 인증 rae-hugo-kim, repo scope) — compr이 `gh pr create` 사용하는 선례
+  - 교차검증 자산 존재 — `.omp/agents/`의 reviewer·verifier(+adversary), ccg/codex 스킬(재사용)
+  - autopilot/ralph + 하네스 게이트가 issue→fix→PR 실행 substrate (이미 있음; Q2.4)
 
 acceptance_criteria:
-  - id: AC1-breadcrumb-append
-    title: turn_end/tool_result breadcrumb append (no-LLM)
-    source: "analysis Q1.5·Q1.7 (L80, L97)"
+  - id: AC1-loop-skill
+    title: 루프 스킬 신설 (option D 절차)
+    source: "analysis Q2.0·Q2.3-D·Q2.7-2 (L113, L129, L154)"
     must:
-      - turn_end 및/또는 tool_result 이벤트에서 breadcrumb 1줄 append (LLM 없음)
-      - 기록 항목 — 변경 파일, 테스트 PASS/FAIL, 커밋 해시, AC 토글
-      - 저장 위치/포맷은 append-only jsonl (`test-history.json` 패턴 확장)
+      - "`.omp/skills/gh-loop/SKILL.md` 신설 — finding→issue→fix→PR→cross-verify→HITL 5단계 절차"
+      - 각 단계가 사용하는 자산을 명시 인용(gh issue create / autopilot·ralph / gh pr create / reviewer·adversary·ccg·codex)
+      - 단일세션·수동 재호출(option D); 프로세스 블로킹 대기 없음
     verify:
-      - 이벤트 발생 → 해당 breadcrumb 줄이 append되는지 확인(가짜 이벤트 주입 테스트)
-  - id: AC2-compact-flush
-    title: session.compacting 보존(flush/preserveData)
-    source: "analysis Q1.5 (L81)"
+      - SKILL.md frontmatter(name/description) 유효 + 5단계 절차 존재; 기존 스킬 포맷 부합
+  - id: AC2-hitl-convention
+    title: needs-decision HITL 컨벤션 (the crux)
+    source: "analysis Q2.2·Q2.4 (L120-123, L137)"
     must:
-      - breadcrumb은 이벤트마다 `session-log.jsonl`에 디스크 append → context 압축은 대화만 압축하고 이 파일은 안 건드림 → **별도 flush/preserve 핸들러 불요**(보존할 in-memory 상태 없음). file-based 설계가 AC2를 충족.
+      - 결정점 도달 → 구조화 질문을 이슈/댓글에 게시 + `needs-decision` 라벨 → 세션 종료(stateless-resumable)
+      - 재개 = 다음 이벤트(라벨된 댓글/이슈) → 에이전트가 `issue://` 댓글 read → 최우선 취급
+      - 컨벤션은 스킬에 자체수록(docs/는 harness-sync 미전파 → 스킬이 전파 vehicle)
     verify:
-      - append 후 `session-log.jsonl` 디스크 존재(breadcrumb-tracker 테스트) + no-LLM 가드. 압축-시 재표면화(continuity)는 후속 enhancement(live 검증 가능한 OMP compaction API 필요).
-  - id: AC3-startup-surface
-    title: session_start 관련 docs/sum 표면화
-    source: "analysis Q1.5·Q1.2-C (L82, L53)"
+      - 스킬에 needs-decision 라벨·질문 포맷·종료/재개·사용자응답-최우선 절차 명시
+  - id: AC3-finding-issue-helper
+    title: finding→issue dedup/throttle 헬퍼
+    source: "analysis Q2.4·Q2.5 (L134, L143)"
     must:
-      - session_start에서 관련 `docs/sum/*.md`를 표면화(고아 md 해소)
+      - finding→issue 변환 헬퍼 — dedup(기존 열린 이슈 제목/라벨 대조), throttle(런당 생성 상한), 라벨 부여
+      - gh 호출은 seam(주입 가능) — 라이브 GitHub 없이 결정 로직 단위테스트
     verify:
-      - session_start → 관련 sum 표면화 메시지/주입 확인
-  - id: AC4-sum-seeded
-    title: sum 스킬이 breadcrumb seed 소비
-    source: "analysis Q1.5·Q1.4 (L83, L68)"
+      - dedup(중복 finding→skip)·throttle(상한 초과→block)·라벨 포맷 단위테스트 통과
+  - id: AC4-merge-safety
+    title: 머지 안전 불변식
+    source: "analysis Q2.5 (L142, L146)"
     must:
-      - `sum` 스킬이 breadcrumb(session-log)을 seed로 읽어 내러티브 초안 비용 절감
-      - sum은 수동 유지(자동 호출 안 함)
+      - 머지 자동 금지 — 교차검증 advisory, 머지는 인간 승인(스킬에 명시 불변식)
+      - 루프 반복 한도 + destructive 작업 advisory
     verify:
-      - breadcrumb 존재 시 sum이 그것을 입력으로 참조하는지 스킬 절차 확인
-  - id: AC5-no-shutdown-llm
-    title: session_shutdown LLM 요약 금지
-    source: "analysis Q1.5 (L84)"
+      - 스킬에 "머지 자동 금지/인간 승인" + 반복 한도 명시; 헬퍼 throttle 테스트가 상한 강제
+  - id: AC5-reuse-documented
+    title: 기존 자산 재사용 명문화 (재구현 금지)
+    source: "analysis Q2.4 (L135-139)"
     must:
-      - session_shutdown에서 LLM 요약 트리거 없음 — index.ts에 shutdown 핸들러 자체가 없고, append-per-event라 flush도 불요(파일 항상 최신).
+      - issue→fix→PR→cross-verify는 신규 구현 없이 기존 자산(autopilot/ralph / gh pr create / reviewer·adversary·ccg·codex) 배선만
+      - 스킬이 그 자산의 위치/호출을 정확히 인용
     verify:
-      - breadcrumb 게이트에 LLM/network 호출 없음(no-LLM 가드 테스트) + index.ts에 session_shutdown LLM 핸들러 부재.
-  - id: AC6-docs-corrected
-    title: stale 문서 정정
-    source: "analysis Q1.6 (L88-91)"
+      - 스킬이 인용한 자산이 레포에 실재(에이전트/스킬 파일 존재) 확인
+  - id: AC6-propagation
+    title: 신규 스킬 전파 배선
+    source: "analysis Q2.8·Q2.9 (L165, L167)"
     must:
-      - `rules/session_persistence.md` §Decision "no such events" 전제 정정 + 결정 재서술
-      - `docs/architecture/harness-architecture.md` G7/G8 "의도적 미채택" 근거 정정
-      - `claudedocs/ecc_harness_analysis.md` PreCompact/instinct cross-ref 갱신
-      - breadcrumb 게이트 신설 시 `AGENTS.md` Harness Enforcement 표에 행 추가
+      - "`scripts/harness-sync.sh` PATHS 배열에 `.omp/skills/gh-loop` 추가"
+      - 신규 스킬 추가에 따른 AGENTS.md/README 카운트·표 갱신(해당 시)
     verify:
-      - 위 문서들이 "이벤트 부재" 거짓 전제를 더 이상 담지 않음
+      - PATHS 배열에 신규 스킬 경로 포함(grep/테스트); `node scripts/docs-drift` 0/0
 
 decisions:
-  trigger:
-    value: "turn_end + tool_result"
-    reason: "Q1.5 권장 — turn_end(턴 단위) + tool_result(세밀)."
-    status: confirmed (default 채택 2026-06-18)
-  storage:
-    value: ".omp/harness-state/session-log.jsonl"
-    reason: "Q1.5/Q1.7 — test-history.json과 같은 append-log 위치(gitignored runtime)."
-    status: confirmed (default 채택)
-  scope:
-    value: "option 1 (breadcrumb + session_start surface + sum seed)"
-    reason: "Q1.7 권장. option 3(session.compacting sum 자동초안)은 노이즈 위험으로 out_of_scope."
+  substrate:
+    value: "option D (하이브리드 PoC)"
+    reason: "Q2.7 권장 시작점 — 단일세션·수동 재호출. 옵션 A(Actions)는 검증 후 승급, 옵션 B(데몬)는 기각."
     status: confirmed
-  sum_automemory_link:
-    value: "분리 — session_start 표면화(AC3)만; auto-memory는 sum md를 읽지 않음"
-    reason: "RES 해소(2026-06-18): '연계'는 auto-memory 동작을 바꿔 'auto-memory 재구축 금지' 제약과 모순. 고아 sum은 AC3 표면화로 충분. (analysis Q1.7 L98)"
+  artifact_store:
+    value: "GitHub 이슈/PR/라벨/댓글 = bus + state machine"
+    reason: "Q2.2·Q2.6 — docs/sum md 대신 GitHub이 곧 트래킹 시스템(라벨·검색·상태·알림). Q1↔Q2 수렴 결정."
+    status: confirmed
+  decision_point_detection:
+    value: "에이전트 자가판단 + needs-decision 라벨 컨벤션 (PoC)"
+    reason: "Q2.8 — 자동탐지(게이트 신호/룰)는 옵션 4로 deferred. 캘리브레이션은 검증 후 튜닝."
+    status: confirmed
+  finding_source:
+    value: "수동 킥오프(사용자/에이전트가 finding 지목)"
+    reason: "Q2.3-D — 자동 finding 탐지는 out_of_scope(옵션 4)."
+    status: confirmed
+  hitl_vehicle:
+    value: "스킬 자체수록(별도 docs/rules 계약 신설 안 함)"
+    reason: "docs/는 harness-sync PATHS에 없어 미전파. 스킬은 PATHS 등록 시 전파 → 컨벤션이 스킬과 함께 모든 프로젝트로 상속. 설계 SSOT는 analysis Q2가 이미 담당."
+    status: confirmed
+  target_repo:
+    value: "저작=이 템플릿 레포, 실행=프로젝트별 GitHub Actions"
+    reason: "Q2.1 축 분리 — 런타임은 세션 내 게이트가 아니라 프로젝트별 CI. 본 레포에선 라이브 실행 불가(.github/·runner 부재)."
     status: confirmed
 
 risks:
   - id: R1
-    desc: breadcrumb 노이즈/볼륨 — 매 tool_result append가 과대해질 수 있음
-    mitigation: no-LLM 최소 필드만, jsonl append, 필요시 turn_end로 한정
+    desc: 결정점 탐지 캘리브레이션 — 과(過)정지=짜증 / 과소정지=잘못된 자율 머지
+    mitigation: PoC는 에이전트 자가판단 + 머지 인간승인 고정(AC4); 캘리브레이션 튜닝은 검증 후
   - id: R2
-    desc: session_shutdown 비동기 신뢰 불가
-    mitigation: shutdown은 flush만, LLM 금지(AC5)
+    desc: finding→issue 폭주/중복(Q1 다대다 우려 재현)
+    mitigation: dedup/throttle/라벨 헬퍼(AC3)
+  - id: R3
+    desc: 라이브 런타임 미검증 — 이 레포엔 runner·`.github/` 부재
+    mitigation: PoC는 자산+헬퍼 단위테스트만(gh는 seam); 라이브 루프는 옵션 A seed(out_of_scope, R3 수용)
+  - id: R4
+    desc: 머지 자동화 사고(잘못된 자율 머지)
+    mitigation: "머지 절대 자동 금지" 불변식 — 교차검증 advisory, 머지 인간 승인(AC4)
 
 references:
   - path: claudedocs/harness-auto-capture-analysis.md
-    reason: Q1 = 본 seed의 원본 상위문서(doc-ingest source)
-  - path: .omp/extensions/harness/gates/backpressure-tracker.mjs
-    reason: append-log 패턴 선례(test-history.json)
-  - path: rules/session_persistence.md
-    reason: stale 전제 정정 대상(AC6)
+    reason: Q2 = 본 seed의 원본 상위문서(doc-ingest source, L108-165)
+  - path: .omp/skills/compr/SKILL.md
+    reason: gh pr create(L90) + closeout(L66-69) 선례 — gh issue create 패턴 근거
+  - path: scripts/harness-sync.sh
+    reason: PATHS 전파 메커니즘(L92-119) — AC6 등록 대상
+  - path: .omp/agents
+    reason: reviewer·verifier(+adversary) = cross-verify 재사용 자산(AC5)

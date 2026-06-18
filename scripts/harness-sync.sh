@@ -115,6 +115,7 @@ PATHS=(
   ".omp/skills/brainstorm"
   ".omp/skills/design-mockup"
   ".omp/skills/grepai-search"
+  ".omp/skills/gh-loop"
   ".omp/agents"
 )
 

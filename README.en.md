@@ -101,6 +101,7 @@ In OMP, invoke skills as `/skill:<name>` or trigger them with natural language m
 | `/skill:migrate` | Cut over an existing Claude Code project (.claude/CLAUDE.md) to OMP (insurance tag + harness port) |
 | `/skill:design-mockup` | Generate a single-file HTML mockup with tunable sliders/knobs |
 | `/skill:grepai-search` | Semantic code search (cold-start exploration) |
+| `/skill:gh-loop` | finding → issue → fix → PR → cross-verify → HITL loop (never auto-merges) |
 
 ## Migrating an existing Claude Code project
 
