@@ -18,7 +18,7 @@ No coding. Only information gathering + state file saving to `docs/harness/`.
 |------|------------------|
 | **No implementation** | This is interview only |
 | **No guessing** | Discover from repo, not assume |
-| **All 5 phases required** | Cannot skip phases |
+| **All 5 phase outputs** | Skipping an output = STOP. doc-ingest derives them; interview fills only gaps |
 | **User confirmation per phase** | Each phase needs explicit approval |
 | **Output must be saved** | Kickoff summary required |
 
@@ -27,8 +27,63 @@ No coding. Only information gathering + state file saving to `docs/harness/`.
 - `$ARGUMENTS` — the user-provided argument (appended as `User: <args>`): Project name or feature description
   - `"새 프로젝트"` / `"new project"` → full kickoff (Vision + all phases)
   - `"로그인 기능"` / `"add feature X"` → feature kickoff (skip Vision, start at JTBD)
+  - **문서 경로** (예: `docs/PRD.md`) 또는 **붙여넣은 포괄 스펙** (다중 섹션 산문) → **doc-ingest 모드** (Phase -2): 인터뷰 대신 문서에서 요구를 추출, 인터뷰는 구멍메우기로 축소
 
 ## Workflow
+
+### Phase -2: Doc-Ingest (조건부)
+
+`$ARGUMENTS`에 **포괄 상위 문서 경로**(PRD·스펙·설계문서)가 있거나 사용자가 **다중 섹션 스펙을 붙여넣었으면** doc-ingest 모드로 시작한다. 둘 다 없으면 즉시 Phase -1로 건너뛴다 — **인터뷰-우선 폴백 경로는 그대로 유지**된다.
+
+> **모드 자동결정** (플래그 없음): 문서/스펙 제공 → **인제스트-우선**(인터뷰는 구멍메우개) · 미제공 → **엘리시트-우선**(Phase -1~4 풀 인터뷰). 본 스킬은 P1 초기화 경로를 다룬다 (active seed 있는 P2 반복은 thread-scope가 담당).
+
+**진입 신호 판별**:
+
+1. **경로 인자**: `$ARGUMENTS`가 읽을 수 있는 문서 파일(`.md`/`.txt` 등)을 가리킴 → `read`로 전체 로드
+2. **붙여넣은 스펙**: 한 줄 기능 설명이 아니라 **제목/섹션이 있는 산문 블록** → 그대로 입력으로 사용
+3. 둘 다 아니면(한 줄 설명·프로젝트명) → doc-ingest 아님, **Phase -1로** (브레인스토밍 → 풀 인터뷰)
+
+**Agent가 수행** (completeness-first — *그럴듯한 부분집합 금지*):
+
+1. 문서를 **섹션별로 파싱**한다 (헤딩·번호목록·불릿 단위). 각 섹션에 안정 앵커 부여: `<문서경로>#<헤딩 슬러그 또는 §번호>`.
+2. 섹션별로 요구사항을 **열거**한다 — `R1, R2, … Rn`. 각 `Ri`에 출처 앵커를 붙인다. (요구 = 시스템이 *해야 하는 것*·제약·성공조건. 배경·동기 산문은 요구 아님.)
+3. 열거된 요구별로 **AC를 도출**한다:
+   - **불변식**: 모든 `Ri`는 (a) ≥1개의 `acceptance_criteria`로 매핑되거나 (b) `out_of_scope`로 명시 배제된다. **제3의 상태 금지** — "문서에 있는데 추출 안 함"(=그럴듯한 부분집합)은 completeness contract 위반.
+   - 도출한 각 AC에 **per-AC `source:` 앵커**를 단다 (AC3; 컨벤션은 Step 3 참조).
+4. **요구→AC 매핑표**를 메모리에 구성한다 (Step 4 `coverage` rubric · Step 5 잔차 처리의 입력):
+
+   | Req | 출처 앵커 | 매핑 AC | 상태 |
+   |---|---|---|---|
+   | R1 | `docs/PRD.md#auth` | AC1, AC2 | mapped |
+   | R2 | `docs/PRD.md#audit-log` | — | **residual** |
+   | R3 | `docs/PRD.md#oauth` | — | out_of_scope |
+
+5. 채택한 문서 경로를 메모리에 보존 → Step 3 seed.yaml `references`에 포함, Step 7 audit.jsonl에 `doc_ingested` 이벤트로 기록.
+
+**Gate**: 모든 요구가 `mapped` 또는 `out_of_scope`로 분류될 때까지. residual이 남으면 → 그것만 Phase 0–4 인터뷰가 메운다.
+
+**후속 phase에서의 사용 — 인터뷰는 "구멍메우기"로 축소**:
+
+문서 제공 시 Phase 0–4를 **풀로 강제하지 않는다**. 매핑표에서 **residual·모호·충돌** 항목만 골라 인터뷰한다 (Q6.3 임계: 테스트가능 AC 없음 / 기존 constraint·out_of_scope 충돌 / 경계 모호 / coverage 잔차 — **스타일·nit엔 질문 안 함**). doc-ingest 시 Phase -1(브레인스토밍 신호)은 문서에 흡수되므로 건너뛴다 — 사용자가 별도 캡처를 지목한 경우만 signal로 병합.
+
+| Phase | doc-ingest 시 동작 |
+|---|---|
+| 0 JTBD | 문서에서 User·Problem·Success 추출; 누락 시에만 질문 |
+| 1 Context | 문서가 명시한 스택·제약은 repo 증거로 **검증만**; 공백만 탐색 |
+| 2 Scope | 매핑표의 mapped→MUST/SHOULD, out_of_scope→OUT OF SCOPE 자동 채움; 경계 모호분만 질문 |
+| 3 Acceptance | 도출된 AC를 그대로 사용; **residual·모호 요구만** AC 질문 |
+| 4 Backpressure | 문서가 검증 방법을 명시했으면 채택; 아니면 질문 |
+
+문서가 **없으면** Phase -1(브레인스토밍) → Phase 0–4 풀 인터뷰가 그대로 폴백 경로다 (변경 없음).
+
+**금지 사항** (completeness contract 정합):
+
+- **그럴듯한 부분집합 금지**: 큰 문서를 "핵심만" 추려 일부 요구만 AC화하는 것 = contract 위반. 모든 요구는 mapped 또는 out_of_scope.
+- 요구가 아닌 배경 산문을 AC로 승격하지 않음 (노이즈 유입 금지).
+- 원본 문서를 후처리·재구조화하지 않음 (read-only 인제스트 — Phase -1 보존 정책과 동일).
+- 문서가 모호하면 단정하지 말고 residual로 표시 → 인터뷰로 되돌림 (push→pull).
+
+---
 
 ### Phase -1: Brainstorm Discovery (조건부)
 
@@ -200,17 +255,35 @@ echo "$(date -Iseconds)" > docs/harness/kickoff-done
 - `task_id`: 자동 생성 (`YYYYMMDD-HHMMSS-<4자리 랜덤 hex>`, Bash `date +%Y%m%d-%H%M%S`-`openssl rand -hex 2`)
 - `goal`: Phase 0 JTBD의 Success 기준에서 추출
 - `constraints`: Phase 2 MUST NOT + Phase 1에서 발견한 기술 제약
-- `acceptance_criteria`: Phase 3의 모든 수락 기준
+- `acceptance_criteria`: Phase 3의 모든 수락 기준 (doc-ingest 시 Phase -2 매핑표의 도출 AC; **각 AC에 `source:` 앵커 부여 — AC3**, 아래 컨벤션 참조)
 - `out_of_scope`: Phase 2 OUT OF SCOPE
 - `assumptions`: Phase 1 Context 중 증거 없이 전제한 항목
 - `risks`: Phase 1 Risks + Phase 3 Edge Cases
-- `references`: kickoff-summary.md + 관련 파일 경로 + (Phase -1에서 채택한 brainstorm 캡처 경로, 있을 때만)
+- `references`: kickoff-summary.md + 관련 파일 경로 + (doc-ingest 시 원본 상위 문서 경로) + (Phase -1에서 채택한 brainstorm 캡처 경로, 있을 때만)
+
+**per-AC `source:` 컨벤션** (AC3 — 출처추적 / coverage 역매핑의 기계적 근거):
+
+- doc-ingest로 도출한 각 AC는 출처 문서 섹션 앵커를 인용한다. richer 스키마(현 `seed.yaml` 선례)에서는 AC 객체에 `source:` 필드를 단다:
+
+  ```yaml
+  acceptance_criteria:
+    - id: AC1-...
+      title: ...
+      source: "docs/PRD.md#authentication"   # 또는 "docs/PRD.md §3.2"
+      must: [...]
+      verify: [...]
+  ```
+
+- flat string 스키마(`seed_contract.md` 기본형)를 쓸 경우 앵커를 문장에 인라인한다: `"... (src: docs/PRD.md#authentication)"`.
+- 이 앵커가 Step 4 `coverage` 판정과 verifier coverage 역매핑(AC ↔ 원본 doc)의 기계적 근거다 — 앵커 없으면 누락의 기계적 확인 불가(Q4.3).
 
 **생성 후 자체 검증:**
 - YAML 파싱 가능한가 (Read로 다시 읽어서 확인)
 - 필수 필드 10개 (version, status, task_id, goal, constraints, acceptance_criteria, out_of_scope, assumptions, risks, references) 모두 존재하는가
 - acceptance_criteria가 1개 이상인가
 - `docs/rules/seed_contract.md` 기준에 부합하는가
+- (doc-ingest 시) 원본 요구가 전부 AC≥1 또는 `out_of_scope`로 매핑됐는가 — 매핑표 잔차 0 (`coverage`; Step 4 연동)
+- (doc-ingest 시) 도출 AC가 각각 출처 앵커(`source:`)를 보유하는가 (AC3)
 
 #### Step 3.5: Plan Attack Gate (적대적 검증)
 
@@ -242,7 +315,7 @@ seed.yaml 생성 후 자동 실행. 정책: [`rules/adversarial_review.md`](../.
 
 #### Step 4: Rubric 판정
 
-seed.yaml 내용을 기반으로 4개 차원을 판정한다.
+seed.yaml 내용을 기반으로 **5개 차원**(clarity 4축 + `coverage`)을 판정한다.
 
 | 차원 | HIGH | MEDIUM | LOW |
 |------|------|--------|-----|
@@ -250,8 +323,14 @@ seed.yaml 내용을 기반으로 4개 차원을 판정한다.
 | `constraint_clarity` | 제약이 구체적이고 실행 가능 | 제약 있으나 일부 모호 | 제약 없거나 전부 모호 |
 | `success_criteria_clarity` | 모든 AC가 테스트/관찰 가능 | 일부만 테스트 가능 | 테스트 가능한 AC 없음 |
 | `context_clarity` | 기술 스택, 패턴, 참조 충분 | 부분적 컨텍스트 | 최소한의 발견 |
+| `coverage` | 모든 원본 요구가 ≥1 AC로 매핑, 잔차 0 | 대부분 매핑, 소수 잔차를 명시 | 다수 요구 미매핑 / 매핑표 부재 |
 
 결과를 `docs/templates/rubric-report.template.md` 형식에 맞춰 `docs/harness/rubric-report.md`에 저장.
+
+> **`coverage` 측정** (AC2 — Q9.2 authoring-time coverage; *원본 doc가 전부 AC로 추출됐나*):
+> - **doc-ingest 시**: Phase -2 요구→AC 매핑표 기준. 매핑률 = `mapped / (전체 요구 − out_of_scope)`, 잔차 = 미매핑 요구 목록.
+> - **인터뷰-only 시**: 원본 문서가 없으므로 Scope(MUST/SHOULD) 항목 → AC 매핑률로 측정.
+> - 미매핑 잔차는 `rubric-report.md`의 **`coverage` 줄 + "Unmapped Requirements (Residual)" 목록**에 기록한다.
 
 #### Step 5: Rubric 결과 처리
 
@@ -259,6 +338,10 @@ seed.yaml 내용을 기반으로 4개 차원을 판정한다.
 - LOW가 1개 이상 →
   - `ask` 도구로 해당 차원의 보완 질문을 던진다
   - 보완 후 → seed.yaml 갱신, rubric 재판정
+  - **`coverage` LOW 특수 처리** (AC2 — 기존 ask/followup 메커니즘 *재사용*, 신규 없음): 잔차 목록의 미매핑 요구를 push→pull로 되돌린다 —
+    - 자동 도출 가능(테스트가능·명확)하면 AC를 **추가 추출**해 매핑 (Phase -2 도출 반복)
+    - 모호·충돌이면 `ask`로 질문(Q6.3 임계) → 답을 AC로 흡수하거나 `out_of_scope`로 명시 배제
+    - 잔차 0이 될 때까지 추출·배제 반복 후 `coverage` 재판정 (clarity LOW의 "보완 질문→재판정" 루프와 동형 — 단 *재워딩*이 아니라 *추가 추출*)
   - 사용자가 명시적으로 "그냥 진행해" → override 허용
     - `rubric-report.md`의 Override Reason에 사유 기록
     - `audit.jsonl`에 `seed_override_approved` 이벤트 기록
@@ -298,7 +381,7 @@ seed.yaml 내용을 기반으로 4개 차원을 판정한다.
 ```
 {"ts":"<ISO>","event":"kickoff_completed","actor":"assistant","meta":{"topic":"<작업 주제>"}}
 {"ts":"<ISO>","event":"seed_generated","actor":"assistant","meta":{"seed_path":"docs/harness/seed.yaml","status":"draft","version":1}}
-{"ts":"<ISO>","event":"rubric_evaluated","actor":"assistant","meta":{"goal":"<H/M/L>","constraints":"<H/M/L>","success":"<H/M/L>","context":"<H/M/L>"}}
+{"ts":"<ISO>","event":"rubric_evaluated","actor":"assistant","meta":{"goal":"<H/M/L>","constraints":"<H/M/L>","success":"<H/M/L>","context":"<H/M/L>","coverage":"<H/M/L>"}}
 ```
 
 override가 있었다면 추가:
@@ -309,6 +392,11 @@ override가 있었다면 추가:
 Phase -1에서 brainstorm 캡처를 채택했다면 추가:
 ```
 {"ts":"<ISO>","event":"brainstorm_referenced","actor":"user","meta":{"path":"docs/brainstorming/<file>.md"}}
+```
+
+Phase -2에서 doc-ingest를 사용했다면 추가:
+```
+{"ts":"<ISO>","event":"doc_ingested","actor":"user","meta":{"path":"<원본 문서 경로>","requirements":<N>,"mapped":<M>,"residual":<R>}}
 ```
 
 > **주의**: 기존 audit.jsonl 내용을 덮어쓰지 말고 반드시 append. `bash`로 `echo '...' >> docs/harness/audit.jsonl` 또는 기존 내용을 `read`한 후 합쳐서 `write`.
@@ -443,7 +531,7 @@ Next: `/startdev` or manual planning.
 | `docs/harness/kickoff-summary.md` | 사람 중심 요약 | Created at end |
 | `docs/harness/seed.yaml` | 하네스 중심 구조화 명세 (1급 입력) | Created at end |
 | `docs/harness/plan-attack-report.md` | 적대적 계획 검증 결과 | Created at Step 3.5 |
-| `docs/harness/rubric-report.md` | 명확도 4차원 판정 보고서 | Created at end |
+| `docs/harness/rubric-report.md` | 명확도 4축 + `coverage` 판정 보고서 | Created at end |
 | `docs/harness/current-scope.md` | 훅 호환용 scope 정의 (파생물) | Created at end |
 | `docs/harness/audit.jsonl` | Append-only 감사 로그 | Appended throughout |
 

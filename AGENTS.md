@@ -87,6 +87,7 @@ Harness verification contract details: [`rules/harness_integration_contract.md`]
 - **Docs/policy-only mode**: for pure markdown/policy/template edits, follow the docs-only verification path in `rules/verification_tests_and_evals.md` and include its required evidence format.
 - **Evidence**: cite concrete evidence for key decisions (file paths + excerpts or command output).
 - **Reference doc sync**: in the same PR, update `claudedocs/CLAUDEKR.md` (Korean mirror of this file) or explicitly mark it as stale.
+- **Scope self-detection (L1)**: during a session, when a scope-add / fix / new requirement appears, propose AC and either silent-append (testable + unambiguous) or ask on a material fidelity gap (push→pull) — never let a code change proceed with no tracking AC ([`docs/rules/scope_self_detect_policy.md`](docs/rules/scope_self_detect_policy.md); mechanical backstop = `acceptance-gate`).
 
 ## Completion Contract (MUST)
 
@@ -147,6 +148,8 @@ If you cannot comply with any MUST:
 - Session persistence: [`rules/session_persistence.md`](rules/session_persistence.md)
 - Adversarial review: [`rules/adversarial_review.md`](rules/adversarial_review.md)
 - Agent routing: [`rules/agent_routing.md`](rules/agent_routing.md)
+- Artifact roles (seed/scope/audit 3-tier): [`docs/rules/artifact_roles_contract.md`](docs/rules/artifact_roles_contract.md)
+- Scope self-detect policy (L1): [`docs/rules/scope_self_detect_policy.md`](docs/rules/scope_self_detect_policy.md)
 
 ## Checklists (Use as needed)
 

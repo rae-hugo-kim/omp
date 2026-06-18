@@ -95,6 +95,7 @@ Harness 검증 계약 세부 사항: [`rules/harness_integration_contract.md`](.
 - **문서/정책 전용 모드**: 순수 마크다운/정책/템플릿 편집의 경우, `rules/verification_tests_and_evals.md`의 docs-only 검증 경로를 따르고 필요한 증거 형식을 포함합니다.
 - **근거 제시**: 핵심 결정은 구체적 근거(파일 경로 + 발췌 또는 커맨드 출력)를 함께 제공합니다.
 - **Reference doc sync**: 동일한 PR에서 `claudedocs/CLAUDEKR.md`와 `claudedocs/CLAUDE_original.md`를 업데이트하거나, 명시적으로 stale로 표시합니다.
+- **스코프 자가감지 (L1)**: 세션 중 scope-add / fix / 새 요구가 등장하면 AC를 제안하고, 테스트가능·명확하면 silent-append, material gap이면 질문(push→pull) — 추적 AC 없이 코드 변경이 진행되지 않게 합니다 ([`docs/rules/scope_self_detect_policy.md`](../docs/rules/scope_self_detect_policy.md); 기계적 backstop = `acceptance-gate`).
 
 ## 완료 보고 계약 (MUST)
 
@@ -155,6 +156,8 @@ Harness 검증 계약 세부 사항: [`rules/harness_integration_contract.md`](.
 - Session persistence: [`rules/session_persistence.md`](../rules/session_persistence.md)
 - Adversarial review: [`rules/adversarial_review.md`](../rules/adversarial_review.md)
 - Agent routing: [`rules/agent_routing.md`](../rules/agent_routing.md)
+- Artifact roles (seed/scope/audit 3-tier): [`docs/rules/artifact_roles_contract.md`](../docs/rules/artifact_roles_contract.md)
+- Scope self-detect policy (L1): [`docs/rules/scope_self_detect_policy.md`](../docs/rules/scope_self_detect_policy.md)
 
 ## 체크리스트 (필요 시 사용)
 
