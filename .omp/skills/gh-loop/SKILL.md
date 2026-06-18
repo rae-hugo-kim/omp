@@ -96,6 +96,7 @@ PR에 대해 교차검증을 1패스 돌린다 — 결과는 **참고용**이지
    - A) <…> — tradeoff
    - B) <…> — tradeoff
    **Recommendation**: <기본안 + 근거>
+   <!-- gh-loop:agent -->
    ```
    ```bash
    gh issue comment <issue> --body-file /tmp/ghloop-question.md
@@ -105,8 +106,8 @@ PR에 대해 교차검증을 1패스 돌린다 — 결과는 **참고용**이지
 
 **재개** (트리거 = `needs-decision` 이슈에 **권한 있는 사람**의 새 댓글. option-A: `issue_comment` webhook; option-D: 수동 핑 / `/gh-loop N`):
 1. `issue://<n>` 로 이슈+댓글을 읽는다 (author 포함).
-2. **에이전트 자신의 댓글은 제외**(author ≠ 에이전트), **권한자**의 댓글만 본다 (정확한 권한 임계값·다중응답 충돌·봇 아이덴티티 = 아래 *Open guard decisions*).
-3. 최신 권한자 댓글을 **LLM으로 해석**한다 — **고정 키워드/`grep` 매칭 금지**. 자연어로 충분하다 (예: `"B, 검증까지 해야지"` → 옵션 B + 검증; `approve|merge` grep이었으면 놓쳤을 결정). 그 결정을 memory/이전 계획보다 우선한다.
+2. **권한자(write 권한 이상)의 댓글만** 본다. **에이전트 자신의 댓글은 제외** — 전용 bot 토큰이면 author로, 사용자 PAT 모드면 댓글의 `<!-- gh-loop:agent -->` 마커로 식별해 거른다.
+3. **owner 댓글이 있으면 우선, 없으면 최신 권한자 댓글**을 **LLM으로 해석**한다 — **고정 키워드/`grep` 매칭 금지**. 자연어로 충분하다 (예: `"B, 검증까지 해야지"` → 옵션 B + 검증; `approve|merge` grep이었으면 놓쳤을 결정). 권한자 간 **명시적 이견**이면 자동결정 말고 되묻기(parked). 결정을 memory/이전 계획보다 우선한다.
 4. **모호하면 행동 금지** — 질문·미결정·딴소리면 명확화 댓글을 달고 parked 유지(그 자체가 HITL). 명확한 결정일 때만 진행.
 5. 멱등: 결정당 **1회만** 행동. 행동이 **성공한 뒤** `needs-decision` 제거(`gh issue edit <n> --remove-label needs-decision`); 재라벨 전엔 추가 댓글 무시.
 6. 머지 결정이면: PR별 명시적 인간 승인이 있을 때만 그 지시로 `gh pr merge`. 자율 단계로는 절대 머지하지 않는다.
@@ -117,13 +118,13 @@ PR에 대해 교차검증을 1패스 돌린다 — 결과는 **참고용**이지
 - **반복 한도**: 같은 이슈에서 fix→verify가 N회(기본 3) 수렴 실패면 멈추고 `needs-decision`으로 사용자에게.
 - 파괴 작업은 advisory를 넘어 사용자 확인 (Non-Negotiables).
 
-## Open guard decisions (미결 — 확정 후 본 절 갱신)
+## Guard policy (확정 — 라이브 검증 후 결정)
 
-option-A에서 "권한자 댓글 = 트리거"를 안전하게 하려면 아래 정책을 확정해야 한다 (라이브 검증에서 도출):
-- **권한 임계값**: 누가 루프를 조종할 수 있나 — write / triage / maintain / owner-only? (보안 직결)
-- **봇 아이덴티티**: 에이전트 자기 댓글 제외 기준 — 전용 bot 토큰 vs 사용자 토큰 (option-A 인프라에 종속)
-- **다중 응답 충돌**: 권한자 2인이 다른 답이면 — 최신 / owner 우선 / 합의 요구?
-- **모호성 에스컬레이션**: 명확화 N회 후에도 미결이면 — 권고안 default vs 무기한 parked?
+option-A에서 "권한자 댓글 = 트리거"의 안전 정책:
+- **권한 임계값**: **write 권한 이상**만 루프를 조종할 수 있다 (그 미만 댓글은 무시).
+- **봇 아이덴티티**: 전용 **bot 토큰**으로 식별; PAT 모드면 에이전트 댓글의 `<!-- gh-loop:agent -->` **마커 fallback**으로 자기 댓글 제외.
+- **다중 응답 충돌**: **owner 우선, 없으면 최신** 권한자; 명시적 이견이면 **되묻기**(자동결정 금지).
+- **모호성 에스컬레이션**: 명확화 후에도 미결이면 **무기한 parked** — 자동결정하지 않는다 (선택적 리마인더만).
 
 ## Reuse Map (stage → asset → 위치 / provenance)
 
