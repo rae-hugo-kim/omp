@@ -42,10 +42,13 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 
 ### Stage 1 — Finding → Issue (dedup + throttle)
 
-1. 이미 열린 루프 이슈를 수집 (dedup 입력):
+1. 루프 라벨을 보장하고(없으면 생성, 멱등) 열린 루프 이슈를 수집한다 (dedup 입력):
    ```bash
+   gh label create gh-loop --description "gh-loop automated" --color BFD4F2 2>/dev/null || true
+   gh label create needs-decision --description "awaiting human decision" --color D93F0B 2>/dev/null || true
    gh issue list --state open --label gh-loop --json number,title,labels,body --limit 100
    ```
+   새 repo엔 라벨이 없어 `--label gh-loop` 조회가 곧장 실패하므로 **먼저 보장**한다 (라이브 검증에서 확인된 게이트).
 2. 생성 여부를 **헬퍼**로 판정한다 (gh 호출은 seam, 결정은 테스트된 로직). finding 텍스트는 **변수로** 넘기고 쉘 라인에 직접 보간하지 않는다. `--out`으로 결과를 파일로 받아 **jq 없이**(node만) 소비한다:
    ```bash
    node .omp/extensions/harness/gh-loop-issue.mjs decide --kind finding \
