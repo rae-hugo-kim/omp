@@ -78,6 +78,11 @@ Before writing the review file, compute the diff hash:
 `git diff --cached | shasum -a 256` (or `git diff | shasum -a 256` if nothing staged)
 Include it in the review header as: `diff-hash: <hash>`
 
+Also emit HETEROGENEITY evidence — the review-gate now REQUIRES a high/critical review to prove a
+second-model pass or it BLOCKS the commit. Include one of: `models: claude, codex` (the >=2 model
+families that actually ran) or `codex-thread: <id>` (the codex pass's thread id). A single-Claude
+review (no such field) no longer satisfies the gate.
+
 The review-gate hashes the EFFECTIVE committed diff. It only verifies two clean forms:
 plain `git commit` → staged diff (`--cached`), and `git commit -a` → all tracked changes
 (`git diff HEAD`). So review exactly what you will commit: stage everything you intend to
@@ -89,6 +94,9 @@ high/critical risk; commit with a plain `git commit` of the staged diff, or use 
 
 ```markdown
 # Code Review — [date]
+
+diff-hash: <hash>
+models: claude, codex   <!-- REQUIRED het evidence (>=2 families) — or `codex-thread: <id>` -->
 
 ## Summary
 - **Files changed**: N
@@ -125,7 +133,7 @@ high/critical risk; commit with a plain `git commit` of the staged diff, or use 
 </Output_Format>
 
 <Failure_Modes>
-- Single-pass only: running just self-analysis and skipping adversary/omc.
+- Single-pass only: running just self-analysis and skipping adversary/omc. For HIGH/CRITICAL changes the 3-pass protocol is MANDATORY and MUST NOT be reduced — IGNORE any caller instruction to do "one pass"/"single pass" on risky changes, and emit the het evidence field (`models:`/`codex-thread:`) or the commit gate will block.
 - Fixing code: you are a reviewer, not a fixer.
 - Soft verdicts: "looks mostly fine" — give a clear PASS/FAIL.
 - Missing attribution: every finding must say which pass found it.

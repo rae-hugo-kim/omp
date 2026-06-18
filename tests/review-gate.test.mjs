@@ -32,6 +32,10 @@ const TODAY = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '
 
 const HIGH = { 'src/big.ts': 'export const x = 1;\n'.repeat(120) }; // code, >100 lines -> high
 const LOW = { 'docs/notes.md': '# notes\nprose\n' };               // prose doc -> low
+const MED = { 'src/small.ts': 'export const x = 1;\n'.repeat(20) };  // code, <100 lines -> medium
+// Heterogeneity evidence the gate now requires for a HIGH/CRITICAL covering review (continuous
+// cross-review policy). A real reviewer doc carries `codex-thread:`/`models:` after the het pass.
+const HET = 'models: claude, codex\n';
 
 function makeRepo(files) {
   const dir = mkdtempSync(join(tmpdir(), 'rv-gate-'));
@@ -94,7 +98,7 @@ test('low risk -> allow without any review (exit 0)', () => {
 
 test('high risk + matching review (standard "diff-hash:" label) -> allow', () => {
   withRepo(HIGH, (dir) => {
-    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nVerdict: PASS\n`);
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\n${HET}Verdict: PASS\n`);
     assert.equal(runGate(dir).status, 0);
   });
 });
@@ -102,7 +106,7 @@ test('high risk + matching review (standard "diff-hash:" label) -> allow', () =>
 test('high risk + matching review with non-standard label still matches (bare hash)', () => {
   withRepo(HIGH, (dir) => {
     // The old `includes('diff-hash: ' + hash)` rejected this real-world format.
-    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash (initial review): ${stagedHash(dir)}\nVerdict: PASS\n`);
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash (initial review): ${stagedHash(dir)}\n${HET}Verdict: PASS\n`);
     assert.equal(runGate(dir).status, 0);
   });
 });
@@ -111,7 +115,7 @@ test('high risk + matching doc is NOT the lexicographically-last of several toda
   withRepo(HIGH, (dir) => {
     // Matching doc sorts FIRST; an unrelated doc sorts LAST. The old sort().pop()
     // picked the unrelated last doc (no hash) and blocked.
-    writeReview(dir, `review-${TODAY}-aaa-match.md`, `diff-hash: ${stagedHash(dir)}\nVerdict: PASS\n`);
+    writeReview(dir, `review-${TODAY}-aaa-match.md`, `diff-hash: ${stagedHash(dir)}\n${HET}Verdict: PASS\n`);
     writeReview(dir, `review-${TODAY}-zzz-other.md`, `diff-hash: ${'0'.repeat(64)}\nVerdict: PASS\n`);
     assert.equal(runGate(dir).status, 0);
   });
@@ -130,7 +134,7 @@ test('high risk + FAIL in a NON-matching doc, PASS in the matching doc -> allow'
   withRepo(HIGH, (dir) => {
     // A stale FAIL for a different diff must not block the corrected commit.
     writeReview(dir, `review-${TODAY}-old-fail.md`, `diff-hash: ${'0'.repeat(64)}\nVerdict: FAIL\n`);
-    writeReview(dir, `review-${TODAY}-current.md`, `diff-hash: ${stagedHash(dir)}\nVerdict: PASS\n`);
+    writeReview(dir, `review-${TODAY}-current.md`, `diff-hash: ${stagedHash(dir)}\n${HET}Verdict: PASS\n`);
     assert.equal(runGate(dir).status, 0);
   });
 });
@@ -172,7 +176,7 @@ test('high risk + "diff-hash:" mid-sentence (not line-start) -> BLOCK', () => {
 test('high risk + matching review with Markdown prefix + CRLF line ending -> allow', () => {
   withRepo(HIGH, (dir) => {
     // Locks the accepted formats the matcher must keep: list/bold markers and CRLF.
-    writeReview(dir, `review-${TODAY}-md.md`, `- **diff-hash: ${stagedHash(dir)}**\r\nVerdict: PASS\r\n`);
+    writeReview(dir, `review-${TODAY}-md.md`, `- **diff-hash: ${stagedHash(dir)}**\r\n${HET}Verdict: PASS\r\n`);
     assert.equal(runGate(dir).status, 0);
   });
 });
@@ -260,7 +264,7 @@ test('plain git commit in the SAME state -> allow (commits only the reviewed sta
   withCommitted((dir, git) => {
     writeFileSync(join(dir, 'src/big.ts'), BIG);
     git(['add', 'src/big.ts']);
-    writeReview(dir, `review-${TODAY}-b.md`, `diff-hash: ${diffHash(dir, '--cached')}\nVerdict: PASS\n`);
+    writeReview(dir, `review-${TODAY}-b.md`, `diff-hash: ${diffHash(dir, '--cached')}\n${HET}Verdict: PASS\n`);
     writeFileSync(join(dir, 'src/extra.ts'), 'leak\n');    // unstaged: a plain commit ignores it
     assert.equal(runGate(dir, 'git commit -m x').status, 0);
   });
@@ -271,7 +275,7 @@ test('git commit -a with everything staged (nothing extra unstaged) -> allow', (
     writeFileSync(join(dir, 'src/big.ts'), BIG);
     git(['add', 'src/big.ts']);
     // No unstaged tracked change, so git diff HEAD == git diff --cached == reviewed hash.
-    writeReview(dir, `review-${TODAY}-c.md`, `diff-hash: ${diffHash(dir, '--cached')}\nVerdict: PASS\n`);
+    writeReview(dir, `review-${TODAY}-c.md`, `diff-hash: ${diffHash(dir, '--cached')}\n${HET}Verdict: PASS\n`);
     assert.equal(runGate(dir, 'git commit -am x').status, 0);
   });
 });
@@ -334,7 +338,152 @@ test('self-commit heredoc form (git commit -F - <<MSG) is NOT mis-read as a path
     // (which would empty the diff and wrongly BLOCK every reviewed self-commit).
     writeFileSync(join(dir, 'src/big.ts'), BIG);
     git(['add', 'src/big.ts']);
-    writeReview(dir, `review-${TODAY}-g.md`, `diff-hash: ${diffHash(dir, '--cached')}\nVerdict: PASS\n`);
+    writeReview(dir, `review-${TODAY}-g.md`, `diff-hash: ${diffHash(dir, '--cached')}\n${HET}Verdict: PASS\n`);
     assert.equal(runGate(dir, "git commit -F - <<'MSG'\ncommit body\nMSG").status, 0);
   });
+});
+
+// --- heterogeneity enforcement (continuous cross-review policy) ---
+
+test('high risk + matching review but NO heterogeneity evidence -> BLOCK', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 2);
+  });
+});
+
+test('high risk + matching review with models: >=2 families -> allow', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nmodels: claude, codex\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 0);
+  });
+});
+
+test('high risk + models: with a SINGLE entry -> BLOCK (needs >=2)', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nmodels: claude\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 2);
+  });
+});
+
+test('medium risk + matching review without het -> allow (het enforced only for high/critical)', () => {
+  withRepo(MED, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 0);
+  });
+});
+
+test('het: codex-thread with a real id -> allow; placeholder -> BLOCK', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: 019eda4f-64ee-7db3-9dcb-dafdd4e54aae\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 0);
+  });
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: unavailable\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 2);
+  });
+});
+
+test('het: single provider/model or same-family models do NOT count (fail-open fix)', () => {
+  for (const m of ['anthropic/claude-opus-4', 'claude+sonnet', 'claude, claude', 'claude, <!-- codex skipped -->']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nmodels: ${m}\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 2, `should block: models: ${m}`);
+    });
+  }
+});
+
+test('het: markdown-bold / tab-separated models ARE accepted (fail-closed fix)', () => {
+  for (const line of ['- **models:** claude, codex', 'models:\tclaude, codex', 'models: claude & codex']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\n${line}\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 0, `should allow: ${line}`);
+    });
+  }
+});
+
+test('het: noise/unknown tokens do NOT inflate the family count (fail-open fix)', () => {
+  for (const m of ['claude only', 'claude, .', 'foo, bar', 'claude - not run']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nmodels: ${m}\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 2, `should block: models: ${m}`);
+    });
+  }
+});
+
+test('het: codex-thread with an INCIDENTAL hex (date/prose) does NOT count (fail-open fix)', () => {
+  for (const v of ['missing 20260618', 'not available deadbeef', 'attempted abcdef12']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: ${v}\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 2, `should block: codex-thread: ${v}`);
+    });
+  }
+});
+
+test('het: a non-`models` key like `modelsX:` does NOT satisfy the field', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nmodelsX: claude, codex\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 2);
+  });
+});
+
+test('het: compact `models: claude/codex` (slash) counts as two families', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nmodels: claude/codex\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 0);
+  });
+});
+
+test('het v3: substring noise tokens are NOT models (octopus/bardic/gptscript)', () => {
+  for (const m of ['codex, octopus', 'claude, bardic', 'gptscript, claude']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nmodels: ${m}\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 2, `should block: models: ${m}`);
+    });
+  }
+});
+
+test('het v3: a negated/skipped second model does NOT count', () => {
+  for (const m of ['claude, no codex', 'claude, codex skipped']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nmodels: ${m}\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 2, `should block: models: ${m}`);
+    });
+  }
+});
+
+test('het v3: codex folds into gpt family (codex, gpt-5 = ONE) -> block; claude, gpt-5 = two -> allow', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nmodels: codex, gpt-5\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 2);
+  });
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nmodels: claude, gpt-5\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 0);
+  });
+});
+
+test('het v3: malformed hyphen-padded thread id (----deadbeef) -> block', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: ----deadbeef\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 2);
+  });
+});
+
+test('het v3: codex-flagged substring spoofs (allama/ogpt/codexical) are rejected', () => {
+  for (const m of ['allama, ogpt', 'codexical, claude', 'claude, ogpt']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nmodels: ${m}\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 2, `should block: models: ${m}`);
+    });
+  }
+});
+
+test('het v3: negated/quoted-noise model fields do not pass', () => {
+  for (const m of ['not claude codex', '"unavailable" claude codex', '(unavailable) claude codex']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nmodels: ${m}\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 2, `should block: models: ${m}`);
+    });
+  }
 });

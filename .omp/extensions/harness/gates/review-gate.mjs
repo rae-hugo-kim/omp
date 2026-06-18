@@ -33,16 +33,64 @@ function getStateDir(cwd) {
 //   fall back to any of today's reviews so an explicit FAIL still blocks.
 // - matchedCurrent is true/false when a hash exists, or null when it could not be
 //   computed (the gate treats null as "unverified" and fails closed on high/critical).
+// Map a token to a model FAMILY, or null if it is not a single clean model name. The token must be
+// ENTIRELY `[provider/]<alias><version-suffix?>` — the alias is a known model word, optionally followed
+// by a version that starts with `-`/`.`/digit. This rejects substrings ("octopus"!="opus", "gptscript",
+// "bardic") and trailing-word phrases ("codex skipped", "no codex") — only a bare model name maps.
+// Codex folds into the gpt (OpenAI) family, so "codex, gpt-5" is ONE family, while "claude, codex" is two.
+function modelFamily(tok) {
+  const e = String(tok).toLowerCase().trim().replace(/^[a-z][a-z0-9.-]*\//, ''); // drop one provider/ prefix
+  const m = e.match(/^(claude|sonnet|opus|haiku|codex|gpt|o[1-9]|gemini|bard|grok|llama|mistral|mixtral|deepseek|qwen)(?:[-.\d][a-z0-9.-]*)?$/);
+  if (!m) return null;
+  const a = m[1];
+  if (/^(?:claude|sonnet|opus|haiku)$/.test(a)) return 'claude';
+  if (/^(?:codex|gpt|o[1-9])$/.test(a)) return 'gpt';
+  if (/^(?:gemini|bard)$/.test(a)) return 'gemini';
+  return a; // grok | llama | mistral | mixtral | deepseek | qwen
+}
+
+// Heterogeneity evidence for a HIGH/CRITICAL review (continuous-cross-review policy). Accepts EITHER a
+// `codex-thread:`/`codex-session:`/`adversary-thread:` field whose value's FIRST token is a real id
+// (>=8 leading hex, optionally `-hex` groups), OR a `models`/`models-*` field where EVERY token is a
+// clean model name (see modelFamily) AND >=2 DISTINCT families are named. A single stray non-model
+// token (noise, a negated "no codex"/"codex skipped", a bare provider) makes the whole list not count.
+// Markdown emphasis, list/quote/numbered prefixes, CRLF, and HTML comments are tolerated. The gate
+// enforces that real evidence is PRESENT; truthfulness of the declaration is the reviewer contract's job.
+function isHetEvidence(content) {
+  for (const raw of String(content).split(/\r?\n/)) {
+    const m = /^[ \t>*-]*(?:\d+[.)][ \t]*)?\*{0,2}([a-z][a-z-]*)\*{0,2}[ \t]*:\*{0,2}[ \t]*(.*)$/i.exec(raw);
+    if (!m) continue;
+    const key = m[1].toLowerCase();
+    const val = m[2].replace(/<!--[\s\S]*?-->/g, '').replace(/[*`]/g, '').trim();
+    if (!val) continue;
+    if (/^(?:codex|adversary)-(?:thread|session)$/.test(key)) {
+      const id = val.split(/\s+/)[0];
+      if (/^[0-9a-f]{8,}(?:-[0-9a-f]+)*$/i.test(id)) return true; // real id shape, not "----deadbeef"
+    } else if (/^models(?:[-_]|$)/.test(key)) {
+      const toks = val.split(/[,&+/]|\s+/).map((s) => s.trim()).filter(Boolean);
+      if (toks.length < 2) continue;
+      const fams = new Set();
+      let allModels = true;
+      for (const tok of toks) { const f = modelFamily(tok); if (!f) { allModels = false; break; } fams.add(f); }
+      if (allModels && fams.size >= 2) return true;
+    }
+  }
+  return false;
+}
+
 function evaluateReviews(reviews, currentHash) {
   // ^ + optional "[ \t>*-]" markers + word-bounded "diff-hash" field + the hash.
   const covers = currentHash
     ? (content) => new RegExp(`^[ \\t>*-]*diff-hash\\b[^\\n:]*:[ \\t]*${currentHash}\\b`, 'm').test(content)
     : () => false;
+  // Heterogeneity is detected by isHetEvidence() (family-counting parser, above): a single-model or
+  // placeholder-field review does not satisfy it.
   const matching = currentHash ? reviews.filter((r) => covers(r.content)) : [];
   const failScope = matching.length > 0 ? matching : (currentHash ? [] : reviews);
   const hasFail = failScope.some((r) => /Verdict:\s*FAIL/i.test(r.content));
   const matchedCurrent = currentHash ? matching.length > 0 : null;
-  return { hasFail, matchedCurrent };
+  const matchedHet = currentHash ? matching.some((r) => isHetEvidence(r.content)) : null;
+  return { hasFail, matchedCurrent, matchedHet };
 }
 
 const input = readFileSync(0, 'utf-8');
@@ -146,7 +194,7 @@ const reviews = todayReviews.map((f) => {
   }
 });
 
-const { hasFail, matchedCurrent } = evaluateReviews(reviews, currentHash);
+const { hasFail, matchedCurrent, matchedHet } = evaluateReviews(reviews, currentHash);
 
 // A FAIL verdict covering the current diff blocks regardless of risk level.
 if (hasFail) {
@@ -173,6 +221,16 @@ if (matchedCurrent !== true) {
   }
   log(`WARNING: ${detail}`);
   console.error(`HARNESS WARNING: ${detail}. Consider re-running reviewer.`);
+}
+
+// Heterogeneity enforcement: a covering review for a HIGH/CRITICAL change must evidence a
+// heterogeneous (>=2 model families, e.g. a codex pass) review. A single-model review covering the
+// diff is treated as not-yet-reviewed for risky changes. (Medium keeps review optional, so it is not
+// subject to this; review-skip remains the deliberate override.)
+if (matchedCurrent === true && matchedHet !== true && (risk.level === 'critical' || risk.level === 'high')) {
+  log('BLOCKED: covering review shows no heterogeneous-review evidence');
+  console.error('HARNESS BLOCK: the review covering these changes is single-model — a HIGH/CRITICAL change needs a HETEROGENEOUS review (>=2 model families / a codex pass). After running the heterogeneous pass, add a `models:` (>=2 entries) or `codex-thread:` field to the review doc, or create docs/harness/review-skip to override.');
+  process.exit(2);
 }
 
 log(`Review check passed (${todayReviews.length} today, matchedCurrent=${matchedCurrent})`);
