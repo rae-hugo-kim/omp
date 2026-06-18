@@ -30,10 +30,11 @@ function entry() {
     const command = String(input.command || '');
     if (!command) return null;
     if (isGitCommit(command)) {
-      if (input.failed) return { kind: 'commit', result: 'FAIL', cmd: command.slice(0, 80) };
+      const cmd = command.slice(0, 80);
+      if (input.failed) return { kind: 'commit', result: 'FAIL', cmd };
       let hash;
       try { hash = execSync('git rev-parse --short HEAD', { cwd, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch {}
-      return { kind: 'commit', hash, cmd: command.slice(0, 80) };
+      return { kind: 'commit', hash, cmd };
     }
     const { isVerification, type } = classifyVerification(command);
     if (isVerification) {
