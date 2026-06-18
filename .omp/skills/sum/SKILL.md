@@ -25,6 +25,8 @@ If `docs/sum/` doesn't exist, create it.
 
 ## Process
 
+**Seed from breadcrumb (먼저)**: `.omp/harness-state/session-log.jsonl`이 있으면 먼저 읽는다 — `breadcrumb-tracker`가 자동 기록한 no-LLM 항목(커밋·테스트 PASS/FAIL·변경 파일)이 *Files Changed*·*Work Completed*·*Fixes & Troubleshooting* 섹션을 직접 시드하므로 수기 도출이 줄어든다. (자율화 Q1; 없으면 평소대로 대화에서 도출.)
+
 ### 1. Create output directory
 
 ```bash

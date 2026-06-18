@@ -115,7 +115,7 @@ cd <existing-project>
 
 ## Harness
 
-Mechanisms that operate automatically in the kickoff → startdev flow. Gates are stdin-JSON CLI scripts in `.omp/extensions/harness/gates/` (17), wired to events by the OMP extension `index.ts`:
+Mechanisms that operate automatically in the kickoff → startdev flow. Gates are stdin-JSON CLI scripts in `.omp/extensions/harness/gates/` (19), wired to events by the OMP extension `index.ts`:
 
 | OMP event | Gate | Role |
 |-----------|------|------|
@@ -126,8 +126,10 @@ Mechanisms that operate automatically in the kickoff → startdev flow. Gates ar
 | `tool_result` (read) | read-tracker | Record files read |
 | `tool_result` (edit/write success) | write-tracker + backpressure-invalidator | Record written files; invalidate verification state on code edits |
 | `tool_result` (bash) | backpressure-tracker / failure-tracker | Record verification PASS/FAIL |
+| `tool_result` (bash commit·verify / edit·write) | breadcrumb-tracker | Record session-resume breadcrumbs (commits, tests, file changes; no-LLM) |
 | `before_agent_start` | kickoff-detector | Inject kickoff reminder when new work is detected |
 | `session_start` | harness-version-check | Remote harness drift notice (24h cache) |
+| `session_start` | breadcrumb-surface | Surface recent docs/sum (un-orphan prior summaries; no-LLM) |
 
 - **seed.yaml** — structured kickoff output (goals, constraints, AC, risks)
 - **rubric** — 4-dimension clarity gate (HIGH/MED/LOW)

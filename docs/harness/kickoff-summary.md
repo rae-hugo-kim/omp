@@ -1,29 +1,26 @@
-# Kickoff Summary: intent-ingest-fidelity-framework
+# Kickoff Summary: session-breadcrumb-capture (autonomy Q1)
 
-**Date**: 2026-06-17 · **task_id**: 20260617-145852-04c2 · **Seed**: `docs/harness/seed.yaml`
-**원본 상위 문서(ingest source)**: `claudedocs/harness-auto-capture-analysis.md` (Q1–Q9 + 설계 초안 v1)
+**Date**: 2026-06-18 · **task_id**: 20260618-142442-e610 · **Seed**: `docs/harness/seed.yaml`
+**원본 상위 문서(ingest source)**: `claudedocs/harness-auto-capture-analysis.md#Q1` (실제 doc-ingest)
 
-> 이 요약은 사람용. 전체 분석·근거는 위 분석 doc이 SST. 본 kickoff는 그 doc을 **수동 doc-ingest**하여 seed로 증류한 dogfood다.
+> 자율화 레이어의 첫 sub-feature. 틀(intent-ingest-fidelity-framework v1)의 **doc-ingest를 실전 적용**한 결과 — Q1 섹션을 인제스트해 요구 6개 → AC 6개(coverage 6/6, 잔차 0)로 증류, push→pull로 1 residual 해소.
 
 ## 동기 (JTBD)
-- **User**: 이 하네스로 작업하는 개발자(본인).
-- **Problem**: `sum` 스킬은 수동·고아 문서; kickoff seed는 수기 PRD보다 thin; **반복(P2) 작업은 충실도 게이트가 0** — 대화+sum로만 흘러 추적 안 됨.
-- **Success**: "포괄적 상위 문서를 잘 줬을 때 충실하게 구현되는 틀". 편하게 작업해도 알아서 잡고, 빠진 게 있으면 질문으로 되돌려 답을 얻어냄.
+- **Problem**: 세션 재개 비용 + `sum` 호출 비용 + 고아 `docs/sum/` md. auto-memory(영속 사실)는 이미 자동이나 sum md는 안 읽음.
+- **Success**: turn_end/tool_result에서 no-LLM breadcrumb 자동 캡처 + session_start 표면화 + sum이 breadcrumb seed 소비. 풀 LLM 요약은 수동 유지(Q1.4).
 
-## 설계 (v1)
-- **모드 = 입력 2신호 자동결정**: active seed 有無(P1 초기화/P2 반복) × 문서 제공 與否(인제스트-우선/인터뷰-우선). 문서 있으면 인터뷰는 구멍 메우개로 축소.
-- **볼륨→산출물**: 무게=고도(P1 풀 seed / P2 AC append), 인터뷰 길이=입력 풍부함 역비례.
-- **coverage 불변식(한 불변식 두 시점)**: authoring-coverage(seed가 원본 doc 덮나) + runtime-coverage(seed가 지금 하는 일 덮나=L2). 큰 시드면 draw-down으로 대부분 침묵, 벗어날 때만 발화.
-- **P2 자가감지 2층**: L1(대화 중 in-agent, silent append/질문) + L2(커밋 시 acceptance-gate backstop). push→pull — 빠진 건 질문으로 당김.
-- **역할 3-tier**: `seed`=durable SSOT(체크대상, bounded) · `current-scope`=스레드 작업목표(bounded) · `audit.jsonl`=provenance/satisfaction 원장(유일 성장).
+## 결정 (확정)
+- trigger = `turn_end + tool_result` (현 구현은 tool_result), storage = `.omp/harness-state/session-log.jsonl`, scope = option 1.
+- **sum ↔ auto-memory = 분리** (RES 해소): auto-memory가 sum md를 읽는 *연계*는 "auto-memory 재구축 금지" 제약과 모순 → session_start 표면화(AC3)만.
 
-## 핵심 결정
-- **(가) seed=feature-unit durable**: 반복은 seed revise + thread-scope, 새 기능이면 새 seed. 스레드 경계는 L1이 겸판.
-- **richer 스키마**: per-AC `must`/`should`/`verify`/`source` (기존 seed 선례). `seed_contract.md`(flat)와 drift — 정합은 out_of_scope.
-- **첫 슬라이스 = AC4+AC6+AC7** (P2 충실도 최소 루프): 기계적·신뢰가능, 게이트-0 구멍 직접 차단.
+## 구현 (lean cut: AC1/3/4/6)
+- `breadcrumb-tracker.mjs` (tool_result) — 커밋·테스트 PASS/FAIL·파일변경 append (AC1)
+- `breadcrumb-surface.mjs` (session_start) — 최근 docs/sum 표면화 (AC3)
+- `sum` 스킬 — breadcrumb seed 소비 (AC4)
+- stale 문서 4곳 정정 (AC6)
 
-## Out of Scope (deferred)
-24/7 자율·robo-omp · 멀티세션(Q3) · GitHub 루프(Q2) · auto-memory 재구축(Q1) · CI workflow · seed_contract 정합.
+## Out of scope (fast-follow)
+- AC2 session.compacting 보존 · AC5 session_shutdown no-LLM — `index.ts` extension API에 새 라이프사이클 이벤트 추가 필요(코어 변경).
 
 ## 다음
-seed `draft` → rubric 통과 → (사용자 승인 `approved`) → slice 1 구현(`startdev`).
+seed `draft` → rubric 통과 → 구현(완료) → reviewer/verifier → 커밋. AC2/5 fast-follow는 후속 스레드(seed reopen).

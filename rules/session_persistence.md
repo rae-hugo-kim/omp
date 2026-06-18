@@ -22,12 +22,12 @@ When capturing a phase boundary, fold the worked/failed/remaining detail into th
 
 ## Decision: summarization stays manual (no compaction/turn-end auto-save)
 
-We deliberately do **not** auto-summarize sessions on compaction or turn end. Decided 2026-05-27, when these were available as Claude Code `PreCompact`/`Stop` hooks; OMP exposes no such events, which keeps the decision in force for free.
+We deliberately do **not** auto-summarize sessions **with an LLM** on compaction or turn end. Decided 2026-05-27 (Claude Code `PreCompact`/`Stop` era). **Correction (2026-06)**: OMP *does* expose these lifecycle events (`session.compacting` / `turn_end` / `session_shutdown`) — feasibility was never the blocker. The decision now rests purely on value-vs-noise: a full **LLM** auto-summary stays manual (Q1.4 — no event encodes "this thread is done *and* worth keeping"), while the **lightweight breadcrumb** mentioned below is now implemented (`breadcrumb-tracker`, no-LLM).
 
 - **Compaction rarely happens.** In our usage a session seldom fills even ~50% of the context window, so a compaction-triggered save would almost never run — low value for the maintenance cost.
 - **Session end is not machine-detectable.** Only the user decides when a coherent thread of work is "done." A turn-end trigger fires when the assistant finishes a turn, not when the user closes out a session, so turn-based auto-summary would misfire constantly.
 - **The `sum` skill is manual by design.** Its value is the troubleshooting/decision narrative that is *not* already in git or the PR body; capturing that well requires the user's judgment about when the thread is complete.
-- **Git-event triggers (push/merge) were considered and deferred.** `merge` is the only git event that means "this unit of work is accepted," but sessions and PRs are many-to-many (one session can span several PRs), so a merge-triggered full summary would fragment or duplicate. No good design yet — revisit only if a concrete, low-noise trigger emerges (e.g. a lightweight breadcrumb log rather than a full LLM summary).
+- **Git-event triggers (push/merge) were considered and deferred.** `merge` is the only git event that means "this unit of work is accepted," but sessions and PRs are many-to-many, so a merge-triggered full summary would fragment or duplicate. **Update (2026-06)**: the lightweight breadcrumb alternative is now built — `breadcrumb-tracker` appends no-LLM breadcrumbs (commits, test PASS/FAIL, edited files) on `tool_result`, and `breadcrumb-surface` surfaces recent `docs/sum/` at `session_start`. The full LLM summary remains manual `sum`, now seeded by the breadcrumb.
 
 If this is revisited, see `claudedocs/ecc_harness_analysis.md` (the original PreCompact proposal, Claude Code era) and `docs/architecture/harness-architecture.md` §4.3 G7/G8.
 

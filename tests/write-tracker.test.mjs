@@ -122,6 +122,10 @@ test('index.ts wires the lifecycle this fix depends on', () => {
     'context-gate must gate edit/write at tool_call');
   assert.match(src, /runGate\("write-tracker\.mjs"/,
     'write-tracker must record edit/write at tool_result');
+  assert.match(src, /runGate\("breadcrumb-tracker\.mjs"/,
+    'breadcrumb-tracker must record breadcrumbs at tool_result');
+  assert.match(src, /runGate\("breadcrumb-surface\.mjs"/,
+    'breadcrumb-surface must surface docs/sum at session_start');
 });
 
 test('parity: write-tracker normalizes paths identically to read-tracker', () => {

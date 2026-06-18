@@ -1,176 +1,129 @@
-name: intent-ingest-fidelity-framework
+name: session-breadcrumb-capture
 status: draft
 version: 1
-task_id: "20260617-145852-04c2"
+task_id: "20260618-142442-e610"
 goal: >
-  사용자가 임의 고도의 의도(포괄적 상위 문서 또는 변경노트)를 저작하면, 하네스가 이를
-  추적가능·테스트가능한 AC로 추출하고 coverage를 검증하며 구현이 그것에 충실한지
-  게이트로 보장하는 "의도-인제스트 충실-구현" 틀. 인터뷰 의존을 doc-ingest로,
-  반복 작업의 게이트-부재를 자가감지 amend로 대체한다.
+  세션 재개 비용과 sum 호출 비용을 줄이기 위해, turn_end/tool_result에서 변경파일·테스트
+  PASS/FAIL·커밋·AC토글을 no-LLM으로 자동 캡처(breadcrumb)하고, session.compacting에서 보존,
+  session_start에서 관련 docs/sum을 표면화하며, 수동 sum이 breadcrumb을 seed로 소비한다.
+  영속 사실(auto-memory)은 이미 자동이므로 재구축하지 않는다. (자율화 레이어 Q1)
 
 context:
-  source: claudedocs/harness-auto-capture-analysis.md
-  date_locked: 2026-06-17
+  source: claudedocs/harness-auto-capture-analysis.md  # Q1 (L23-107) = doc-ingest 원본 상위문서
+  date_locked: 2026-06-18
   related_docs:
-    - claudedocs/harness-auto-capture-analysis.md   # Q1–Q9 분석 + 설계 초안 v1
-    - .omp/skills/kickoff/SKILL.md
-    - docs/rules/seed_contract.md
-    - docs/rules/kickoff_output_contract.md
-    - docs/rules/closeout_contract.md
-    - .omp/extensions/harness/gates/acceptance-gate.mjs
+    - claudedocs/harness-auto-capture-analysis.md       # Q1.1-Q1.7
+    - rules/session_persistence.md                       # stale 전제 정정 대상
+    - docs/architecture/harness-architecture.md          # G7/G8 정정 대상
+    - .omp/extensions/harness/gates/backpressure-tracker.mjs  # append-log 패턴 선례
 
-# 스키마 주: 본 seed는 기존 docs/harness/seed.yaml 선례의 richer 스키마(per-AC must/should/verify)를
-# 따른다. docs/rules/seed_contract.md(flat string 배열)와 drift가 있으며, contract 정합은 out_of_scope.
+# 스키마: intent-ingest-fidelity-framework seed 선례의 richer 스키마(per-AC must/verify/source).
 
 constraints:
-  - 기존 kickoff/seed/gate 확장으로 구현 — 신규 발명 최소 (Phase -1 ingest 패턴·rubric·Step3.5·acceptance-gate 재사용)
-  - harness-sync.sh 자동 전파 경로 유지 (kickoff/startdev는 PATHS 등재됨, gate는 .omp/extensions/harness 통째 sync)
-  - SSOT 무한 성장 금지 — seed=durable bounded, current-scope=thread bounded, audit.jsonl=유일 성장처 (Q7)
-  - 역할 분리 — seed=체크할 SSOT, current-scope=스레드 작업목표, 혼동 없이 (Q8 R1)
-  - 충실도 게이트는 advisory 아닌 실효 (현 kickoff-detector는 advisory뿐)
-  - 머지 자동화 금지 (상위 비전 정합)
-  - 수동/PoC 티어 대상, 24/7 인프라 비의존 (Q3.9)
+  - no-LLM 캡처 — breadcrumb append에 LLM 호출 금지(턴마다 비용/노이즈 금지)
+  - session_shutdown에서 LLM 요약 금지 — 프로세스 종료 시점, 비동기 LLM 신뢰 불가(flush만)
+  - auto-memory(영속 사실 A) 재구축 금지 — 이미 자동(`<memories>` 주입), 상호보완
+  - 기존 tracker/append-log 패턴 재사용(`backpressure-tracker`→`test-history.json` 선례), 신규 발명 최소
+  - 노이즈 최소 — 미완 스레드의 저품질 자동요약 양산 금지(Q1.4)
+  - 풀 내러티브(C)는 수동 sum 유지 — 자동화하지 않음(인간 판단 필요)
 
-# in_scope는 계약 필드 아님(참고용). out_of_scope는 계약대로 top-level.
 in_scope:
-  - P1 doc-ingest 모드 (kickoff 인터뷰→인제스트 재프레이밍)
-  - authoring-time coverage 게이트 (rubric 5번째 축)
-  - per-AC 출처추적 (AC가 source doc 섹션 인용)
-  - P2 반복 thread-scope 복원 + 자가감지(L1) + commit backstop(L2)
-  - audit provenance/satisfaction 원장 확장
-  - 역할 분리 계약 명문화
-  - verify-time verifier coverage 패스
+  - turn_end/tool_result breadcrumb append (no-LLM)
+  - session.compacting flush/preserve(preserveData)
+  - session_start 관련 docs/sum 표면화(고아 해소)
+  - sum 스킬이 breadcrumb seed 소비
+  - stale 문서 정정(session_persistence/harness-architecture/ecc/AGENTS)
 
 out_of_scope:
-  - 24/7 완전자율·상시응답 (robo-omp 프로젝트별 볼트온, 후순위; Q4.0)
-  - 멀티세션 오케스트레이션 (RPC 워커 풀; Q3)
-  - GitHub 이슈→fix→PR→교차검증 자율 루프 (Q2)
-  - auto-memory/breadcrumb 재구축 (이미 가동; Q1)
-  - CI reusable workflow·셋업 스킬 (틀 검증 후; Q2.10)
-  - seed_contract.md 스키마 정합 (flat↔richer drift — 별도 cleanup)
+  - auto-memory 재구축(영속 사실 A — 이미 자동; Q1.2)
+  - session.compacting sum 자동초안 생성(option 3 — 노이즈 위험, 잠정 제외; Q1.7)
+  - 풀 트러블슈팅 내러티브 자동화(C는 수동 유지; Q1.4)
 
 assumptions:
-  - 기존 kickoff/seed/gate를 확장 가능 (acceptance-gate.mjs·kickoff SKILL.md 구조 확인함)
-  - OMP가 turn/commit 라이프사이클 이벤트를 노출 (analysis Q1에서 확인)
-  - harness-sync.sh PATHS에 kickoff/startdev 등재 → 확장분 자동 전파 (analysis Q4)
-  - richer 스키마가 acceptance-gate 파싱과 호환 (acceptance_criteria 존재 regex·status 체크 통과)
+  - OMP가 turn_end/tool_result/session.compacting/session_start/session_shutdown 이벤트를 노출(Q1.1 확인)
+  - `.omp/harness-state/`가 runtime append-log의 표준 위치(gitignored)
+  - auto-memory(`memory.backend: local`) 활성 — 영속 사실 축 담당
 
 acceptance_criteria:
-  - id: AC1-doc-ingest
-    title: P1 doc-ingest 모드 (인터뷰→인제스트)
-    source: "analysis Q4.4(a)·Q5.2·Q5.4 / kickoff SKILL.md:33-74 Phase -1 일반화"
+  - id: AC1-breadcrumb-append
+    title: turn_end/tool_result breadcrumb append (no-LLM)
+    source: "analysis Q1.5·Q1.7 (L80, L97)"
     must:
-      - kickoff가 문서 path/붙여넣은 스펙을 입력으로 수용 (인자 또는 감지)
-      - 입력 문서를 섹션별로 파싱하여 요구사항 열거
-      - 열거된 요구별로 AC 도출 (완전성 우선, 그럴듯한 부분집합 금지)
-      - 문서 제공 시 인터뷰는 coverage 구멍 메우기로 축소 (전 5-phase 강제 안 함)
-    should:
-      - 문서 없으면 기존 5-phase 인터뷰로 자연 폴백
+      - turn_end 및/또는 tool_result 이벤트에서 breadcrumb 1줄 append (LLM 없음)
+      - 기록 항목 — 변경 파일, 테스트 PASS/FAIL, 커밋 해시, AC 토글
+      - 저장 위치/포맷은 append-only jsonl (`test-history.json` 패턴 확장)
     verify:
-      - 샘플 문서 ingest → 요구 N개 열거 + AC 매핑 표 산출 확인
-      - 인터뷰가 미매핑/모호 항목으로만 한정되는지 확인
-
-  - id: AC2-coverage-gate
-    title: authoring-time coverage 게이트 (rubric 5번째 축)
-    source: "analysis Q4.2·Q4.4(b)·Q9.2"
+      - 이벤트 발생 → 해당 breadcrumb 줄이 append되는지 확인(가짜 이벤트 주입 테스트)
+  - id: AC2-compact-flush
+    title: session.compacting 보존(flush/preserveData)
+    source: "analysis Q1.5 (L81)"
     must:
-      - kickoff rubric에 5번째 차원 coverage 추가 (기존 4 clarity 축 + coverage)
-      - 원본 요구 ↔ AC 매핑률 및 미매핑 잔차 명시
-      - coverage LOW면 추가 추출 강제 (기존 Step5 LOW→ask 패턴 재사용)
+      - session.compacting에서 breadcrumb 상태를 flush/preserve(preserveData 반환)
     verify:
-      - 일부러 요구 누락된 입력 → coverage LOW 판정 + 잔차 리스트 확인
-
-  - id: AC3-per-ac-source
-    title: per-AC 출처추적
-    source: "analysis Q4.4(c)·Q8 R2"
+      - compacting 이벤트 → breadcrumb 보존 확인
+  - id: AC3-startup-surface
+    title: session_start 관련 docs/sum 표면화
+    source: "analysis Q1.5·Q1.2-C (L82, L53)"
     must:
-      - 각 AC가 출처 문서 섹션 앵커를 인용 (seed AC에 source 필드)
+      - session_start에서 관련 `docs/sum/*.md`를 표면화(고아 md 해소)
     verify:
-      - 본 seed 자체가 per-AC source 보유 (dogfood 증거)
-
-  - id: AC4-p2-thread-scope
-    title: P2 반복 thread-scope 복원
-    source: "analysis Q5.3·Q8.2 G-scope"
+      - session_start → 관련 sum 표면화 메시지/주입 확인
+  - id: AC4-sum-seeded
+    title: sum 스킬이 breadcrumb seed 소비
+    source: "analysis Q1.5·Q1.4 (L83, L68)"
     must:
-      - 반복 스레드마다 current-scope.md 재생성 (현재 kickoff-only 생성 → 반복도 생성)
-      - 닫힌/없는 seed에서 재개 시 thread-goal 파일 확보
+      - `sum` 스킬이 breadcrumb(session-log)을 seed로 읽어 내러티브 초안 비용 절감
+      - sum은 수동 유지(자동 호출 안 함)
     verify:
-      - active seed 있는 상태에서 반복 작업 시작 → current-scope.md 재생성 확인
-
-  - id: AC5-p2-l1-selfdetect
-    title: P2 자가감지 L1 (in-agent)
-    source: "analysis Q6.0·Q6.2 L1·Q6.3"
+      - breadcrumb 존재 시 sum이 그것을 입력으로 참조하는지 스킬 절차 확인
+  - id: AC5-no-shutdown-llm
+    title: session_shutdown LLM 요약 금지
+    source: "analysis Q1.5 (L84)"
     must:
-      - 규칙(AGENTS.md/rules)에 — 대화 중 scope-add/fix 감지 시 AC 제안
-      - 테스트가능·명확하면 silent append, material gap이면 질문 (Q6.3 임계)
+      - session_shutdown에서 LLM 요약을 트리거하지 않음(flush 정도만)
     verify:
-      - scope-add 대화 → AC append 또는 질문 트리거 확인 (규칙 존재 + 동작 예시)
-
-  - id: AC6-l2-backstop
-    title: L2 commit backstop (runtime coverage)
-    source: "analysis Q6.2 L2·Q9.2"
+      - shutdown 경로에 LLM 요약 호출이 없음을 코드로 확인(부재 보장)
+  - id: AC6-docs-corrected
+    title: stale 문서 정정
+    source: "analysis Q1.6 (L88-91)"
     must:
-      - acceptance-gate 확장 — 코드변경 커밋인데 매칭 active AC 없으면 질문/차단
-      - 현 "active AC 0 → no-op(allow)" 구멍을 "→ 질문"으로 전환
+      - `rules/session_persistence.md` §Decision "no such events" 전제 정정 + 결정 재서술
+      - `docs/architecture/harness-architecture.md` G7/G8 "의도적 미채택" 근거 정정
+      - `claudedocs/ecc_harness_analysis.md` PreCompact/instinct cross-ref 갱신
+      - breadcrumb 게이트 신설 시 `AGENTS.md` Harness Enforcement 표에 행 추가
     verify:
-      - active AC 없이 코드 커밋 시도 → backstop 발화 확인
-      - draw-down(AC 커버됨) 커밋은 통과 확인
-
-  - id: AC7-audit-provenance
-    title: audit provenance + satisfaction 원장
-    source: "analysis Q8.2 G-trace·Q8 R2"
-    must:
-      - audit.jsonl 스키마에 thread_id, seed_version, ac_targeted, verdict 기록
-      - 커밋 메시지에 thread/task_id 링크
-    verify:
-      - 한 스레드 작업 후 audit에서 커밋→seed version→AC→verdict 체인 추적 확인
-
-  - id: AC8-role-tiering
-    title: 역할 분리 계약 (seed/scope/audit 3-tier)
-    source: "analysis Q7·Q8.1"
-    must:
-      - seed=durable SSOT(체크대상), current-scope=스레드 목표, audit=원장 역할을 계약 문서에 명시
-      - 에이전트가 혼동 없이 사용하도록 규칙화 + 성장 정책(seed/scope bounded, audit append-only)
-    verify:
-      - 계약 문서에 3-tier 역할·성장 정책 명시 존재
-
-  - id: AC9-verifier-coverage
-    title: verify-time verifier coverage 패스
-    source: "analysis Q4.4(d)·Q9.2 runtime-coverage"
-    must:
-      - verifier가 AC ↔ 원본 doc 역매핑 재확인 (저작-시 AC2 + 검증-시 AC9 이중)
-    verify:
-      - verifier 실행 → coverage 잔차 0 또는 명시 확인
+      - 위 문서들이 "이벤트 부재" 거짓 전제를 더 이상 담지 않음
 
 decisions:
-  seed_granularity:
-    value: feature-unit-durable
-    reason: "(가) — seed=작업단위(feature) durable SSOT. 반복은 seed revise + thread-scope, 진짜 새 기능이면 새 seed. 스레드 경계는 L1 자가감지가 겸판. (analysis Q8.4·(가))"
-  schema:
-    value: richer-per-ac-verify
-    reason: "기존 seed 선례 스키마(per-AC must/should/verify) 채택. contract(flat)와 drift이나 per-AC verify가 AC3와 정합. (analysis R3)"
-  first_slice:
-    value: "AC4 + AC6 + AC7 (P2 충실도 최소 루프)"
-    reason: "기계적·신뢰가능, P2 게이트-0 구멍 직접 차단, tests/ 회귀 기반 존재. L1·doc-ingest·coverage rubric은 후속 슬라이스. (analysis Q8.3·Q9.3)"
+  trigger:
+    value: "turn_end + tool_result"
+    reason: "Q1.5 권장 — turn_end(턴 단위) + tool_result(세밀)."
+    status: confirmed (default 채택 2026-06-18)
+  storage:
+    value: ".omp/harness-state/session-log.jsonl"
+    reason: "Q1.5/Q1.7 — test-history.json과 같은 append-log 위치(gitignored runtime)."
+    status: confirmed (default 채택)
+  scope:
+    value: "option 1 (breadcrumb + session_start surface + sum seed)"
+    reason: "Q1.7 권장. option 3(session.compacting sum 자동초안)은 노이즈 위험으로 out_of_scope."
+    status: confirmed
+  sum_automemory_link:
+    value: "분리 — session_start 표면화(AC3)만; auto-memory는 sum md를 읽지 않음"
+    reason: "RES 해소(2026-06-18): '연계'는 auto-memory 동작을 바꿔 'auto-memory 재구축 금지' 제약과 모순. 고아 sum은 AC3 표면화로 충분. (analysis Q1.7 L98)"
+    status: confirmed
 
 risks:
   - id: R1
-    desc: L1 자가감지 캘리브레이션 — 과탐(짜증)/과소탐(누락). 의미판단이라 regex 불가.
-    mitigation: L2 backstop(기계적)이 L1 누락 포획. 질문은 충실도 gap에만 (Q6.3 임계).
+    desc: breadcrumb 노이즈/볼륨 — 매 tool_result append가 과대해질 수 있음
+    mitigation: no-LLM 최소 필드만, jsonl append, 필요시 turn_end로 한정
   - id: R2
-    desc: doc→AC 추출 완전성 보장 어려움 (큰 시드가 전부 짊어짐; Q9.1 load-bearing 1).
-    mitigation: coverage 게이트(AC2) + verifier coverage(AC9) 이중 + 미매핑 잔차 명시.
-  - id: R3
-    desc: seed_contract.md(flat) ↔ 실제 seed(richer) 스키마 drift.
-    mitigation: 본 작업은 richer 채택(precedent + per-AC verify 정합). contract 정합은 out_of_scope.
-  - id: R4
-    desc: P2 "스레드 경계"(seed revise vs 새 seed) 판단 모호.
-    mitigation: L1 자가감지가 "기존 연장 vs 새 기능" 겸판 ((가) 결정).
+    desc: session_shutdown 비동기 신뢰 불가
+    mitigation: shutdown은 flush만, LLM 금지(AC5)
 
 references:
   - path: claudedocs/harness-auto-capture-analysis.md
-    reason: Q1–Q9 분석 + 설계 초안 v1 (본 seed의 원본 상위 문서)
-  - path: .omp/skills/kickoff/SKILL.md
-    reason: 확장 대상 — Phase -1 ingest 패턴, Step3.5/Step4 rubric
-  - path: .omp/extensions/harness/gates/acceptance-gate.mjs
-    reason: 확장 대상 — L2 backstop (slice 1)
+    reason: Q1 = 본 seed의 원본 상위문서(doc-ingest source)
+  - path: .omp/extensions/harness/gates/backpressure-tracker.mjs
+    reason: append-log 패턴 선례(test-history.json)
+  - path: rules/session_persistence.md
+    reason: stale 전제 정정 대상(AC6)

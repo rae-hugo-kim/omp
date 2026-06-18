@@ -286,6 +286,7 @@ export default function harness(pi: HarnessExtensionApi): void {
 				const payload: GatePayload = { tool_name: "Bash", tool_input: { command }, session_state };
 				const tracker = bashRunFailed(event) ? "backpressure-failure-tracker.mjs" : "backpressure-tracker.mjs";
 				await runGate(tracker, payload);
+				await runGate("breadcrumb-tracker.mjs", { tool_name: "Bash", tool_input: { command, failed: bashRunFailed(event) }, session_state });
 				return;
 			}
 			if (EDIT_TOOL_NAMES.has(event.toolName) && !event.isError) {
@@ -293,6 +294,7 @@ export default function harness(pi: HarnessExtensionApi): void {
 					const payload: GatePayload = { tool_name: "Write", tool_input: { file_path: filePath }, session_state };
 					await runGate("write-tracker.mjs", payload);
 					await runGate("backpressure-invalidator.mjs", payload);
+					await runGate("breadcrumb-tracker.mjs", payload);
 				}
 			}
 		} catch (err) {
@@ -314,14 +316,20 @@ export default function harness(pi: HarnessExtensionApi): void {
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
+		const session_state = { cwd: ctx.cwd };
 		try {
-			const run = await runGate("harness-version-check.mjs", { session_state: { cwd: ctx.cwd } }, VERSION_CHECK_TIMEOUT_MS);
+			const run = await runGate("harness-version-check.mjs", { session_state }, VERSION_CHECK_TIMEOUT_MS);
 			const note = `${run.stdout}\n${run.stderr}`.trim();
-			if (!note) return;
-			if (ctx.hasUI && ctx.ui?.notify) ctx.ui.notify(note, "warning");
-			else pi.logger?.info?.(note);
+			if (note) { if (ctx.hasUI && ctx.ui?.notify) ctx.ui.notify(note, "warning"); else pi.logger?.info?.(note); }
 		} catch {
 			// Version check is best-effort advisory; stay silent on infra errors.
+		}
+		try {
+			const run = await runGate("breadcrumb-surface.mjs", { session_state });
+			const note = run.stdout.trim();
+			if (note) { if (ctx.hasUI && ctx.ui?.notify) ctx.ui.notify(note, "info"); else pi.logger?.info?.(note); }
+		} catch {
+			// Surface is best-effort; prior summaries are a nicety, not a gate.
 		}
 	});
 }

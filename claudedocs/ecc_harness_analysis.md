@@ -49,7 +49,7 @@
 | **`agents/silent-failure-hunter`** (빈 catch / 삼켜진 에러 / 위험한 fallback 전담) | 우리 `code-reviewer`가 겸업하지만 독립 패스로 빠짐없이 잡힘 | `rules/code_review_policy.md` 체크리스트에 항목 추가 (에이전트 신설은 후순위) |
 | **`continuous-learning-v2` "instinct" 모델의 3요소**: (a) PreToolUse/PostToolUse 훅 관찰(100% 관측), (b) confidence 0.3~0.9 가중, (c) project/global 스코프 분리 | 우리 auto-memory는 **대화 감지 기반 + 글로벌**. 프로젝트 오염/confidence 없음 | auto-memory frontmatter에 `confidence`, `project_id` 필드 추가 + 관찰 훅 실험 (전면 도입 대신 **개념만 흡수**) |
 | **`skills/eval-harness`** (테스트와 구분되는 LLM eval 파이프라인) | 우리 `rules/verification_tests_and_evals.md`는 원칙만. 실행 인프라 없음 | EDD가 실제로 필요해지는 시점에 도입 (지금 당장은 ROI 낮음) |
-| **PreCompact hook** (압축 직전 상태 덤프) | 우리 `sum` 스킬은 수동. 자동 PreCompact 훅은 컨텍스트 날림 방지 | ~~`.claude/hooks/harness/pre-compact.mjs` 후보~~ → **미채택 (결정 2026-05-27)**: 세션이 컨텍스트 ~50%도 안 채워 압축이 거의 안 일어남 → 트리거 거의 안 됨. 요약은 `sum` 수동 유지. `rules/session_persistence.md` 참조 |
+| **PreCompact hook** (압축 직전 상태 덤프) | 우리 `sum` 스킬은 수동. 자동 PreCompact 훅은 컨텍스트 날림 방지 | ~~`.claude/hooks/harness/pre-compact.mjs` 후보~~ → **미채택 (결정 2026-05-27)** → **부분 실현(2026-06)**: no-LLM breadcrumb을 `breadcrumb-tracker`(turn_end/tool_result)로 신설, 압축 비의존. 전체 LLM 요약은 여전히 `sum` 수동. `rules/session_persistence.md` 참조 |
 | **`instinct-export`/`import` YAML 포맷** | 팀 공유/머신 이동 시 memory 전이 | 개인 사용이면 보류, 팀 확장 시 고려 |
 
 ## 3. 우리에게 없어서 받아들여야 하는 것 (신규 도입 후보)
@@ -91,7 +91,7 @@
 2. **`rules/harness_design.md` 신설** — ECC `agent-harness-construction`의 4-quality 모델 + granularity 룰 편입. `hook_recipes.md`, `harness_integration_contract.md`와 상호참조.
 3. **`code_review_policy.md` 체크리스트에 silent-failure 항목 추가** — 에이전트 신설 대신 룰 보강이 우리 스타일에 맞음.
 4. **auto-memory frontmatter 확장 실험** — `confidence`, `project_id` 필드 추가, 기존 memory 구조는 유지. (instinct 전면 도입은 보류)
-5. ~~**PreCompact 훅 신설** — `.claude/hooks/harness/pre-compact.mjs`가 `.omc/state/sessions/<id>/`에 요약 덤프.~~ → **미채택 (결정 2026-05-27)**. 압축이 거의 발생 안 해 트리거가 안 걸리고, 세션 종료는 사용자만 판단 가능(Stop 훅 자동 요약도 같은 이유로 기각). 요약은 `sum` 스킬 수동 유지. git push/merge 트리거도 검토했으나 세션↔PR 다대다라 조각화/중복 → 보류. 상세: `rules/session_persistence.md` "Decision: summarization stays manual".
+5. ~~**PreCompact 훅 신설**~~ → **부분 실현(2026-06, 자율화 Q1)**: 압축 트리거 대신 `breadcrumb-tracker`가 `turn_end`/`tool_result`에서 no-LLM breadcrumb(커밋·테스트·변경파일)을 `.omp/harness-state/session-log.jsonl`에 append하고, `breadcrumb-surface`가 `session_start`에 `docs/sum/`를 표면화하며, 수동 `sum`이 이를 seed로 소비. 전체 LLM 자동요약은 미채택 유지(Q1.4). 상세: `rules/session_persistence.md`.
 
 3~5는 small·reversible → 하네스 버전 하나로 묶어 태깅 가능. 1~2는 별도 PR 단위가 적합.
 

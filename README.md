@@ -125,7 +125,7 @@ cd <기존-프로젝트>
 
 ## 하네스
 
-kickoff → startdev 흐름에서 자동으로 작동하는 장치들. 게이트는 `.omp/extensions/harness/gates/` (17)의 stdin-JSON CLI 스크립트이고, OMP 확장 `index.ts`가 이벤트에 배선합니다:
+kickoff → startdev 흐름에서 자동으로 작동하는 장치들. 게이트는 `.omp/extensions/harness/gates/` (19)의 stdin-JSON CLI 스크립트이고, OMP 확장 `index.ts`가 이벤트에 배선합니다:
 
 | OMP 이벤트 | 게이트 | 역할 |
 |-----------|--------|------|
@@ -136,8 +136,10 @@ kickoff → startdev 흐름에서 자동으로 작동하는 장치들. 게이트
 | `tool_result` (read) | read-tracker | 읽은 파일 기록 |
 | `tool_result` (edit/write 성공) | write-tracker + backpressure-invalidator | 작성 파일 기록, 코드 수정 시 검증 상태 무효화 |
 | `tool_result` (bash) | backpressure-tracker / failure-tracker | 검증 명령 PASS/FAIL 기록 |
+| `tool_result` (bash 커밋·검증 / edit·write) | breadcrumb-tracker | 세션 재개용 breadcrumb 기록 (커밋·테스트·파일변경, no-LLM) |
 | `before_agent_start` | kickoff-detector | 새 작업 감지 시 킥오프 리마인더 주입 |
 | `session_start` | harness-version-check | 원격 하네스 드리프트 알림 (24h 캐시) |
+| `session_start` | breadcrumb-surface | 최근 docs/sum 표면화 (고아 요약 해소, no-LLM) |
 
 - **seed.yaml** — 킥오프 결과를 구조화 (목표, 제약, 수락 기준, 리스크)
 - **rubric** — 4차원 명확도 게이트 (HIGH/MED/LOW)

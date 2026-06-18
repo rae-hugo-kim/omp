@@ -29,6 +29,7 @@ This repo ships its own enforcement layer as an **OMP extension**. The following
 | Destructive command warnings | `destructive-guard` | `.omp/extensions/harness/gates/` |
 | New work detection | `kickoff-detector` | `.omp/extensions/harness/gates/` |
 | Code changes review/verification | `reviewer` / `verifier` agents via the `task` tool | `.omp/agents/` |
+| Session breadcrumb capture (non-blocking) | `breadcrumb-tracker` + `breadcrumb-surface` | `.omp/extensions/harness/gates/` |
 
 All gates are wired by the extension `.omp/extensions/harness/index.ts` (OMP events: `tool_call`, `tool_result`, `before_agent_start`, `session_start`). Gates require `node` on PATH.
 
