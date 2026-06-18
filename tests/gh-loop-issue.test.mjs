@@ -14,6 +14,7 @@ import {
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { readFileSync, rmSync } from 'node:fs';
 
 const CLI = join(dirname(fileURLToPath(import.meta.url)), '..', '.omp', 'extensions', 'harness', 'gh-loop-issue.mjs');
 function runCli(args) {
@@ -115,4 +116,16 @@ test('CLI decide: unparseable --existing-json is fail-safe (empty, never crashes
 
 test('CLI: a non-decide subcommand exits 1 (usage)', () => {
   assert.equal(runCli(['frobnicate']).code, 1);
+});
+
+test('CLI --out writes action/title/body.md/labels for the skill (node-only, no jq); hostile title stays literal', () => {
+  const dir = join(dirname(fileURLToPath(import.meta.url)), '..', '.tmp-ghloop-out-test');
+  rmSync(dir, { recursive: true, force: true });
+  const r = runCli(['decide', '--kind', 'finding', '--title', 'X $(touch /tmp/pwn)', '--body', 'b', '--label', 'bug', '--out', dir]);
+  assert.equal(r.code, 0);
+  assert.equal(readFileSync(join(dir, 'action'), 'utf-8').trim(), 'create');
+  assert.equal(readFileSync(join(dir, 'title'), 'utf-8').trim(), 'X $(touch /tmp/pwn)', 'title persisted as literal data');
+  assert.ok(readFileSync(join(dir, 'body.md'), 'utf-8').includes('<!-- gh-loop:'), 'body.md carries marker');
+  assert.deepEqual(readFileSync(join(dir, 'labels'), 'utf-8').split('\n').filter(Boolean), ['gh-loop', 'bug']);
+  rmSync(dir, { recursive: true, force: true });
 });

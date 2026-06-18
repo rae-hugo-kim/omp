@@ -46,25 +46,24 @@ gh repo view --json nameWithOwner -q .nameWithOwner
    ```bash
    gh issue list --state open --label gh-loop --json number,title,labels,body --limit 100
    ```
-2. 생성 여부를 **헬퍼**로 판정한다 (gh 호출은 seam, 결정은 테스트된 로직). finding 텍스트는 **변수로** 넘기고 쉘 라인에 직접 보간하지 않는다:
+2. 생성 여부를 **헬퍼**로 판정한다 (gh 호출은 seam, 결정은 테스트된 로직). finding 텍스트는 **변수로** 넘기고 쉘 라인에 직접 보간하지 않는다. `--out`으로 결과를 파일로 받아 **jq 없이**(node만) 소비한다:
    ```bash
    node .omp/extensions/harness/gh-loop-issue.mjs decide --kind finding \
      --title "$FINDING_TITLE" --body "$FINDING_BODY" --label "$SEV" \
-     --cap 5 --created "$CREATED" --existing-json "$EXISTING_JSON" > /tmp/ghloop-decision.json
-   action=$(jq -r .action /tmp/ghloop-decision.json)
+     --cap 5 --created "$CREATED" --existing-json "$EXISTING_JSON" \
+     --out /tmp/ghloop > /dev/null
+   action=$(cat /tmp/ghloop/action)
    ```
    - `action == "skip"` → 중복. 기존 이슈에 코멘트만 남기고 종료.
    - `action == "block"` → 상한 도달(런당 `--created` 또는 열린 루프 이슈 수). 멈추고 사용자에게 보고.
-   - `action == "create"` → payload를 **변수/파일로** 꺼내 생성한다. **finding 텍스트를 쉘 명령줄에 보간하지 말 것** — `$(...)`·백틱·따옴표가 그대로 실행된다:
+   - `action == "create"` → payload 파일로 생성한다. **finding 텍스트를 쉘 명령줄에 보간하지 말 것** — `$(...)`·백틱·따옴표가 그대로 실행된다:
      ```bash
-     title=$(jq -r .payload.title /tmp/ghloop-decision.json)
-     jq -r .payload.body /tmp/ghloop-decision.json > /tmp/ghloop-body.md
      label_args=()
-     while IFS= read -r l; do label_args+=(--label "$l"); done \
-       < <(jq -r '.payload.labels[]' /tmp/ghloop-decision.json)
-     gh issue create --title "$title" --body-file /tmp/ghloop-body.md "${label_args[@]}"
+     while IFS= read -r l; do label_args+=(--label "$l"); done < /tmp/ghloop/labels
+     gh issue create --title "$(cat /tmp/ghloop/title)" \
+       --body-file /tmp/ghloop/body.md "${label_args[@]}"
      ```
-     큰따옴표 **변수** 전개(`"$title"`)는 재스캔되지 않아 finding의 `$(...)`/백틱이 무력화되고, `--body-file`은 본문을 명령줄 밖으로 빼며, 배열 `"${label_args[@]}"`는 각 라벨을 한 인자로 안전 전달한다(공백 포함 라벨 포함). `payload.body`엔 dedup 마커가 박혀 다음 런이 같은 finding을 재검출한다.
+     `"$(cat …/title)"` 전개 결과는 재스캔되지 않아 finding의 `$(...)`/백틱이 무력화되고, `--body-file`은 본문을 명령줄 밖으로 빼며, 배열 `"${label_args[@]}"`는 각 라벨을 한 인자로 안전 전달한다(공백 라벨 포함). `body.md`엔 dedup 마커가 박혀 다음 런이 같은 finding을 재검출한다.
 
 ### Stage 2 — Issue → Fix (재사용, 신규 구현 없음)
 

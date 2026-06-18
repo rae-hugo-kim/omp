@@ -19,9 +19,10 @@
 //
 // CLI (for the skill):
 //   node gh-loop-issue.mjs decide --kind finding --title "..." [--body "..."] \
-//        [--label x]... [--cap N] [--created N] [--existing-json '<json array>']
-//   -> prints the decision object as JSON on stdout (exit 0). Malformed input -> a fail-safe
-//      {action:"block"} decision (exit 0) so the loop degrades to "do nothing", never crashes mid-run.
+//        [--label x]... [--cap N] [--created N] [--existing-json '<json array>'] [--out <dir>]
+//   -> prints the decision JSON on stdout (exit 0). With --out, ALSO writes <dir>/{action,title,
+//      body.md,labels} (node-only, NO jq) so the skill reads fields from files. Malformed input ->
+//      a fail-safe {action:"block"} decision (exit 0): the loop degrades to "do nothing", never crashes.
 
 // 32-bit FNV-1a -> 8-char hex. Stable, dependency-free; only needs to be collision-resistant
 // enough to disambiguate finding titles within one repo (not a security hash).
@@ -111,13 +112,15 @@ function parseArgs(argv) {
     else if (a === '--cap') opts.cap = Number(argv[++i]);
     else if (a === '--created') opts.created = Number(argv[++i]);
     else if (a === '--existing-json') opts.existingJson = argv[++i];
+    else if (a === '--out') opts.out = argv[++i];
   }
   return opts;
 }
 
 // Run as a script (not when imported by tests). import.meta.url vs argv[1] is the standard ESM
 // main-module check.
-import { realpathSync } from 'fs';
+import { realpathSync, writeFileSync, mkdirSync } from 'fs';
+import { join } from 'path';
 import { fileURLToPath } from 'url';
 const isMain = (() => {
   try { return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)); }
@@ -127,7 +130,7 @@ const isMain = (() => {
 if (isMain) {
   const mode = process.argv[2];
   if (mode !== 'decide') {
-    console.error('gh-loop-issue: usage — decide --kind finding|decision --title "..." [--body s] [--label l]... [--cap N] [--created N] [--existing-json json]');
+    console.error('gh-loop-issue: usage — decide --kind finding|decision --title "..." [--body s] [--label l]... [--cap N] [--created N] [--existing-json json] [--out dir]');
     process.exit(1);
   }
   const o = parseArgs(process.argv.slice(2));
@@ -141,6 +144,16 @@ if (isMain) {
     existing, created: Number.isFinite(o.created) ? o.created : 0,
     cap: Number.isFinite(o.cap) ? o.cap : Infinity,
   });
+  if (o.out) {
+    // Serialize the decision to files so the skill consumes it with zero JSON parsing in shell
+    // (no jq dependency): `--title "$(cat <dir>/title)"`, `--body-file <dir>/body.md`, labels via read.
+    mkdirSync(o.out, { recursive: true });
+    const p = decision.payload || {};
+    writeFileSync(join(o.out, 'action'), `${decision.action}\n`);
+    writeFileSync(join(o.out, 'title'), `${p.title || ''}\n`);
+    writeFileSync(join(o.out, 'body.md'), p.body || '');
+    writeFileSync(join(o.out, 'labels'), (p.labels || []).map((l) => `${l}\n`).join(''));
+  }
   process.stdout.write(JSON.stringify(decision));
   process.exit(0);
 }
