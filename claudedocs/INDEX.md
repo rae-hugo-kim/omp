@@ -8,4 +8,6 @@ Project-specific instruction documents and examples, plus historical Claude Code
 - Bootstrap guide (historical, Claude Code era — see `/skill:bootstrap`): [`bootstrap_oh_my_claudecode.md`](bootstrap_oh_my_claudecode.md)
 - ECC harness analysis (historical, Claude Code era): [`ecc_harness_analysis.md`](ecc_harness_analysis.md)
 - Agreements / notes (not always-on): [`agreements.md`](agreements.md)
+- OMP 업그레이드 점검·실행 기록 (15.11 계획 → `16.0.1` 직접 업그레이드 완료, 2026-06-16): [`omp-15.11-upgrade-prep.md`](omp-15.11-upgrade-prep.md)
+- 하네스 능동적 지식 캡처 분석 (living, 진행 중 — Q1: `sum` 자동화/세션 캡처, 2026-06-17): [`harness-auto-capture-analysis.md`](harness-auto-capture-analysis.md)
 - Vibe Invest project instructions (example): [`project_instructions.md`](project_instructions.md)

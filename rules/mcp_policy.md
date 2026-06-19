@@ -143,9 +143,11 @@ Serena MCP에 대한 MUST/SHOULD 정책(구 레이어 D, 심볼 단위 의미 �
 
 ---
 
-## Web Search (Exa / web-search)
+## Web Search (Exa / Tavily / web-search)
 
 **Purpose**: Search the web for current information, error solutions, latest docs.
+
+**Default (병행)**: Exa와 Tavily를 1차 웹 검색 엔진으로 병행한다. 심층 조사·비교·사실 검증은 둘 다 질의해 교차검증/종합하고, 단순 단건 확인은 둘 중 가용한 쪽 + 내장 web-search로 충분하다. 상세는 아래 "Exa & Tavily" 참조.
 
 ### SHOULD use when:
 - Current events or recent releases (post knowledge cutoff)
@@ -176,14 +178,19 @@ Serena MCP에 대한 MUST/SHOULD 정책(구 레이어 D, 심볼 단위 의미 �
 
 ---
 
-## Exa (AI Search)
+## Exa & Tavily (AI Search)
 
-**Purpose**: AI-powered semantic search with better relevance than keyword search.
+**Purpose**: AI 시맨틱 웹 검색 (키워드 검색보다 관련도 높음). 두 엔진은 보완재 — Exa는 의미 유사도·개념 매칭, Tavily는 최신성·출처 신뢰도·본문 추출에 강하다. 둘 다 원격 MCP(`mcp.exa.ai` / `mcp.tavily.com`), OAuth 인증.
 
 ### SHOULD use when:
 - Complex, nuanced queries
 - Finding conceptually similar content
 - Research requiring synthesis
+
+### 병행 (use both):
+- 심층 조사·사실 검증·비교 → **Exa + Tavily 둘 다** 질의 후 교차검증/종합.
+- 가벼운 단건 조회 → 둘 중 가용한 하나로 충분 (중복 호출 회피).
+- 미인증(OAuth 미완료) 시 → 내장 web-search로 폴백.
 
 ### MAY skip when:
 - Simple keyword searches suffice
