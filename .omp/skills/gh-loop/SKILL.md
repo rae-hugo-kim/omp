@@ -18,7 +18,7 @@ description: Runs a finding→issue→fix→PR→cross-verify→HITL loop on Git
 |------|------------------|
 | **머지 절대 자동 금지** | 교차검증은 advisory일 뿐. 에이전트는 **자율 단계로 머지하지 않는다**; `gh pr merge`는 **PR별 명시적 인간 승인**(이슈/PR 댓글)이 있을 때만 그 지시로 실행한다. |
 | **블로킹 대기 금지** | 결정점에선 질문을 이슈에 게시하고 **턴 종료**. 프로세스를 붙잡고 폴링/sleep 하지 않는다. |
-| **dedup/throttle** | 이슈 생성 전 항상 `gh-loop-issue.mjs`로 중복·상한을 판정. 동일 finding 이슈 폭주 금지. |
+| **dedup/throttle** | 이슈 생성 전 항상 `gh-loop-issue.mjs`로 중복·상한을 판정. 동일 finding 이슈 폭주 금지. 단 `gh issue list`는 **최종일관성**이라 생성 직후 조회가 권위적이지 않음 — Stage 1 주의 참조. |
 | **사용자 응답 최우선** | 재개 시 이슈 댓글의 최신 사용자 지시를 memory/계획보다 우선한다 (CLAUDE.md "user > memory"). |
 | **파괴 작업 가드** | force-push·history 재작성·대량 삭제는 advisory에 그치지 않고 사용자 확인. |
 
@@ -59,6 +59,8 @@ gh repo view --json nameWithOwner -q .nameWithOwner
    gh issue list --state open --label gh-loop --json number,title,labels,body --limit 100
    ```
    새 repo엔 라벨이 없어 `--label gh-loop` 조회가 곧장 실패하므로 **먼저 보장**한다 (라이브 검증에서 확인된 게이트).
+
+   **`gh issue list` 최종일관성 주의** (라이브 E2E에서 확인): 이슈 생성 **직후** 같은 쿼리로 재조회하면 방금 만든 이슈가 **누락**될 수 있다 → dedup 입력이 비어 **중복 생성** 위험(+ 빈/stale list는 `gh-loop-issue`의 `existing.length` 기반 **open-count throttle 백스톱**도 과소계상해 상한이 늦게 걸림). 완화: (a) **한 run 안에서는** `planIssues`의 배치 dedup(`seen` 누적)이 gh 조회 없이 중복을 막는다(1차 방어); (b) **연속 run**(자동 cron 등)은 list 지연을 가정 — **직렬화만으론 부족**(다음 run도 stale list를 볼 수 있음): 마커 기반 dedup이 나중에 수렴하게 두거나 직렬화에 **수렴 대기/재시도**를 더한다; (c) 즉시 재조회가 필요하면 카운트가 맞을 때까지 **짧은 재시도**. `gh issue list`를 *즉시* 권위 소스로 가정하지 말 것.
 2. 생성 여부를 **헬퍼**로 판정한다 (gh 호출은 seam, 결정은 테스트된 로직). finding 텍스트는 **변수로** 넘기고 쉘 라인에 보간하지 않는다. `--out`은 **호출마다 임시 디렉터리**로 받아(공유 `/tmp/ghloop` 레이스·심링크 회피) **jq 없이**(node만) 소비한다:
    ```bash
    GHLOOP_OUT=$(mktemp -d); trap 'rm -rf "$GHLOOP_OUT"' EXIT
