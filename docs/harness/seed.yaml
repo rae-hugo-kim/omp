@@ -1,141 +1,128 @@
-name: autonomy-github-runtime
+name: autonomy-finding-detection
 status: draft
 version: 1
-task_id: "20260618-212940-642a"
+task_id: "20260619-142403-fddb"
 goal: >
-  option-A 런타임 저작 — 검증된 gh-loop을 **자율 실행**하는 재사용 하네스 자산: (1) `templates/` 아래
-  GitHub Actions 워크플로 템플릿(issue_comment=resume / issues=start 트리거 → runner 결정 헬퍼 →
-  에이전트 CLI 헤드리스 호출), (2) **테스트가능 runner-decision 헬퍼**(이벤트+권한+라벨 → start/resume/
-  ignore; gh 호출 seam; guard policy의 실행체), (3) runner+secrets 셋업 가이드, (4) 전파 배선. 저작·배포는
-  이 레포; 실제 자율 실행(runner·secrets)은 각 프로젝트 몫(Q2.1 축 분리). self-hosted runner 미설치라
-  **라이브 구동은 out_of_scope** — 로직(헬퍼) 단위테스트 + 워크플로 구조 검증까지. (자율화 Q2 → 옵션 A)
+  자동탐지(Q2.7-4) — gh-loop의 **입력 자동화**: 소스(Q1 breadcrumb의 FAIL 등, 그리고 lint/리뷰
+  발견)에서 finding을 추출 → dedup/throttle → gh-loop 이슈로 자동 생성한다. 수동 킥오프(지목) 대신
+  소스가 finding을 공급. **테스트가능 추출/계획 헬퍼**(소스 read·gh 호출은 seam; decideIssue 재사용)로
+  검증 — 라이브 GitHub 불필요. breadcrumb 어댑터 우선 + 제네릭 findings-JSON 입력으로 lint/리뷰 확장.
+  *언제* 자동탐지를 도느냐(스케줄/트리거)는 option-A 런타임·per-project 몫(out_of_scope). (자율화 Q2.7-4)
 
 context:
-  source: claudedocs/harness-auto-capture-analysis.md#Q2.7-3,Q2.9   # 옵션 A 승급 + 배포 메커니즘
-  date_locked: 2026-06-18
+  source: claudedocs/harness-auto-capture-analysis.md#Q2.6,Q2.7-4,Q2.8
+  date_locked: 2026-06-19
   related_docs:
-    - claudedocs/harness-auto-capture-analysis.md          # Q2.7 staging, Q2.9 전파 경로(L167-178)
-    - .omp/skills/gh-loop/SKILL.md                          # 루프 절차 + 확정 guard policy (실행체로 옮김)
-    - .omp/extensions/harness/gh-loop-issue.mjs             # 테스트가능 헬퍼 + gh-seam 선례
-    - scripts/harness-sync.sh                               # templates/ 전파(통째), .github/ 미전파
-    - scripts/harness-version-bump.sh                       # templates/ 변경 = bump 대상
+    - claudedocs/harness-auto-capture-analysis.md          # Q2.6(breadcrumb=finding 소스), Q2.7-4(자동탐지), Q2.8(소스 선택)
+    - .omp/extensions/harness/gates/breadcrumb-tracker.mjs  # session-log.jsonl 스키마(FAIL 엔트리)
+    - .omp/extensions/harness/gh-loop-issue.mjs             # decideIssue(dedup/throttle) 재사용
+    - .omp/skills/gh-loop/SKILL.md                          # Stage 1 생성 경로(auto-detect 진입 추가)
 
 constraints:
-  - 저작·배포만 — 실제 자율 실행(self-hosted runner + secrets)은 각 프로젝트 인프라 (Q2.1)
-  - 워크플로는 `templates/` 아래 — harness-sync가 통째 전파, `.github/`는 미전파; init/migrate가 **instantiate-once** (force-sync 금지) (Q2.9)
-  - runner 결정 로직은 **테스트가능 헬퍼**로 추출(gh 호출 seam) — gh-loop-issue.mjs 선례; 워크플로 YAML은 얇은 글루
-  - guard policy 실행체 — **write+ 권한 / bot 토큰·`gh-loop:` 마커 자기제외 / owner 우선·이견 parked / 모호 parked** (gh-loop seed에서 확정)
-  - **머지 자동 금지** 불변식 유지 — 워크플로/헬퍼가 `gh pr merge` 자동 실행 안 함
-  - 위험 변경(런타임 로직)은 **연속 이종(codex 포함) 리뷰** 후 커밋 (het-gate 정책)
+  - 추출/계획만 — gh 이슈 생성은 기존 gh-loop Stage 1 경로 재사용(신규 생성 로직 금지)
+  - decideIssue 재사용 — dedup(마커+제목, kind-scoped)·throttle(런당 상한)을 그대로 활용
+  - 노이즈 억제 — FAIL 후 동일 type PASS면 resolved로 보고 finding 제외; 배치 내 동일 finding 1개
+  - 소스 read·gh 호출은 seam(주입) — 라이브 없이 단위테스트
+  - 위험 변경은 커밋 전 연속 이종(codex 포함) 리뷰 (het-gate 정책)
 
 in_scope:
-  - `templates/<gh-loop-workflow>.yml` — issue_comment(resume)+issues(start) 트리거, guard-gated, 에이전트 CLI 헤드리스 호출
-  - `.omp/extensions/harness/gh-loop-runner.mjs` — 이벤트→action(start/resume/ignore) 결정 + 권한/봇/라벨/모호 가드, gh seam, 단위테스트
-  - runner+secrets 셋업 가이드 (per-project 인프라·결정 명시) — `templates/` README 또는 gh-loop SKILL의 option-A 섹션
-  - 전파 확인: 템플릿 `templates/` 통째 sync, 헬퍼 `.omp/extensions/harness/` 통째 sync; instantiate-once 경로 문서화
-  - AGENTS.md/README 반영(해당 시)
+  - `.omp/extensions/harness/gh-loop-detect.mjs` — `fromBreadcrumb(entries)`→findings, `planIssues(findings,{existing,cap})`→decisions(decideIssue 재사용, 배치 dedup + throttle), CLI
+  - breadcrumb 어댑터 — `session-log.jsonl`의 `result:'FAIL'`(test/commit) 추출, FAIL→later-PASS suppression
+  - 제네릭 findings 입력 — `--from json`({title,body,labels}) 으로 lint/리뷰/테스트결과 확장
+  - gh-loop SKILL에 auto-detect 진입 명문화(수동 킥오프 대안)
+  - 전파: 헬퍼 `.omp/extensions/harness/`(sync 통째)
 
 out_of_scope:
-  - 라이브 runner 실행 / E2E 자율 구동 — self-hosted runner 미설치(각 프로젝트 인프라; Q3.9)
-  - secrets 프로비저닝(GH 토큰 스코프·모델 API 키) — 각 프로젝트
-  - Codex CI 이식 — 컴패니언 로컬 플러그인(Q2.5 deferred)
-  - finding 자동 탐지(리뷰/린트→이슈) (Q2.7-4)
-  - GitHub-hosted runner — 자율 에이전트+repo write는 self-hosted 권장(선택은 프로젝트)
-  - init/migrate의 instantiate 로직 구현 변경 — 템플릿이 `templates/`에 존재하는 것까지(인스턴스화 훅 신설은 별도)
+  - 스케줄/트리거(언제 자동탐지 도느냐) — option-A 런타임·per-project(cron/workflow)
+  - 라이브 이슈 생성 — 기존 gh-loop Stage 1(gh CLI) 경로가 담당
+  - lint/리뷰 파서 자체 — 제네릭 findings-JSON 입력만 받음(파싱은 호출자)
+  - finding 품질 판정/ML/우선순위 — 단순 추출 + dedup/throttle만
 
 assumptions:
-  - templates/는 harness-sync PATHS·version-bump HARNESS_PATHS에 이미 포함(L35-49) — 신규 PATHS 등록 불필요
-  - 실행 에이전트는 OMP/Claude 계열 CLI 헤드리스(스킬이 `issue://` 등 OMP 리소스 사용) — CLI·auth는 per-project
-  - 권한 확인은 `gh api repos/{repo}/collaborators/{user}/permission`(seam) — 헬퍼는 주입된 권한으로 판정
+  - breadcrumb session-log.jsonl 스키마 = `{ts,kind:'commit'|'test'|'edit'|'scope',result?,type?,cmd?,hash?,file?}` (breadcrumb-tracker.mjs L28-56)
+  - decideIssue 시그니처/동작 안정(gh-loop-issue.mjs) — finding당 1회 호출로 계획
 
 acceptance_criteria:
-  - id: AC1-runner-helper
-    title: 이벤트→action 결정 헬퍼 + 단위테스트
-    source: "analysis Q2.7-3 (L155); gh-loop-issue.mjs 선례"
+  - id: AC1-detect-core
+    title: 추출+계획 헬퍼
+    source: "analysis Q2.7-4 (L156); gh-loop-issue.mjs decideIssue 재사용"
     must:
-      - "`.omp/extensions/harness/gh-loop-runner.mjs` — 입력(event kind, labels, actor, actor permission, bot-identity/marker) → {action: start|resume|ignore, reason}"
-      - gh/agent 호출은 seam(주입) — 라이브 GitHub 없이 결정 로직 단위테스트
+      - "`planIssues(findings,{existing,cap})` — finding마다 decideIssue 호출, **배치 내 생성분을 existing에 누적**해 같은 배치 중복도 dedup, throttle 적용"
+      - 반환 = 각 finding의 {action: create|skip|block, payload?} 계획
     verify:
-      - start(라벨된 새 이슈)·resume(needs-decision 댓글)·ignore(무관/봇자기/권한미달) 단위테스트 통과
-  - id: AC2-workflow-template
-    title: templates/ 워크플로 템플릿
-    source: "analysis Q2.7-3·Q2.9 (L155, L175)"
+      - 신규 finding→create, 동일 finding 2건→1 create+1 skip, 상한 초과→block 단위테스트
+  - id: AC2-breadcrumb-adapter
+    title: breadcrumb 어댑터 (per-FAIL 추출; 노이즈는 dedup/cap)
+    source: "analysis Q2.6 (L150); breadcrumb-tracker 스키마; het-review(coarse type)"
     must:
-      - "`templates/` 아래 워크플로(issue_comment+issues 트리거) — runner 헬퍼 호출 후 에이전트 CLI 헤드리스 실행"
-      - "`.github/`가 아닌 `templates/`에 둠(전파 가능); 인스턴스화는 init/migrate 1회"
+      - "`fromBreadcrumb(entries)` — `result:'FAIL'` test/commit를 finding으로(type은 trim/lower 정규화)"
+      - "**coarse type(test/lint/build) 때문에 FAIL→PASS suppression 안 함** — 다른 suite를 가려 real failure를 놓치므로(false-negative). 동일 title로 emit하고 planIssues dedup + cap + triage가 노이즈 처리"
+      - PASS-only / edit / scope 엔트리는 finding 아님
     verify:
-      - YAML 파싱 유효; (actionlint 설치 시) lint 통과; 트리거·가드 단계 존재
-  - id: AC3-guard-executable
-    title: guard policy 실행체화
-    source: ".omp/skills/gh-loop/SKILL.md Guard policy (확정)"
+      - FAIL test→finding, FAIL 뒤 same-type PASS여도 emit(suppression 안 함), 동일 type 여러 FAIL→제목 동일(dedup) 단위테스트
+  - id: AC3-generic-input
+    title: 제네릭 findings 입력 (lint/리뷰 확장)
+    source: "analysis Q2.7-4 (리뷰/린트→이슈)"
     must:
-      - write+ 권한 미달 actor 무시 / 봇 자기 댓글 제외(토큰 or `gh-loop:` 마커) / 모호하면 ignore(parked)
-      - 헬퍼가 prose 컨벤션을 실행 코드로 강제
+      - "CLI `--from json --findings-json '[{title,body,labels}]'` 지원 → planIssues로 전달"
+      - 어댑터 추가 없이 외부 소스(lint/리뷰/테스트) 연결 가능
     verify:
-      - 권한미달→ignore, 봇자기→ignore, 비결정 댓글→ignore 단위테스트
-  - id: AC4-setup-guide
-    title: runner+secrets 셋업 가이드
-    source: "analysis Q2.1·Q2.7-3 (per-project 인프라)"
+      - json 입력이 planIssues 계획으로 이어지는 CLI 테스트
+  - id: AC4-dedup-throttle
+    title: dedup/throttle 재사용
+    source: ".omp/extensions/harness/gh-loop-issue.mjs"
     must:
-      - self-hosted runner 프로비저닝 + 필요한 secrets(GH 토큰 스코프, 모델 키) + 에이전트 CLI 설치 명시
-      - per-project **결정**(트리거 범위·권한 임계값·CLI) 명시
+      - 기존 열린 이슈 대조 dedup + 배치 내 dedup + 런당 throttle(cap)
     verify:
-      - 가이드 문서 존재 + per-project 인프라/결정/시크릿 항목 포함
-  - id: AC5-propagation
-    title: 전파 + instantiate-once 경로
-    source: "analysis Q2.9 (L175); harness-sync PATHS"
+      - existing와 중복인 finding→skip, cap 초과 findings→block 단위테스트
+  - id: AC5-skill-wiring
+    title: 스킬 auto-detect 진입
+    source: ".omp/skills/gh-loop/SKILL.md Stage 1 (수동 킥오프 대안)"
     must:
-      - 템플릿이 `templates/`(sync 통째), 헬퍼가 `.omp/extensions/harness/`(sync 통째)에 위치
-      - instantiate-once 경로(init/migrate가 templates/→.github/ 1회) 문서화
+      - gh-loop SKILL에 "auto-detect" 진입(breadcrumb/json → planIssues → Stage 1 생성) 명문화; 생성은 기존 경로
     verify:
-      - 파일 위치가 synced PATHS에 포함 확인; `node scripts/docs-drift` 0/0
-  - id: AC6-no-auto-merge
-    title: 머지 자동 금지 유지
-    source: ".omp/skills/gh-loop/SKILL.md Non-Negotiables"
+      - 스킬에 auto-detect 절차 + 기존 Stage 1 재사용 명시
+  - id: AC6-propagation
+    title: 전파
+    source: "harness-sync PATHS(.omp/extensions/harness 통째)"
     must:
-      - 워크플로/헬퍼 어디서도 `gh pr merge` 자동 실행 안 함; 머지는 인간 승인 경로만
+      - 헬퍼가 `.omp/extensions/harness/`에 위치(sync 통째); 신규 스킬 아님→PATHS 변경 불필요
     verify:
-      - 헬퍼 action에 'merge' 자동 없음(테스트); 템플릿에 `gh pr merge` 무조건 실행 없음(grep)
+      - 위치 확인; `node scripts/docs-drift` 0/0
 
 decisions:
-  substrate:
-    value: "GitHub Actions + self-hosted runner (option A)"
-    reason: "Q2.7-3. GitHub-hosted는 자율 에이전트+repo write 보안상 비권장."
+  adapter_pattern:
+    value: "source 어댑터(breadcrumb 우선) + 제네릭 findings-JSON"
+    reason: "Q2.6 breadcrumb 연계가 구체+실재; lint/리뷰는 제네릭 JSON으로 확장(파서는 out_of_scope)."
     status: confirmed
-  template_home:
-    value: "`templates/` (init/migrate instantiate-once)"
-    reason: "Q2.9 — `.github/`는 harness-sync 미전파, `templates/`는 통째 전파."
+  reuse_decision:
+    value: "decideIssue 재사용, planIssues는 배치 래퍼"
+    reason: "dedup/throttle 로직 중복 금지 — gh-loop-issue.mjs가 SSOT."
     status: confirmed
-  runtime_logic:
-    value: "테스트가능 헬퍼(gh-loop-runner.mjs)로 추출, YAML은 글루"
-    reason: "라이브 검증 불가(runner 미설치)라도 로직은 단위테스트로 검증; gh-loop-issue.mjs 선례."
+  noise_suppression:
+    value: "suppression 안 함(coarse type) — emit + 제목 dedup + 기본 cap=5 + triage"
+    reason: "het-review: breadcrumb type이 coarse(test/lint/build)라 FAIL→PASS suppression이 다른 suite의 real failure를 false-negative로 가림. 검출기엔 false-negative가 더 나쁘므로 emit하고 dedup/cap로 폭주만 막음. 정밀 suppression은 breadcrumb가 command까지 기록해야(future)."
     status: confirmed
-  agent_cli:
-    value: "per-project (OMP/Claude 헤드리스 기본, 가이드에 명시)"
-    reason: "스킬이 OMP 리소스(`issue://`) 사용 — 실행 에이전트는 OMP 계열; CLI/auth는 프로젝트 인프라."
-    status: confirmed
-  live_exec:
-    value: "out_of_scope (runner 미설치)"
-    reason: "Q3.9 self-hosted runner 미설치 — 라이브 자율 구동은 각 프로젝트가 runner 갖춘 뒤."
+  scope_extract_only:
+    value: "추출+계획만, 생성은 기존 Stage 1"
+    reason: "단일 책임; 라이브 생성은 검증 불가(seam)·기존 경로 재사용."
     status: confirmed
 
 risks:
   - id: R1
-    desc: 워크플로 YAML이 라이브 미검증 — 실제 Actions에서만 드러나는 버그
-    mitigation: 결정 로직을 헬퍼로 빼 단위테스트; YAML은 파싱/actionlint + 구조 리뷰; 라이브는 out_of_scope 명시(stub 미배포 — 검증가능 부분만 납품)
+    desc: 고쳐진 일시 FAIL을 finding으로 만들어 노이즈
+    mitigation: 제목 dedup(동일 FAIL 1이슈) + 기본 cap=5 throttle + triage가 닫음(coarse type라 suppression은 안 함; AC2/AC4)
   - id: R2
-    desc: 자율 실행이 repo write로 사고(잘못된 머지/푸시)
-    mitigation: 머지 자동 금지 불변식(AC6) + write+ 권한 가드 + self-hosted 권장
+    desc: 어느 FAIL이 "이슈감"인지 과/과소 판정
+    mitigation: PoC는 단순 규칙(미해결 FAIL=후보) + 인간/루프 triage; 품질판정은 out_of_scope
   - id: R3
-    desc: instantiate-once가 force-sync로 사용자 워크플로 덮어씀
-    mitigation: 템플릿은 `templates/`에만(force-sync 대상), 인스턴스(.github/)는 1회 복사 후 사용자 소유 — 문서에 명시
+    desc: 스케줄 없이 추출만이면 "자동"이 반쪽
+    mitigation: 스케줄/트리거는 option-A 런타임 몫으로 명시(out_of_scope); 본 작업은 입력 *로직* 완성
 
 references:
   - path: claudedocs/harness-auto-capture-analysis.md
-    reason: Q2.7-3(옵션 A 승급) + Q2.9(전파 경로) = 본 seed 원본
-  - path: .omp/skills/gh-loop/SKILL.md
-    reason: 루프 절차 + 확정 guard policy(헬퍼로 실행체화)
+    reason: Q2.6/Q2.7-4/Q2.8 = 본 seed 원본
+  - path: .omp/extensions/harness/gates/breadcrumb-tracker.mjs
+    reason: session-log.jsonl 스키마(어댑터 입력)
   - path: .omp/extensions/harness/gh-loop-issue.mjs
-    reason: 테스트가능 헬퍼 + gh-seam 패턴 선례
-  - path: scripts/harness-sync.sh
-    reason: templates/ 통째 전파 / .github/ 미전파 — template_home 결정 근거
+    reason: decideIssue(dedup/throttle) 재사용

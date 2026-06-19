@@ -42,6 +42,16 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 
 ### Stage 1 — Finding → Issue (dedup + throttle)
 
+**Finding 소스 (둘 중 하나)**:
+- **수동 지목** (기본): 네가/사용자가 finding을 직접 제시 → 아래 1·2로 이슈화.
+- **자동탐지** (option, Q2.7-4): `gh-loop-detect.mjs`로 소스에서 finding을 추출·계획한 뒤 아래 생성 경로를 재사용한다(신규 생성 로직 없음):
+  ```bash
+  EXISTING=$(gh issue list --state open --label gh-loop --json number,title,labels,body --limit 100)
+  # 소스: breadcrumb의 미해결 FAIL(FAIL 뒤 동일 type PASS면 제외) — 또는 lint/리뷰: --from json --findings-json '[{"title","body","labels"}]'
+  node .omp/extensions/harness/gh-loop-detect.mjs detect --from breadcrumb --existing-json "$EXISTING" --cap 5
+  ```
+  출력 `plan[]`에서 `action=="create"`인 항목마다 그 `payload`(title/body/labels)를 **Stage 1 create 블록과 동일한 안전 패턴**(변수 title + `--body-file` + 라벨 배열)으로 생성한다. `skip`/`block`은 건너뛴다. *언제* 돌릴지(스케줄/트리거)는 option-A 런타임·per-project 몫.
+
 1. 루프 라벨을 보장하고(없으면 생성, 멱등) 열린 루프 이슈를 수집한다 (dedup 입력):
    ```bash
    gh label create gh-loop --description "gh-loop automated" --color BFD4F2 2>/dev/null || true
