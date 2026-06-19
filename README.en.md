@@ -102,6 +102,7 @@ In OMP, invoke skills as `/skill:<name>` or trigger them with natural language m
 | `/skill:design-mockup` | Generate a single-file HTML mockup with tunable sliders/knobs |
 | `/skill:grepai-search` | Semantic code search (cold-start exploration) |
 | `/skill:gh-loop` | finding → issue → fix → PR → cross-verify → HITL loop (never auto-merges) |
+| `/skill:gh-fanout` | multisession — runs gh-loop across many issues as worktree-isolated parallel workers (observed via GitHub) |
 
 ## Migrating an existing Claude Code project
 

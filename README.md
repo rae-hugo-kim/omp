@@ -112,6 +112,7 @@ OMP에서 스킬은 `/skill:<이름>`으로 호출하거나, 설명에 매칭되
 | `/skill:design-mockup` | 슬라이더/노브로 파라미터 튜닝 가능한 단일 HTML mockup 생성 |
 | `/skill:grepai-search` | 의미 기반 코드 검색 (콜드스타트 탐색) |
 | `/skill:gh-loop` | finding → 이슈 → 수정 → PR → 교차검증 → HITL 루프 (머지 자동 안 함) |
+| `/skill:gh-fanout` | 멀티세션 — gh-loop을 여러 이슈에 worktree 격리 병렬 실행 (관측=GitHub) |
 
 ## 기존 Claude Code 프로젝트 이주
 

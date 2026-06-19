@@ -1,26 +1,25 @@
-# Current Scope: autonomy-finding-detection (autonomy Q2.7-4)
+# Current Scope: autonomy-multisession-controller (autonomy Q3)
 
 **Created**: 2026-06-19
-**Seed**: docs/harness/seed.yaml (`autonomy-finding-detection`, v1, task_id 20260619-142403-fddb)
-**Thread goal**: gh-loop 입력 자동화 — 소스(breadcrumb FAIL / lint·리뷰 JSON)에서 finding 추출 → dedup/throttle → 이슈 계획. 추출/계획 로직만(생성은 기존 Stage 1); 스케줄은 out_of_scope.
+**Seed**: docs/harness/seed.yaml (`autonomy-multisession-controller`, v1, task_id 20260619-153030-f28d)
+**Thread goal**: Q3 멀티세션 = Q2 루프의 exec 엔진. 얇은 컨트롤러가 이슈를 worktree-격리 `omp --mode rpc` 워커로 fan-out, GitHub=관측·조정 평면, 동적 스케일(cap 기본 3). 테스트가능 결정로직 + worktree/RPC 배선 저작; 라이브 N워커는 옵션. tmux 없음.
 
 ## MUST
-- `.omp/extensions/harness/gh-loop-detect.mjs` — `fromBreadcrumb(entries)`→findings + `planIssues(findings,{existing,cap})`→decisions(decideIssue 재사용, 배치 dedup + throttle) + CLI (AC1/AC4)
-- breadcrumb 어댑터: FAIL 추출 + **coarse type라 suppression 안 함**(emit + dedup/cap) (AC2)
-- 제네릭 `--from json` 입력 (lint/리뷰 확장) (AC3)
-- gh-loop SKILL에 auto-detect 진입 명문화 (생성은 기존 Stage 1) (AC5)
-- 헬퍼 `.omp/extensions/harness/` 전파 (AC6)
+- `.omp/extensions/harness/gh-loop-controller.mjs` — `planPool`/`nextScale`/`assign` 결정로직(gh/git/spawn seam) + 단위테스트 (AC1/AC2/AC3)
+- 컨트롤러 스킬: worktree-per-worker + `omp --mode rpc` spawn + 이벤트 모니터 + 정리 절차 (AC4)
+- GitHub 관측: 라벨(상태)+코멘트(마일스톤, gh-loop-issue throttle 재사용)+트래킹 이슈; 머지 자동금지 (AC5)
+- 전파: 헬퍼 `.omp/extensions/harness/`; 신규 스킬이면 PATHS+README (AC6)
 
 ## MUST NOT
-- 신규 이슈 생성 로직(기존 Stage 1 재사용), 스케줄/트리거, lint/리뷰 파서 자체, 품질 ML (out_of_scope)
+- 라이브 N워커 E2E(옵션), 24/7 컨트롤러, 워커 직접통신, rpc 프로토콜 변경, 데몬/대시보드 제품화(ecc2)
 
 ## OUT OF SCOPE
-- 언제 자동탐지 도느냐(스케줄/트리거 = option-A·per-project), 라이브 이슈 생성, 외부 파서, finding 우선순위/품질판정
+- 라이브 다중구동(비용 N배), 24/7 상시(robo-omp/cloud), 워커↔워커 실시간 통신, 대시보드/데몬
 
 ## Acceptance Criteria
-- [x] AC1 planIssues 배치 계획(decideIssue 재사용, 배치 dedup, throttle) 단위테스트
-- [x] AC2 fromBreadcrumb 모든 FAIL emit(coarse type→suppression 없음) + 동일 type FAIL 제목 동일(dedup) 단위테스트
-- [x] AC3 제네릭 `--from json` 입력 CLI 테스트
-- [x] AC4 existing-dedup + cap-throttle 단위테스트
-- [x] AC5 gh-loop SKILL auto-detect 진입 + Stage 1 재사용 명시
-- [x] AC6 헬퍼 위치(.omp/extensions/harness/) + docs-drift 0/0
+- [x] AC1 planPool(tasks,signals,cap)→할당계획(신호↑→워커↑≤cap, cap 캡[정수], 빈입력, 거대 changedFiles 클램프) 단위테스트
+- [x] AC2 nextScale(state,signals,cap)→up/down/hold/retire(부하→up≤cap, idle→down, 분수cap floor) 단위테스트
+- [x] AC3 assign→중복할당 방지(claim된 이슈·배치 내 중복·string/number 정규화 skip) 단위테스트
+- [x] AC4 스킬: worktree-per-worker + RPC spawn + claim 롤백 + 크래시 재조정 절차 명시
+- [x] AC5 GitHub 라벨/코멘트(마일스톤 coalescing)/트래킹 이슈 edit + 머지 자동금지 명시
+- [x] AC6 헬퍼 위치/스킬 PATHS+README 등록 + docs-drift 0/0

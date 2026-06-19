@@ -27,3 +27,9 @@
 {"ts":"2026-06-19T14:25:49+09:00","event":"kickoff_completed","actor":"assistant","meta":{"topic":"autonomy-finding-detection","mode":"doc-ingest","ingest_source":"analysis#Q2.7-4"}}
 {"ts":"2026-06-19T14:25:49+09:00","event":"seed_generated","actor":"assistant","meta":{"seed_path":"docs/harness/seed.yaml","status":"draft","version":1,"task_id":"20260619-142403-fddb"}}
 {"ts":"2026-06-19T14:25:49+09:00","event":"rubric_evaluated","actor":"assistant","meta":{"goal":"HIGH","constraints":"HIGH","success":"HIGH","context":"HIGH","coverage":"HIGH","unmapped_residual":0,"open_decisions":0}}
+{"ts":"2026-06-19T15:30:31+09:00","event":"task_closed","actor":"assistant","meta":{"task_id":"20260619-142403-fddb","name":"autonomy-finding-detection","note":"Q2.7-4 shipped (90bd288); het HIGH(coarse suppression, no-cap flood) fixed; v2026.58 pushed"}}
+{"ts":"2026-06-19T15:30:31+09:00","event":"seed_superseded","actor":"assistant","meta":{"task_id":"autonomy-finding-detection","prior_status":"draft-complete","reason":"seed slot reused for autonomy-multisession-controller (Q3)"}}
+{"ts":"2026-06-19T15:32:53+09:00","event":"doc_ingested","actor":"assistant","meta":{"path":"claudedocs/harness-auto-capture-analysis.md#Q3","requirements":6,"mapped":6,"unmapped_residual":0,"out_of_scope":5,"open_decisions":0}}
+{"ts":"2026-06-19T15:32:53+09:00","event":"kickoff_completed","actor":"assistant","meta":{"topic":"autonomy-multisession-controller","mode":"doc-ingest","ingest_source":"analysis#Q3","decisions_locked":5}}
+{"ts":"2026-06-19T15:32:53+09:00","event":"seed_generated","actor":"assistant","meta":{"seed_path":"docs/harness/seed.yaml","status":"draft","version":1,"task_id":"20260619-153030-f28d"}}
+{"ts":"2026-06-19T15:32:53+09:00","event":"rubric_evaluated","actor":"assistant","meta":{"goal":"HIGH","constraints":"HIGH","success":"HIGH","context":"HIGH","coverage":"HIGH","unmapped_residual":0,"open_decisions":0}}
