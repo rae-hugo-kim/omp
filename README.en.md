@@ -69,7 +69,7 @@ Skills also trigger from natural language ("let's kick off", "brainstorm this", 
 ├── checklists/            task checklists
 ├── templates/             reusable templates
 ├── .omp/
-│   ├── skills/            skill definitions (OMP-native discovery, 13 skills)
+│   ├── skills/            skill definitions (OMP-native discovery, 15 skills)
 │   ├── agents/            reviewer / verifier agents (delegated via the task tool)
 │   └── extensions/harness/
 │       ├── index.ts       gate-wiring extension (tool_call/tool_result/before_agent_start/session_start)

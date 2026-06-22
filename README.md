@@ -76,7 +76,7 @@ MCP 서버(OMP 설정에 등록), docs 뷰어 도구(mdBook + mdbook-mermaid + m
 ├── checklists/            작업별 체크리스트
 ├── templates/             재사용 템플릿
 ├── .omp/
-│   ├── skills/            스킬 정의 (OMP 네이티브 발견, 13개)
+│   ├── skills/            스킬 정의 (OMP 네이티브 발견, 15개)
 │   ├── agents/            reviewer / verifier 에이전트 (task 도구로 위임)
 │   └── extensions/harness/
 │       ├── index.ts       게이트 배선 확장 (tool_call/tool_result/before_agent_start/session_start)
