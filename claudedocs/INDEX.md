@@ -10,4 +10,5 @@ Project-specific instruction documents and examples, plus historical Claude Code
 - Agreements / notes (not always-on): [`agreements.md`](agreements.md)
 - OMP 업그레이드 점검·실행 기록 (15.11 계획 → `16.0.1` 직접 업그레이드 완료, 2026-06-16): [`omp-15.11-upgrade-prep.md`](omp-15.11-upgrade-prep.md)
 - 하네스 능동적 지식 캡처 분석 (living, 진행 중 — Q1: `sum` 자동화/세션 캡처, 2026-06-17): [`harness-auto-capture-analysis.md`](harness-auto-capture-analysis.md)
+- 에이전트 토큰 효율 접근법 비교 (저작 tidy / 하네스 네이티브 / headroom류 전송층 압축 — 장단·코스트, 2026-06-17): [`agent-context-efficiency-approaches.md`](agent-context-efficiency-approaches.md)
 - Vibe Invest project instructions (example): [`project_instructions.md`](project_instructions.md)
