@@ -51,7 +51,7 @@ When multiple tools can accomplish the same task:
 ### Language-server absence fallback
 
 필요한 언어 서버 바이너리가 PATH에 없어 레이어 B·C가 비활성일 때:
-- 모델 호출 가능한 원시 LSP 기능은 부재 → `search`/`read`로 전환
+- 모델 호출 가능한 원시 LSP 기능은 부재 → `grep`/`read`로 전환
 - 진단: `mcp__plugin_oh-my-claudecode_t__lsp_servers`로 설치 상태 일괄 조회
 - 복구: 해당 언어 서버 전역 설치 (예: `npm i -g typescript-language-server typescript`)
 
@@ -64,22 +64,22 @@ When multiple tools can accomplish the same task:
 | 심볼 정의·참조·타입·진단 | **MUST** 레이어 C (`lsp_goto_definition`, `lsp_find_references`, `lsp_diagnostics`) |
 | 심볼 단위 편집 (바디 치환·삽입·삭제) | **MUST** `edit` (라인 앵커; 레이어 C로 참조 선확인) |
 | 새 파일 또는 >500줄 파일의 구조 파악 | **SHOULD** 레이어 C `lsp_document_symbols` |
-| 문자열·주석·에러 메시지·환경변수·설정값 | **MUST** `search` |
-| 파일·디렉토리 이름 패턴 | **MUST** `find` |
-| 심볼명 모름 (의도 기반 탐색, 코드베이스 <100파일 또는 키워드 확정적) | **SHOULD** `search`에 관련 키워드 복수(OR)로 후보 추림 → 레이어 C로 정밀화 |
+| 문자열·주석·에러 메시지·환경변수·설정값 | **MUST** `grep` |
+| 파일·디렉토리 이름 패턴 | **MUST** `glob` |
+| 심볼명 모름 (의도 기반 탐색, 코드베이스 <100파일 또는 키워드 확정적) | **SHOULD** `grep`에 관련 키워드 복수(OR)로 후보 추림 → 레이어 C로 정밀화 |
 | **콜드스타트 + 의도 기반 (코드베이스 >500파일, AGENTS.md/CLAUDE.md로 미해결)** | **SHOULD** `grepai search` Top-5 → 레이어 C로 정밀화 (trial) |
 | **유저가 "grepai"·"의미 기반 검색"을 명시** | **MUST** `grepai search` 경유 |
 | 동적 디스패치·설정 주도·폴리글롯 코드의 call 추적 | **MAY** `grepai trace callers/callees` — 단일언어 정적코드는 `lsp_find_references` 우선 |
 
 **MUST NOT**:
-- LSP 가용 상태에서 심볼 참조를 `search` 단독으로 결론 (주석·유사 식별자 오탐 위험)
+- LSP 가용 상태에서 심볼 참조를 `grep` 단독으로 결론 (주석·유사 식별자 오탐 위험)
 - 파일 전체 `read` 후 눈으로 심볼 탐색 — `lsp_document_symbols` 선행
-- 심볼명·파일경로·리터럴이 유저 프롬프트에 이미 주어졌는데 `grepai` 호출 (LSP/search 직행)
+- 심볼명·파일경로·리터럴이 유저 프롬프트에 이미 주어졌는데 `grepai` 호출 (LSP/grep 직행)
 - `grepai` 랭킹만으로 작업 결론 — 상위 1–2개를 LSP/read로 검증해야 함
 
 **MAY skip LSP** when:
 - 수정 위치가 이미 정확히 특정된 단일 라인 편집
-- 비코드 파일(md / yaml / json) — search·read로 충분
+- 비코드 파일(md / yaml / json) — grep·read로 충분
 
 **비고 — 시맨틱 검색 레이어 (grepai, 이벤트 기반 시범)**:
 CLI + Skill 래퍼 경로로 도입(MCP 서버 아님 → context tax 0). 상세 라우팅은 `.omp/skills/grepai-search/SKILL.md`. 시범 평가는 시간이 아니라 **트리거 이벤트** 기준: 전제조건(>500파일 unfamiliar 코드베이스 콜드스타트)이 충족된 작업 3회 누적 후, (a) 오도 ≥ 유도 또는 (b) 트리거 충족에도 미호출이면 skill 디렉토리 삭제로 롤백. (구 "2주" 시간 조건은 2026-06-10까지 트리거 0회 — 전제 미발생으로 평가 자체가 불성립해 교체.) 배경: `docs/sum/session_2026-04-21_grepai-adoption-decision.md`.

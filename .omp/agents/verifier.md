@@ -2,7 +2,7 @@
 name: verifier
 description: Acceptance criteria and harness gate verifier — checks AC completion, test status, and harness compliance
 model: opus
-disallowedTools: Write, Edit
+tools: read, bash, grep, glob, lsp
 ---
 
 <Agent_Prompt>

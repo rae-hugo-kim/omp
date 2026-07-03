@@ -1,14 +1,14 @@
 ---
 name: grepai-search
 argument-hint: <natural-language-query>
-description: Semantic code search via grepai CLI for cold-start orientation when symbol names are unknown. Use ONLY when ALL of (a) intent-based query with no specific symbol/literal, (b) codebase >500 files or unfamiliar, (c) AGENTS.md did not yield a concrete target. Explicit user keywords like "grepai", "semantic search", "의미 기반 검색", "콜드스타트 탐색" also trigger it. Do NOT use when a symbol name, file path, or literal string is already specified — go straight to `search`/LSP.
+description: Semantic code search via grepai CLI for cold-start orientation when symbol names are unknown. Use ONLY when ALL of (a) intent-based query with no specific symbol/literal, (b) codebase >500 files or unfamiliar, (c) AGENTS.md did not yield a concrete target. Explicit user keywords like "grepai", "semantic search", "의미 기반 검색", "콜드스타트 탐색" also trigger it. Do NOT use when a symbol name, file path, or literal string is already specified — go straight to `grep`/LSP.
 ---
 
 # grepai-search - Semantic Code Search (Trial, event-based)
 
 ## Goal
 
-Collapse the iteration cost of "I don't know the symbol name yet" cold-start orientation into a single vector-similarity call, then hand off to `search`/LSP for precise resolution.
+Collapse the iteration cost of "I don't know the symbol name yet" cold-start orientation into a single vector-similarity call, then hand off to `grep`/LSP for precise resolution.
 
 ## Scope & Trial Status
 
@@ -28,16 +28,16 @@ Invoke ONLY when the top-priority cold-start tree below says `grepai`:
 Semantic query arrives (new session / subagent)
   │
   ├─ 1. Read AGENTS.md (always first, ~0 cost)
-  │     └─ Answer found → extract symbol/path → `search`/LSP direct, STOP
+  │     └─ Answer found → extract symbol/path → `grep`/LSP direct, STOP
   │
   ├─ 2. User prompt already names a symbol / path / literal?
-  │     └─ YES → `search`/LSP direct, STOP
+  │     └─ YES → `grep`/LSP direct, STOP
   │
   ├─ 3. Codebase <100 files?
-  │     └─ YES → `find` + `read` is cheaper, STOP
+  │     └─ YES → `glob` + `read` is cheaper, STOP
   │
   ├─ 4. Target is markdown / yaml / json / non-code config?
-  │     └─ YES → `search`, STOP
+  │     └─ YES → `grep`, STOP
   │
   └─ 5. Otherwise → grepai search (Top-5) → LSP goto_definition / `read` for precision
 ```
@@ -108,8 +108,8 @@ Keep it under 10 lines. Rank + file:line + next action. Do not paste the raw JSO
 ## Guardrails (MUST NOT)
 
 - Use grepai when the user's prompt already names a file / symbol / literal string.
-- Use grepai on codebases <100 files — `find` + `read` is strictly cheaper.
-- Use grepai for markdown / config / comment search — `search` is exact and free.
+- Use grepai on codebases <100 files — `glob` + `read` is strictly cheaper.
+- Use grepai for markdown / config / comment search — `grep` is exact and free.
 - Conclude a task from grepai ranking alone without LSP or `read` verification.
 - Run `grepai init` without explicit user approval on provider choice.
 
@@ -117,7 +117,7 @@ Keep it under 10 lines. Rank + file:line + next action. Do not paste the raw JSO
 
 If grepai returns zero usable candidates twice in the same query:
 
-1. Fall back to `search` with keyword-OR expansion (2–4 related keywords).
+1. Fall back to `grep` with keyword-OR expansion (2–4 related keywords).
 2. If still zero, ask the user for a symbol hint or file area.
 3. Log the miss in the trial retro (issue #9 checklist) — each miss counts toward the kill-criteria count.
 

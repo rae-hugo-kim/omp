@@ -91,7 +91,7 @@ No coding. Only information gathering + state file saving to `docs/harness/`.
 
 **Agent가 수행**:
 
-1. `docs/brainstorming/*.md`를 `find`로 나열 (가장 최근 파일이 먼저 오도록 mtime 또는 파일명 timestamp로 정렬)
+1. `docs/brainstorming/*.md`를 `glob`로 나열 (가장 최근 파일이 먼저 오도록 mtime 또는 파일명 timestamp로 정렬)
 2. 비어있으면 → 이 phase 건너뛰고 Phase 0으로
 3. 있으면 → `ask` 도구로 옵션 제시:
    - **최신 파일 사용** (파일명 + 첫 줄 topic 미리보기)
@@ -152,7 +152,7 @@ No coding. Only information gathering + state file saving to `docs/harness/`.
 ### Phase 1: Context Discovery
 
 **Agent가 수행** (사용자에게 묻지 않음):
-1. 프로젝트 구조 파악 (`find`, `read`)
+1. 프로젝트 구조 파악 (`glob`, `read`)
 2. 기존 패턴 확인 (package.json, AGENTS.md, README)
 3. 기술 스택 확인
 4. 빌드/테스트/린트 명령어 발견

@@ -33,7 +33,7 @@ C. 전송층(transport)   LLM 앞단 압축 프록시/라이브러리(headroom) 
 
 ## B. 하네스 네이티브 압축 (OMP가 이미 하는 것)
 
-`read` 구조요약 · range 읽기(`:50-80`) · `search`/`ast_grep` · `lsp`(타깃 컨텍스트) · `artifact://`(잘린 출력→원본 on-demand) · **RTK**(CLI 출력 재작성, `~/.claude/CLAUDE.md`에 등록).
+`read` 구조요약 · range 읽기(`:50-80`) · `grep`/`ast_grep` · `lsp`(타깃 컨텍스트) · `artifact://`(잘린 출력→원본 on-demand) · **RTK**(CLI 출력 재작성, `~/.claude/CLAUDE.md`에 등록).
 
 | | |
 |---|---|

@@ -83,5 +83,5 @@ jobs:
           # INSTANTIATE: replace this with YOUR headless OMP/Claude-family agent CLI invocation.
           # The agent reads issue://$ISSUE, runs the "$ACT" stage of the gh-loop skill, and per that
           # skill NEVER auto-merges (merge requires explicit human approval inside the run). Example:
-          #   omp run --headless --skill gh-loop "gh-loop $ACT for issue #$ISSUE"
+          #   omp -p "/skill:gh-loop $ACT for issue #$ISSUE"
           echo "PLACEHOLDER (instantiate your agent CLI): gh-loop $ACT for issue #$ISSUE"

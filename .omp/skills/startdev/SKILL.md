@@ -77,7 +77,7 @@ seed.yaml을 확인하고 유효성을 검증한다.
 
 **seed.yaml이 없을 때 (fallback):**
 ```
-1. Find epic file: `find` **/epic*<number>*.md
+1. Find epic file: `glob` **/epic*<number>*.md
 2. Extract:
    - [ ] User stories
    - [ ] Acceptance criteria
