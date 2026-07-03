@@ -9,7 +9,8 @@
 //   PostToolUse Read         -> tool_result read                : read-tracker
 //   PostToolUse Bash         -> tool_result bash (ok)           : backpressure-tracker
 //   PostToolUseFailure Bash  -> tool_result bash (isError)      : backpressure-failure-tracker
-//   PostToolUse Edit|Write   -> tool_result edit|write|ast_edit : write-tracker + backpressure-invalidator
+//   PostToolUse Edit|Write   -> tool_result edit|write|ast_edit : write-tracker + backpressure-invalidator + mermaid-check
+//     (ast_edit preview only invalidates backpressure; the REAL apply is tracked via its `resolve` result)
 //   UserPromptSubmit         -> before_agent_start              : kickoff-detector (message injection)
 //   SessionStart             -> session_start                   : harness-version-check
 //
@@ -20,14 +21,21 @@
 // Requires `node` on PATH (gates are spawned with node, NOT process.execPath —
 // inside OMP, process.execPath is the omp binary itself).
 //
+// Exception: the mermaid check (mermaid-check.ts) runs IN-PROCESS, not as a
+// spawned gate — it needs omp's bundled @oh-my-pi/pi-utils parser, which only
+// resolves inside the compiled omp binary. It appends a warning chunk to the
+// tool result (fail-open, never blocks).
+//
 // Infra failures (node missing, gate crash, timeout) fail OPEN with a loud
 // warning, matching the original per-hook fail-open behavior. Only an explicit
 // gate exit code 2 blocks a tool call.
 
 import { spawn } from "node:child_process";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isGitCommit } from "./gates/git-commit-detect.mjs";
+import { readTarget, resolvedAstEditFiles } from "./gates/read-path.mjs";
+import { checkMermaidFile, MERMAID_SUPPORTED } from "./mermaid-check";
 
 const GATES_DIR = join(dirname(fileURLToPath(import.meta.url)), "gates");
 const GATE_TIMEOUT_MS = 3_000;
@@ -38,8 +46,6 @@ const VERSION_CHECK_TIMEOUT_MS = 15_000;
 const EDIT_TOOL_NAMES = new Set(["edit", "write", "ast_edit"]);
 /** `[path#TAG]` headers inside a hashline `edit` patch. */
 const HASHLINE_HEADER = /^\[([^\]\n#]+)#[0-9A-Fa-f]{4,}\]\s*$/gm;
-/** Trailing read selectors (`:50-100`, `:raw`, ...) appended to `read` paths. */
-const READ_SELECTOR = /:(?:raw|conflicts|\d+(?:[-+]\d+)?(?:,\d+(?:[-+]\d+)?)*)(?::raw)?$/;
 
 interface ContentChunk {
 	type: string;
@@ -55,7 +61,7 @@ interface ToolCallEvent {
 interface ToolResultEvent extends ToolCallEvent {
 	content?: ContentChunk[];
 	isError?: boolean;
-	details?: { exitCode?: number } & Record<string, unknown>;
+	details?: { exitCode?: number; applied?: boolean } & Record<string, unknown>;
 }
 
 /**
@@ -73,6 +79,11 @@ function bashRunFailed(event: ToolResultEvent): boolean {
 interface ToolCallBlock {
 	block: true;
 	reason: string;
+}
+
+/** tool_result middleware patch: returned `content` replaces the original. */
+interface ToolResultPatch {
+	content: ContentChunk[];
 }
 
 interface AgentStartMessage {
@@ -114,7 +125,7 @@ interface HarnessExtensionApi {
 	setLabel?(label: string): void;
 	logger?: HarnessLogger;
 	on(event: "tool_call", handler: (event: ToolCallEvent, ctx: HarnessCtx) => Promise<ToolCallBlock | undefined>): void;
-	on(event: "tool_result", handler: (event: ToolResultEvent, ctx: HarnessCtx) => Promise<void>): void;
+	on(event: "tool_result", handler: (event: ToolResultEvent, ctx: HarnessCtx) => Promise<ToolResultPatch | undefined>): void;
 	on(event: "before_agent_start", handler: (event: unknown, ctx: HarnessCtx) => Promise<AgentStartMessage | undefined>): void;
 	on(event: "session_start", handler: (event: unknown, ctx: HarnessCtx) => Promise<void>): void;
 }
@@ -184,7 +195,17 @@ function editTargets(toolName: string, input: Record<string, unknown> | undefine
 		// Direct path field (find/replace-style edit tools)...
 		const direct = input.path ?? input.file_path ?? input.filePath;
 		if (typeof direct === "string" && direct) targets.add(resolve(cwd, direct));
-		// ...and hashline patch headers `[path#TAG]` (hashline-style edit tools).
+		// ...native parsed-target list — OMP >=16.1.17 exposes every parsed hashline
+		// target as input.paths (single-file calls also set input.path above)...
+		if (Array.isArray(input.paths)) {
+			for (const p of input.paths) {
+				if (typeof p === "string" && p) targets.add(resolve(cwd, p));
+			}
+		}
+		// ...and hashline patch headers `[path#TAG]` as a fallback for hosts that
+		// don't expose parsed targets (pre-16.1.17). Note an `MV DEST` op row names
+		// its destination outside any header; only a host-provided input.paths that
+		// carries the DEST tracks it — the header fallback sees the source file only.
 		const patch = typeof input.input === "string" ? input.input : "";
 		for (const match of patch.matchAll(HASHLINE_HEADER)) {
 			targets.add(resolve(cwd, match[1]));
@@ -197,13 +218,6 @@ function editTargets(toolName: string, input: Record<string, unknown> | undefine
 		return paths.filter((p): p is string => typeof p === "string" && p.length > 0).map((p) => resolve(cwd, p));
 	}
 	return [];
-}
-
-/** Local file path a `read` call targets, selector stripped; "" for URLs/internal URIs. */
-function readTarget(input: Record<string, unknown> | undefined, cwd: string): string {
-	const raw = input?.path;
-	if (typeof raw !== "string" || !raw || raw.includes("://")) return "";
-	return resolve(cwd, raw.replace(READ_SELECTOR, ""));
 }
 
 function latestUserText(event: unknown, ctx: HarnessCtx): string {
@@ -219,6 +233,18 @@ function latestUserText(event: unknown, ctx: HarnessCtx): string {
 		if (text) return text;
 	}
 	return "";
+}
+
+/** Append a HARNESS WARNING chunk when any mermaid block failed to parse. */
+function mermaidResultPatch(event: ToolResultEvent, problems: string[]): ToolResultPatch | undefined {
+	if (!problems.length) return undefined;
+	const text = [
+		"HARNESS WARNING: invalid mermaid diagram(s) in this edit — the OMP bundled parser rejected:",
+		...problems.map((problem) => `  - ${problem}`),
+		`Supported types: ${MERMAID_SUPPORTED}.`,
+		"Fix the block(s) and re-save; docs are rendered by Obsidian/GitHub and the OMP TUI.",
+	].join("\n");
+	return { content: [...(event.content ?? []), { type: "text", text }] };
 }
 
 export default function harness(pi: HarnessExtensionApi): void {
@@ -290,12 +316,44 @@ export default function harness(pi: HarnessExtensionApi): void {
 				return;
 			}
 			if (EDIT_TOOL_NAMES.has(event.toolName) && !event.isError) {
+				// ast_edit is preview-first: this tool_result is the PREVIEW (details.applied:false); the
+				// real write lands later as a `resolve` apply (handled below, with the actual file list).
+				// On the preview we run backpressure-invalidator as a BEST-EFFORT early fallback — it only
+				// invalidates when editTargets resolves to a code-extension path, so a glob/dir target is
+				// invalidated at apply time instead, not here. The breadcrumb (phantom until apply, false
+				// on discard) and write-tracker are deferred to the apply.
+				const astEditPreview = event.toolName === "ast_edit" && event.details?.applied === false;
+				const mermaidProblems: string[] = [];
 				for (const filePath of editTargets(event.toolName, event.input, ctx.cwd)) {
+					const payload: GatePayload = { tool_name: "Write", tool_input: { file_path: filePath }, session_state };
+					if (astEditPreview) { await runGate("backpressure-invalidator.mjs", payload); continue; }
+					await runGate("write-tracker.mjs", payload);
+					await runGate("backpressure-invalidator.mjs", payload);
+					await runGate("breadcrumb-tracker.mjs", payload);
+					for (const problem of await checkMermaidFile(filePath)) {
+						mermaidProblems.push(`${relative(ctx.cwd, filePath)}: ${problem}`);
+					}
+				}
+				return mermaidResultPatch(event, mermaidProblems);
+			}
+			// The hidden `resolve` apply of an ast_edit preview is the REAL write: ast_edit re-runs with
+			// dryRun:false and surfaces as a `resolve` tool_result carrying details.sourceToolName and
+			// details.sourceResultDetails.files. Track those files so the actual apply — not just the
+			// preview — is recorded; ignore discard/failed applies.
+			if (event.toolName === "resolve" && !event.isError
+				&& (event.input?.action ?? event.details?.action) === "apply"
+				&& event.details?.sourceToolName === "ast_edit") {
+				const mermaidProblems: string[] = [];
+				for (const filePath of resolvedAstEditFiles(event.details, ctx.cwd)) {
 					const payload: GatePayload = { tool_name: "Write", tool_input: { file_path: filePath }, session_state };
 					await runGate("write-tracker.mjs", payload);
 					await runGate("backpressure-invalidator.mjs", payload);
 					await runGate("breadcrumb-tracker.mjs", payload);
+					for (const problem of await checkMermaidFile(filePath)) {
+						mermaidProblems.push(`${relative(ctx.cwd, filePath)}: ${problem}`);
+					}
 				}
+				return mermaidResultPatch(event, mermaidProblems);
 			}
 		} catch (err) {
 			pi.logger?.warn?.(`HARNESS WARNING: tool_result adapter error: ${err instanceof Error ? err.message : String(err)}`);

@@ -128,6 +128,29 @@ test('index.ts wires the lifecycle this fix depends on', () => {
     'breadcrumb-surface must surface docs/sum at session_start');
 });
 
+test('index.ts records ast_edit only on the real resolve apply, not the preview (F2)', () => {
+  // ast_edit is preview-first: its tool_result is a PREVIEW (details.applied:false); the real
+  // write lands later as a `resolve` apply (details.sourceToolName === "ast_edit"). The handler
+  // must withhold breadcrumb/write-tracker on the preview (keeping backpressure-invalidator as a
+  // safety fallback) and track the actual written files on the resolve apply.
+  const src = readFileSync(INDEX_TS, 'utf-8');
+  assert.match(
+    src,
+    /const astEditPreview = event\.toolName === "ast_edit" && event\.details\?\.applied === false/,
+    'preview must be detected via details.applied === false',
+  );
+  assert.match(
+    src,
+    /event\.toolName === "resolve"[\s\S]*?event\.details\?\.sourceToolName === "ast_edit"/,
+    'the resolve-driven apply of an ast_edit must be handled',
+  );
+  assert.match(
+    src,
+    /resolvedAstEditFiles\(event\.details, ctx\.cwd\)/,
+    'resolve apply must extract written files via resolvedAstEditFiles',
+  );
+});
+
 test('parity: write-tracker normalizes paths identically to read-tracker', () => {
   // context-gate matches EITHER tracker's entry, so write-tracker MUST normalize exactly like
   // read-tracker. Use a Windows-style raw path (drive letter + backslashes) that the shared
