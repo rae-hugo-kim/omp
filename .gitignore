@@ -2,7 +2,7 @@
 .omp/harness-state/
 .omp/state/
 
-# Local archives (intentionally untracked, not SUMMARY-indexed)
+# Local archives (intentionally untracked; visible in the Obsidian vault)
 docs/sum/
 docs/brainstorming/
 docs/reviews/
@@ -12,10 +12,8 @@ docs/harness/*-done
 # OMC state, if OMC tooling is used alongside (transient)
 .omc/
 
-# mdBook build output + vendored viewer assets
-book/
-mermaid.min.js
-mermaid-init.js
+# Obsidian vault config (viewer-local UI state, per-machine)
+.obsidian/
 
 # Human-facing one-off HTML artifacts (see artifacts/README.md)
 # Pattern: ignore everything under artifacts/, but keep README.md at any depth

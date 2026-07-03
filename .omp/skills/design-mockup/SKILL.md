@@ -71,7 +71,7 @@ artifacts/design/2026-05-22-payment-button.html 생성. 브라우저로 열어 �
 
 - 위치: `artifacts/design/<YYYY-MM-DD>-<topic>.html`
 - gitignore 대상 (1회성 사람용 산출물)
-- mdBook 뷰어에 포함되지 않음
+- docs SST 미포함 (HTML은 `artifacts/` 격리 — `rules/doc_standards.md` R4)
 
 ## Examples
 

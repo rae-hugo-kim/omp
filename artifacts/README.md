@@ -1,7 +1,7 @@
 # Artifacts
 
 이 디렉터리는 **사람이 한 번 보고 버리는 1회성 HTML 산출물**의 격리 위치다.
-mdBook 뷰어(`docs/`)에 포함되지 않으며, gitignore 대상이다.
+docs SST(`docs/`)에 포함되지 않으며, gitignore 대상이다.
 
 ## 용도
 
@@ -17,7 +17,7 @@ mdBook 뷰어(`docs/`)에 포함되지 않으며, gitignore 대상이다.
 - 모든 파일 gitignore (`.gitignore`의 `artifacts/*` + 예외 라인 참조)
 - 단, `README.md` 및 `<subdir>/README.md`는 추적 허용 (구조 문서화 목적)
 - 영속 유지가 필요한 산출물은 `docs/` 안의 MD로 승격
-- mdBook 뷰어에 surface 되지 않음 (SUMMARY.md에 포함 금지)
+- md 뷰어(Obsidian vault)의 대상 아님 — HTML은 여기 격리
 
 ## Retention
 

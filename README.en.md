@@ -38,7 +38,7 @@ One improvement over the original: failed bash verifications are recorded as FAI
 /skill:bootstrap
 ```
 
-Installs MCP servers (registered in OMP's MCP config) and docs viewer tooling (mdBook + mdbook-mermaid + mmdc).
+Installs MCP servers (registered in OMP's MCP config). Docs need no build tooling — read them with Obsidian/GitHub directly.
 
 ### 2. Create a project
 
@@ -76,9 +76,8 @@ Skills also trigger from natural language ("let's kick off", "brainstorm this", 
 │       ├── gates/         gate scripts — stdin JSON CLIs, covered by tests/
 │       └── harness-meta.json  harness version metadata
 ├── tests/                 gate unit tests (node --test)
-├── docs/                  mdBook sources + harness runtime files (seed.yaml, ...)
-├── book.toml              mdBook config (mermaid preprocessor)
-├── scripts/               docs build / drift audit / version management
+├── docs/                  markdown SST + harness runtime files (seed.yaml, ...)
+├── scripts/               drift audit / version management
 └── claudedocs/            reference docs (incl. Claude Code era history)
 ```
 
@@ -117,7 +116,7 @@ cd <existing-project>
 
 ## Harness
 
-Mechanisms that operate automatically in the kickoff → startdev flow. Gates are stdin-JSON CLI scripts in `.omp/extensions/harness/gates/` (19), wired to events by the OMP extension `index.ts`:
+Mechanisms that operate automatically in the kickoff → startdev flow. The `.omp/extensions/harness/gates/` (20) directory holds stdin-JSON gate CLIs (plus a few import helpers), wired to events by the OMP extension `index.ts`:
 
 | OMP event | Gate | Role |
 |-----------|------|------|
@@ -165,13 +164,14 @@ Projects created via `/skill:init` get a `session_start` gate that checks remote
 
 `--audit` runs `scripts/harness-audit.sh` (rubric v3); on version bumps results accumulate in `.omp/state/harness-scores.jsonl`.
 
-## Docs Viewer (mdBook)
+## Docs Viewer (Obsidian)
 
-```bash
-bash scripts/docs-build.sh   # build static site to book/ + Mermaid syntax validation (mmdc)
-mdbook serve                 # http://127.0.0.1:3000 hot reload
-```
+Markdown (SST) is read as-is, no build step: open the repo root as an Obsidian
+vault (setup and entry point: [`docs/README.md`](docs/README.md)).
 
+- Mermaid syntax is validated on save by the harness gate using OMP's bundled
+  parser (`.omp/extensions/harness/mermaid-check.ts`)
+- Link integrity: `node scripts/docs-drift`
 - Writing standard: [`rules/doc_standards.md`](rules/doc_standards.md)
 - One-off human-facing HTML goes to `artifacts/` (gitignored except READMEs)
 - `docs/brainstorming/`, `docs/sum/`, `docs/reviews/` are local-only archives

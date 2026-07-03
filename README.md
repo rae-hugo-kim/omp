@@ -38,7 +38,7 @@ OMP(Oh My Pi) 코딩 에이전트가 일관되고 안전하게 동작하도록 �
 /skill:bootstrap
 ```
 
-MCP 서버(OMP 설정에 등록), docs 뷰어 도구(mdBook + mdbook-mermaid + mmdc)를 설치합니다.
+MCP 서버(OMP 설정에 등록)를 설치합니다. docs는 빌드 도구 없이 Obsidian/GitHub로 바로 읽습니다.
 
 ### 2. 프로젝트 생성
 
@@ -84,11 +84,10 @@ MCP 서버(OMP 설정에 등록), docs 뷰어 도구(mdBook + mdbook-mermaid + m
 │       └── harness-meta.json  하네스 버전 메타
 ├── tests/                 게이트 단위 테스트 (node --test)
 ├── docs/
-│   ├── SUMMARY.md         mdBook 뷰어 인덱스
+│   ├── README.md          docs 색인 노트 (Obsidian vault 진입점)
 │   ├── brainstorming/     발산 캡처 (gitignored)
 │   └── harness/           하네스 런타임 파일 (seed.yaml 등)
-├── book.toml              mdBook 설정 (mermaid preprocessor)
-├── scripts/               docs 빌드/드리프트 감사/버전 관리
+├── scripts/               드리프트 감사/버전 관리
 └── claudedocs/            참조 문서 (Claude Code 시절 이력 포함)
 ```
 
@@ -127,7 +126,7 @@ cd <기존-프로젝트>
 
 ## 하네스
 
-kickoff → startdev 흐름에서 자동으로 작동하는 장치들. 게이트는 `.omp/extensions/harness/gates/` (19)의 stdin-JSON CLI 스크립트이고, OMP 확장 `index.ts`가 이벤트에 배선합니다:
+kickoff → startdev 흐름에서 자동으로 작동하는 장치들. `.omp/extensions/harness/gates/` (20)에 있는 stdin-JSON 게이트 CLI(와 일부 import helper)를 OMP 확장 `index.ts`가 이벤트에 배선합니다:
 
 | OMP 이벤트 | 게이트 | 역할 |
 |-----------|--------|------|
@@ -177,15 +176,14 @@ git push --follow-tags
 
 `--audit`은 `scripts/harness-audit.sh`(rubric v3)를 호출하며, 버전 bump 시 결과가 `.omp/state/harness-scores.jsonl`에 누적됩니다.
 
-## Docs 뷰어 (mdBook)
+## Docs 뷰어 (Obsidian)
 
-마크다운(SST)을 사람 친화적 HTML로 렌더링하는 로컬 뷰어.
+마크다운(SST)을 빌드 없이 그대로 읽습니다. repo 루트를 vault로 열면 됩니다
+(설정·진입점은 [`docs/README.md`](docs/README.md) 참조).
 
-```bash
-bash scripts/docs-build.sh   # book/에 정적 사이트 빌드 + Mermaid syntax 검증 (mmdc)
-mdbook serve                 # http://127.0.0.1:3000 hot reload
-```
-
+- Mermaid syntax는 저장 시점에 하네스 게이트가 OMP 내장 파서로 검증
+  (`.omp/extensions/harness/mermaid-check.ts`)
+- 링크 무결성: `node scripts/docs-drift`
 - 작성 표준: [`rules/doc_standards.md`](rules/doc_standards.md)
 - 1회성 사람용 HTML은 `artifacts/`로 (gitignored, README 제외)
 - `docs/brainstorming/`, `docs/sum/`, `docs/reviews/`는 로컬 전용 아카이브

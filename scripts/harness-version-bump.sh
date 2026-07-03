@@ -30,7 +30,7 @@ META_FILE="$REPO_ROOT/.omp/extensions/harness/harness-meta.json"
 # Harness asset paths that warrant a version bump. Keep ALIGNED with the synced
 # set in scripts/harness-sync.sh (PATHS): a change to anything consumers receive
 # should produce a new version. Entries ending in "/" are directory prefixes;
-# others are exact file paths. (Excludes docs-build/docs-drift — not synced.)
+# others are exact file paths. (Excludes docs-drift — not synced.)
 HARNESS_PATHS=(
   "rules/"
   "checklists/"

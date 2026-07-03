@@ -239,7 +239,7 @@ Mode exit trigger: <user's verbatim phrase>
 
 # Notes
 
-- 캡처 디렉터리 `docs/brainstorming/`는 gitignored, 로컬 전용. mdBook viewer 미노출 (SUMMARY SECTIONS 미포함).
+- 캡처 디렉터리 `docs/brainstorming/`는 gitignored, 로컬 전용 (원격 미공유). Obsidian vault에서는 열람·검색 가능.
 - 동행 모드는 ADHD/superpowers에 없는 "발산 보호 + 과정 보존" 철학. 이 정체성 유지가 본 스킬의 핵심.
 - 발산기 모드는 ADHD에서 영감 — 단 점수화 정량 메트릭 없이 정성 critic으로 시작.
 - 이 스킬은 산출물 사양이 아니라 **대화 행동 규칙**이다. 매 응답마다 현재 모드의 규칙을 의식적으로 참조.

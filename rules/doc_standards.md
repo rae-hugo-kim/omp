@@ -1,8 +1,8 @@
 # Documentation Standards
 
 저작 매체는 마크다운(SST). HTML은 *파생* 산출물 또는 *1회성* 사람용 아티팩트에만
-허용한다. 본 표준은 마크다운 저작 품질을 끌어올려 [`docs-build.sh`](../scripts/docs-build.sh)가
-빌드하는 mdBook 뷰어에서 가시성을 유지하도록 한다.
+허용한다. 본 표준은 마크다운을 **뷰어 독립적으로** 유지한다 — 같은 파일이 raw
+텍스트, Obsidian vault, GitHub 렌더, OMP TUI(ASCII 다이어그램) 어디서든 읽혀야 한다.
 
 ## Rules
 
@@ -11,7 +11,11 @@
 - 문서 본문의 다이어그램은 ```` ```mermaid ```` 코드펜스를 사용.
 - ASCII 다이어그램은 **코드 코멘트 안 5–10줄 짧은 흐름**에 한해 허용.
 - ASCII 아트로 그린 그래프·플로우차트를 문서 본문에 두지 않는다.
-- 빌드 시점 검증: `scripts/docs-build.sh`가 mmdc로 syntax 오류를 잡아 빌드 실패시킴.
+- 저장 시점 검증: 하네스 익스텐션(`.omp/extensions/harness/mermaid-check.ts`)이
+  OMP 내장 파서로 `.md` 저장 직후 syntax 오류를 잡아 경고를 주입함.
+- 지원 타입은 OMP 내장 파서 기준: `graph`/`flowchart`, `stateDiagram(-v2)`,
+  `sequenceDiagram`, `classDiagram`, `erDiagram`, `xychart`. 이 외(gantt, pie 등)는
+  게이트가 거부하므로 쓰지 않는다.
 
 ### R2. 긴 문서(대략 200줄+)는 상단 요약 강제
 
@@ -28,7 +32,7 @@
 ### R4. 사람용 1회성 HTML은 `artifacts/`로
 
 - 1회성 explainer·mockup·design preview·PR 시각화 등은 `artifacts/` 트리에 둔다.
-- `docs/` 안에 HTML 파일을 두지 않는다 (mdBook 뷰어에 포함되지 않고 SST 오염).
+- `docs/` 안에 HTML 파일을 두지 않는다 (SST 오염; md 뷰어의 대상도 아님).
 - 상세는 [`artifacts/README.md`](../artifacts/README.md) 참조.
 
 ### R5. 스킬 정의 파일은 대문자 `SKILL.md`
@@ -38,14 +42,18 @@
   ([anthropics/skills#314](https://github.com/anthropics/skills/issues/314)).
 - 글로벌(`~/.claude/skills/` — OMC 스킬은 OMP에서도 여기서 로드됨)·로컬(`.omp/skills/`) 양쪽 모두 동일.
 
-## Build & View
+## View
 
-- 빌드: `bash scripts/docs-build.sh` → `book/`에 정적 사이트 생성
-- 로컬 hot reload: `mdbook serve` → http://localhost:3000
-- 빌드 산출물(`book/`), mermaid 런타임 JS(`mermaid.min.js`, `mermaid-init.js`)는 gitignore
+- 뷰어: **Obsidian** — vault 루트 = repo 루트 (`rules/`·`checklists/`·`docs/` 크로스링크 유지).
+  WSL 경로: `\\wsl.localhost\<distro>\...\omp`
+- 권장 설정: 기본 보기 모드 Reading / 위키링크 끄기 + 링크 형식 상대 경로 / 가독 폭 켜기
+- 진입점: `docs/README.md` (섹션별 안내 색인). vault 설정 디렉터리 `.obsidian/`은 gitignore.
+- 링크 무결성: `scripts/docs-drift` (뷰어 무관, 상대 링크 + 앵커 검사)
 
 ## Related
 
-- `docs/harness/seed.yaml` AC2 — 본 표준의 정의 원본
+- 본 표준의 원 출처는 docs-viewer 미션(2026-06) seed의 AC였다 — 이후 `seed.yaml`은
+  미션별로 회전하므로 현행 원본은 본 문서다. (mdBook+mmdc 파이프라인은 2026-07
+  Obsidian 전환으로 폐지, 검증은 하네스 게이트로 이관)
 - `rules/change_control.md` — 최소 변경 원칙 (본 표준의 over-prescription 방지)
 - `artifacts/README.md` — 1회성 HTML 산출물 정책
