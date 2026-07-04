@@ -8,6 +8,8 @@
 //   PreToolUse  mcp__*       -> tool_call  mcp__*               : mcp-gate (advisory)
 //   PostToolUse Read         -> tool_result read                : read-tracker
 //   PostToolUse Bash         -> tool_result bash (ok)           : backpressure-tracker
+//   PostToolUse Bash (ok git commit) -> tool_result bash        : harness-version-check (1h window; drift appended to result)
+//   BeforeAgentStart -> before_agent_start                      : harness-version-check (1h window; agent-facing reminder) + kickoff-detector
 //   PostToolUseFailure Bash  -> tool_result bash (isError)      : backpressure-failure-tracker
 //   PostToolUse Edit|Write   -> tool_result edit|write|ast_edit : write-tracker + backpressure-invalidator + mermaid-check
 //     (ast_edit preview only invalidates backpressure; the REAL apply is tracked via its `resolve` result)
@@ -130,11 +132,15 @@ interface HarnessExtensionApi {
 	on(event: "session_start", handler: (event: unknown, ctx: HarnessCtx) => Promise<void>): void;
 }
 
+/** Freshness window for mid-session drift rechecks (turn start, post-commit). */
+const DRIFT_RECHECK_MAX_AGE_MS = 60 * 60 * 1000;
+
 /** stdin payload in the shape the Claude Code hook protocol fed the gates. */
 interface GatePayload {
 	tool_name?: string;
 	tool_input?: Record<string, unknown>;
 	prompt?: string;
+	max_age_ms?: number;
 	session_state: { cwd: string };
 }
 
@@ -313,6 +319,16 @@ export default function harness(pi: HarnessExtensionApi): void {
 				const tracker = bashRunFailed(event) ? "backpressure-failure-tracker.mjs" : "backpressure-tracker.mjs";
 				await runGate(tracker, payload);
 				await runGate("breadcrumb-tracker.mjs", { tool_name: "Bash", tool_input: { command, failed: bashRunFailed(event) }, session_state });
+				// Post-commit drift recheck (1h window): a bump published mid-session surfaces at
+				// the next commit. Appended to the tool result so the AGENT sees it — surface()/
+				// ui.notify is human-facing only. Non-blocking by design: a stale harness never
+				// invalidates the commit itself (blocking here would force a remote-wins sync
+				// onto a dirty tree — the exact hazard we avoid).
+				if (isGitCommit(command) && !bashRunFailed(event)) {
+					const drift = await runGate("harness-version-check.mjs", { session_state, max_age_ms: DRIFT_RECHECK_MAX_AGE_MS }, VERSION_CHECK_TIMEOUT_MS);
+					const note = drift.stdout.trim();
+					if (note) return { content: [...(event.content ?? []), { type: "text", text: note }] };
+				}
 				return;
 			}
 			if (EDIT_TOOL_NAMES.has(event.toolName) && !event.isError) {
@@ -362,13 +378,23 @@ export default function harness(pi: HarnessExtensionApi): void {
 
 	pi.on("before_agent_start", async (event, ctx) => {
 		try {
+			const session_state = { cwd: ctx.cwd };
+			const notes: string[] = [];
+			// Turn-start drift reminder (1h window): cache hits are a fast local read; misses
+			// probe ls-remote at most once per window, and failed probes back off via the
+			// gate's failure marker. Returned as a message so the AGENT acts on it.
+			const drift = await runGate("harness-version-check.mjs", { session_state, max_age_ms: DRIFT_RECHECK_MAX_AGE_MS }, VERSION_CHECK_TIMEOUT_MS);
+			const driftNote = drift.stdout.trim();
+			if (driftNote) notes.push(driftNote);
 			const prompt = latestUserText(event, ctx);
-			if (!prompt) return;
-			const run = await runGate("kickoff-detector.mjs", { prompt, session_state: { cwd: ctx.cwd } });
-			const note = run.stdout.trim();
-			if (note) return { message: { customType: "harness-reminder", content: note, display: true } };
+			if (prompt) {
+				const run = await runGate("kickoff-detector.mjs", { prompt, session_state });
+				const note = run.stdout.trim();
+				if (note) notes.push(note);
+			}
+			if (notes.length) return { message: { customType: "harness-reminder", content: notes.join("\n\n"), display: true } };
 		} catch (err) {
-			pi.logger?.warn?.(`HARNESS WARNING: kickoff-detector adapter error: ${err instanceof Error ? err.message : String(err)}`);
+			pi.logger?.warn?.(`HARNESS WARNING: before_agent_start adapter error: ${err instanceof Error ? err.message : String(err)}`);
 		}
 		return;
 	});
