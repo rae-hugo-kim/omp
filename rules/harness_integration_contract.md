@@ -81,7 +81,7 @@ Use concrete checks, not assumptions.
 1. Confirm gates directory exists: `test -d .omp/extensions/harness/gates && echo gates_ok`
 2. Confirm all gate files are present:
    ```bash
-   for h in context-gate read-tracker write-tracker commit-gates acceptance-gate backpressure-gate review-gate backpressure-tracker kickoff-detector; do
+   for h in context-gate read-tracker write-tracker commit-gates acceptance-gate backpressure-gate review-gate archive-guard backpressure-tracker kickoff-detector; do
      test -f ".omp/extensions/harness/gates/$h.mjs" && echo "$h: ok" || echo "$h: MISSING"
    done
    ```

@@ -86,7 +86,7 @@ Format: `<type>: <short description>`
 
 ```bash
 # 로컬 아카이브 유출 검사 — 서사는 레포가 아니라 sum-vault에 백업된다 (rules/doc_standards.md)
-if git ls-files docs/sum docs/reviews docs/brainstorming | grep -q .; then
+if [ -n "$(git ls-files docs/sum docs/reviews docs/brainstorming)" ]; then
   echo "push 중단: 로컬 아카이브가 git에 추적 중 — git rm -r --cached docs/sum docs/reviews docs/brainstorming 후 .gitignore 등재"
   exit 1
 fi

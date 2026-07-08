@@ -131,17 +131,20 @@ Write to `docs/sum/<filename>.md`
 저장 직후 중앙 아카이브(sum-vault)로 백업한다 — 프로젝트 레포는 `docs/sum/`을 추적하지 않으므로(untracked 정책, omp `rules/doc_standards.md`) vault가 유일한 백업이다.
 
 ```bash
-VAULT="${SUM_VAULT_DIR:-$HOME/projects/workspace/sum-vault}"
-if [ -d "$VAULT/.git" ]; then
-  PROJ="$(basename "$(git rev-parse --show-toplevel)")"
-  mkdir -p "$VAULT/$PROJ/sum"
-  cp "docs/sum/<filename>.md" "$VAULT/$PROJ/sum/"
-  git -C "$VAULT" add -A
-  git -C "$VAULT" commit -m "sum: $PROJ/<filename>" || echo "vault: 변경 없음(재백업) — 커밋 생략"
-  git -C "$VAULT" push || echo "vault push 실패 — 로컬 vault에는 저장됨; 네트워크 복구 후 git -C $VAULT push"
-else
-  echo "sum-vault 클론 없음 — 백업 생략 (위치 규약: ~/projects/workspace/sum-vault, env SUM_VAULT_DIR로 재정의)"
-fi
+# 서브셸 + || : set -e 환경에서도 백업 실패가 셸/후속 스텝을 중단시키지 않음 (완전 fail-open)
+(
+  VAULT="${SUM_VAULT_DIR:-$HOME/projects/workspace/sum-vault}"
+  if [ -d "$VAULT/.git" ]; then
+    PROJ="$(basename "$(git rev-parse --show-toplevel)")"
+    mkdir -p "$VAULT/$PROJ/sum"
+    cp "docs/sum/<filename>.md" "$VAULT/$PROJ/sum/"
+    git -C "$VAULT" add -A
+    git -C "$VAULT" commit -m "sum: $PROJ/<filename>" || echo "vault: 변경 없음(재백업) — 커밋 생략"
+    git -C "$VAULT" push || echo "vault push 실패 — 로컬 vault에는 저장됨; 네트워크 복구 후 git -C $VAULT push"
+  else
+    echo "sum-vault 클론 없음 — 백업 생략 (위치 규약: ~/projects/workspace/sum-vault, env SUM_VAULT_DIR로 재정의)"
+  fi
+) || echo "vault 백업 실패 — sum 저장 자체는 완료됨"
 ```
 
 - **fail-open**: vault 부재·push 실패는 sum 저장 성공에 영향 없음 — 안내만 남긴다.
