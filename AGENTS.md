@@ -31,6 +31,7 @@ This repo ships its own enforcement layer as an **OMP extension**. The following
 | Code changes review/verification | `reviewer` / `verifier` agents via the `task` tool | `.omp/agents/` |
 | Session breadcrumb capture (non-blocking) | `breadcrumb-tracker` + `breadcrumb-surface` | `.omp/extensions/harness/gates/` |
 | Mermaid syntax in saved `.md` (non-blocking) | in-process `mermaid-check` via OMP bundled parser | `.omp/extensions/harness/mermaid-check.ts` |
+| Local archive leak prevention (commit BLOCK / push BLOCK) | `archive-guard` (via `commit-gates`) + `.githooks/pre-push` + `compush`/`compr` pre-push checks | `.omp/extensions/harness/gates/`, `.githooks/` |
 
 All gates are wired by the extension `.omp/extensions/harness/index.ts` (OMP events: `tool_call`, `tool_result`, `before_agent_start`, `session_start`). Gates require `node` on PATH (the in-process mermaid check does not).
 

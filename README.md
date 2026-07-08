@@ -126,7 +126,7 @@ cd <기존-프로젝트>
 
 ## 하네스
 
-kickoff → startdev 흐름에서 자동으로 작동하는 장치들. `.omp/extensions/harness/gates/` (20)에 있는 stdin-JSON 게이트 CLI(와 일부 import helper)를 OMP 확장 `index.ts`가 이벤트에 배선합니다:
+kickoff → startdev 흐름에서 자동으로 작동하는 장치들. `.omp/extensions/harness/gates/` (21)에 있는 stdin-JSON 게이트 CLI(와 일부 import helper)를 OMP 확장 `index.ts`가 이벤트에 배선합니다:
 
 | OMP 이벤트 | 게이트 | 역할 |
 |-----------|--------|------|

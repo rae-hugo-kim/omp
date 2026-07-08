@@ -5,10 +5,10 @@
 // ONE. The overwhelming majority of Bash commands are not commits, so this performs the single
 // isGitCommit check and exits — one node spawn per non-commit Bash instead of three (audit item #8b).
 //
-// On an actual `git commit` it runs ALL three gates, in registration order, feeding each the same
-// stdin. It runs all three (rather than stopping at the first block) so that every gate evaluates and
-// consumes its own one-shot skip flag deterministically, and all warnings surface in a single pass —
-// matching an all-hooks-run model. The commit is blocked (exit 2) if ANY gate blocks. A gate that
+// On an actual `git commit` it runs ALL registered gates, in registration order, feeding each the
+// same stdin. It runs all of them (rather than stopping at the first block) so that every gate
+// evaluates and consumes its own one-shot skip flag deterministically, and all warnings surface in a
+// single pass — matching an all-hooks-run model. The commit is blocked (exit 2) if ANY gate blocks. A gate that
 // does not exit cleanly (crash / timeout / spawn failure) is treated as non-blocking — a broken gate
 // must not block commits, matching the prior per-hook fail-open behavior — but it is logged loudly so
 // a silently-removed or hung gate is observable. The gates are unchanged and still independently
@@ -37,11 +37,11 @@ const command = data?.tool_input?.command || '';
 if (!isGitCommit(command)) process.exit(0);
 
 const here = dirname(fileURLToPath(import.meta.url));
-const GATES = ['acceptance-gate.mjs', 'backpressure-gate.mjs', 'review-gate.mjs'];
+const GATES = ['acceptance-gate.mjs', 'backpressure-gate.mjs', 'review-gate.mjs', 'archive-guard.mjs'];
 
 // Each child gets its own ~3s budget (matching the old per-gate timeout) so one slow/hung gate can't
 // starve the others or blow the dispatcher's outer budget; the harness extension (index.ts) gives the
-// dispatcher 10s (COMMIT_GATES_TIMEOUT_MS) to cover the three sequential runs.
+// dispatcher 15s (COMMIT_GATES_TIMEOUT_MS) to cover the four sequential runs.
 const CHILD_TIMEOUT_MS = 3000;
 
 let blocked = false;

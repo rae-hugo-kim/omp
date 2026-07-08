@@ -126,11 +126,32 @@ Analyze the conversation and extract the following. **특히 Fixes & Troubleshoo
 
 Write to `docs/sum/<filename>.md`
 
-### 5. Output
+### 5. Vault backup (fail-open)
+
+저장 직후 중앙 아카이브(sum-vault)로 백업한다 — 프로젝트 레포는 `docs/sum/`을 추적하지 않으므로(untracked 정책, omp `rules/doc_standards.md`) vault가 유일한 백업이다.
+
+```bash
+VAULT="${SUM_VAULT_DIR:-$HOME/projects/workspace/sum-vault}"
+if [ -d "$VAULT/.git" ]; then
+  PROJ="$(basename "$(git rev-parse --show-toplevel)")"
+  mkdir -p "$VAULT/$PROJ/sum"
+  cp "docs/sum/<filename>.md" "$VAULT/$PROJ/sum/"
+  git -C "$VAULT" add -A
+  git -C "$VAULT" commit -m "sum: $PROJ/<filename>" || echo "vault: 변경 없음(재백업) — 커밋 생략"
+  git -C "$VAULT" push || echo "vault push 실패 — 로컬 vault에는 저장됨; 네트워크 복구 후 git -C $VAULT push"
+else
+  echo "sum-vault 클론 없음 — 백업 생략 (위치 규약: ~/projects/workspace/sum-vault, env SUM_VAULT_DIR로 재정의)"
+fi
+```
+
+- **fail-open**: vault 부재·push 실패는 sum 저장 성공에 영향 없음 — 안내만 남긴다.
+- vault는 **PRIVATE** 저장소여야 한다 — 서사·프로젝트명이 공개 노출되지 않도록.
+
+### 6. Output
 
 Report: `File saved: docs/sum/<filename>.md`
 
-### 6. Clear context (optional)
+### 7. Clear context (optional)
 
 After saving, suggest `/clear` to reset conversation context.
 
@@ -142,3 +163,4 @@ After saving, suggest `/clear` to reset conversation context.
 | No meaningful content | Create minimal summary, note "short session" |
 | No fixes in session | Fixes & Troubleshooting 섹션에 "해결한 오류 없음" 표기 |
 | No new features | Implementation Details 섹션에 "새로운 구현 없음" 표기 |
+| Vault 클론 없음/push 실패 | 백업 생략·안내만, sum 저장은 성공 처리 (fail-open) |

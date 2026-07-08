@@ -41,7 +41,7 @@ import { checkMermaidFile, MERMAID_SUPPORTED } from "./mermaid-check";
 
 const GATES_DIR = join(dirname(fileURLToPath(import.meta.url)), "gates");
 const GATE_TIMEOUT_MS = 3_000;
-const COMMIT_GATES_TIMEOUT_MS = 10_000;
+const COMMIT_GATES_TIMEOUT_MS = 15_000;
 const VERSION_CHECK_TIMEOUT_MS = 15_000;
 
 /** Tools that create or mutate files (Claude Code's Edit|Write matcher). */
@@ -277,7 +277,7 @@ export default function harness(pi: HarnessExtensionApi): void {
 				const payload: GatePayload = { tool_name: "Bash", tool_input: { command }, session_state };
 				const guard = await runGate("destructive-guard.mjs", payload);
 				surface(ctx, guard, "destructive-guard");
-				// Cheap in-process pre-check; commit-gates spawns 3 child gates on a real commit.
+				// Cheap in-process pre-check; commit-gates spawns 4 child gates on a real commit.
 				if (isGitCommit(command)) {
 					const gates = await runGate("commit-gates.mjs", payload, COMMIT_GATES_TIMEOUT_MS);
 					if (gates.status === 2) return { block: true, reason: gates.stderr.trim() || "HARNESS BLOCK: commit gate failed." };

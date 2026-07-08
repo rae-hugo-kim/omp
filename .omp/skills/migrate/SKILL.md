@@ -108,12 +108,13 @@ git rm -r --quiet .omc/harness-state 2>/dev/null; rm -rf .omc/harness-state
 
 ### Phase 5: .gitignore 병합
 
-`harness-sync.sh`는 `.gitignore`를 동기화하지 않으므로, OMP 하네스 무시 블록을 **없을 때만** 추가한다. 프로젝트 기존 항목은 보존.
+`harness-sync.sh`는 `.gitignore`를 동기화하지 않으므로 여기서 보장한다. **라인별 멱등** — 구버전 블록이 이미 있는 레포도 누락 항목(예: `docs/sum/`)만 보강되고, 프로젝트 기존 항목은 보존.
 
 ```bash
-grep -q '\.omp/harness-state/' .gitignore 2>/dev/null || cat >> .gitignore <<'EOF'
-
-# --- OMP harness (added by /skill:migrate) ---
+touch .gitignore
+while IFS= read -r line; do
+  grep -qxF "$line" .gitignore || echo "$line" >> .gitignore
+done <<'EOF'
 .omp/harness-state/
 .omp/state/
 docs/sum/
@@ -123,6 +124,12 @@ docs/harness/*-skip
 docs/harness/*-done
 .omc/
 EOF
+```
+
+훅 활성화(멱등): 동기화된 `.githooks/`(post-commit no-op 스텁 + pre-push 아카이브/드리프트 검사)를 켠다.
+
+```bash
+git config core.hooksPath .githooks
 ```
 
 ### Phase 6: 게이트 스모크 (확장이 실제로 배선됐는지 증명)

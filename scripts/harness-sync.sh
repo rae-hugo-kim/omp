@@ -98,6 +98,7 @@ PATHS=(
   "EXAMPLES.md"
   ".omp/extensions/harness"
   ".githooks/post-commit"
+  ".githooks/pre-push"
   "scripts/harness-version-bump.sh"
   "scripts/harness-sync.sh"
   "scripts/harness-audit.sh"

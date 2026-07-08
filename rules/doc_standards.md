@@ -42,6 +42,24 @@
   ([anthropics/skills#314](https://github.com/anthropics/skills/issues/314)).
 - 글로벌(`~/.claude/skills/` — OMC 스킬은 OMP에서도 여기서 로드됨)·로컬(`.omp/skills/`) 양쪽 모두 동일.
 
+## Local Archives (untracked + vault backup)
+
+세션 서사 아카이브 — `docs/sum/`(세션 요약), `docs/reviews/`(리뷰 문서),
+`docs/brainstorming/`(발산 기록) — 는 **프로젝트 레포에 추적하지 않는다**:
+
+- **정책**: 서사에는 내부 의사결정·시행착오·경로가 담기므로 레포(특히 public)에
+  올리지 않는다. 추적으로 승격할 문서는 **sanitize 후** `claudedocs/` 같은 추적
+  티어로 옮긴다 (레포가 public이면 sanitize 필수).
+- **백업**: 로컬-온리의 소실 위험은 중앙 **sum-vault**(PRIVATE 저장소, 위치 규약
+  `~/projects/workspace/sum-vault`, env `SUM_VAULT_DIR`)가 담당 — `/skill:sum`이
+  저장 직후 자동 복사·커밋·푸시한다 (fail-open). vault를 Obsidian으로 열면 전
+  프로젝트 서사를 한 곳에서 열람.
+- **강제 지점** (gitignore는 발견 차단일 뿐 `add -f`·legacy 추적을 못 막는다):
+  ① `archive-guard`(commit-gates 자식) — staged/swept 아카이브 커밋 BLOCK, legacy
+  추적은 WARN. ② `.githooks/pre-push` — 추적 아카이브 존재 시 push BLOCK (활성화:
+  `git config core.hooksPath .githooks`). ③ `compush`/`compr` 스킬 — push 전 검사.
+  ④ `bootstrap`/`migrate` — 파생 레포에 ignore 블록 + hooksPath 보장.
+
 ## View
 
 - 뷰어: **Obsidian** — vault 루트 = repo 루트 (`rules/`·`checklists/`·`docs/` 크로스링크 유지).

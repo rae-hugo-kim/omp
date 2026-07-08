@@ -116,7 +116,7 @@ cd <existing-project>
 
 ## Harness
 
-Mechanisms that operate automatically in the kickoff → startdev flow. The `.omp/extensions/harness/gates/` (20) directory holds stdin-JSON gate CLIs (plus a few import helpers), wired to events by the OMP extension `index.ts`:
+Mechanisms that operate automatically in the kickoff → startdev flow. The `.omp/extensions/harness/gates/` (21) directory holds stdin-JSON gate CLIs (plus a few import helpers), wired to events by the OMP extension `index.ts`:
 
 | OMP event | Gate | Role |
 |-----------|------|------|

@@ -62,6 +62,35 @@ docs는 빌드 도구 없이 읽는다 — Obsidian으로 repo 루트를 vault�
 
 출력: "✓ docs viewer: Obsidian (no build tooling required — see docs/README.md)"
 
+### Phase 2.5: 하네스 레포 위생 (자동, 멱등)
+
+로컬 아카이브 untracked 정책과 git hooks 활성화를 보장한다:
+
+```bash
+# 1) 로컬 아카이브 ignore 항목 (라인별 멱등 — 구버전 하네스 블록만 있는 레포도 누락분 보강)
+touch .gitignore
+while IFS= read -r line; do
+  grep -qxF "$line" .gitignore || echo "$line" >> .gitignore
+done <<'EOF'
+.omp/harness-state/
+.omp/state/
+docs/sum/
+docs/brainstorming/
+docs/reviews/
+docs/harness/*-skip
+docs/harness/*-done
+.omc/
+EOF
+# 2) 하네스 훅 활성화 (.githooks: post-commit no-op 스텁 + pre-push 아카이브/드리프트 검사)
+[ -d .githooks ] && git config core.hooksPath .githooks
+# 3) 이미 추적 중인 아카이브 감지 (있으면 push가 차단되므로 지금 안내)
+git ls-files docs/sum docs/reviews docs/brainstorming | head -5
+```
+
+추적 중인 아카이브가 발견되면: `git rm -r --cached docs/sum docs/reviews docs/brainstorming` 후 커밋을 안내하고, 서사 백업은 sum-vault(`/skill:sum`의 Vault backup 참조)로 안내한다.
+
+출력: "✓ repo hygiene: archives untracked + hooksPath=.githooks"
+
 ### Phase 3: 범용 MCP 서버 등록 (자동)
 
 MCP 서버는 OMP 자체 MCP 설정에 등록한다 (`~/.claude.json` 아님).
