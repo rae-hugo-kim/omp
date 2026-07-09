@@ -7,6 +7,7 @@
 //   PreToolUse  Bash         -> tool_call  bash                 : destructive-guard (advisory), commit-gates (blocking)
 //   PreToolUse  mcp__*       -> tool_call  mcp__*               : mcp-gate (advisory)
 //   PostToolUse Read         -> tool_result read                : read-tracker
+//   PostToolUse Grep|AstGrep -> tool_result grep|ast_grep      : read-tracker (batched; search-minted [path#TAG] anchors satisfy context-gate)
 //   PostToolUse Bash         -> tool_result bash (ok)           : backpressure-tracker
 //   PostToolUse Bash (ok git commit) -> tool_result bash        : harness-version-check (1h window; drift appended to result)
 //   BeforeAgentStart -> before_agent_start                      : harness-version-check (1h window; agent-facing reminder) + kickoff-detector
@@ -36,7 +37,7 @@ import { spawn } from "node:child_process";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isGitCommit } from "./gates/git-commit-detect.mjs";
-import { readTarget, resolvedAstEditFiles } from "./gates/read-path.mjs";
+import { readTarget, resolvedAstEditFiles, searchTrackTargets } from "./gates/read-path.mjs";
 import { checkMermaidFile, MERMAID_SUPPORTED } from "./mermaid-check";
 
 const GATES_DIR = join(dirname(fileURLToPath(import.meta.url)), "gates");
@@ -310,6 +311,15 @@ export default function harness(pi: HarnessExtensionApi): void {
 			if (event.toolName === "read" && !event.isError) {
 				const filePath = readTarget(event.input, ctx.cwd);
 				if (filePath) await runGate("read-tracker.mjs", { tool_name: "Read", tool_input: { file_path: filePath }, session_state });
+				return;
+			}
+			// grep/ast_grep mint per-file [path#TAG] edit anchors backed by whole-file
+			// snapshots, and OMP's edit tool accepts them ("from your latest read/search") —
+			// record the anchored files as read or context-gate false-blocks a grep-anchored
+			// edit (live-reproduced on omp 16.3.12, 2026-07-09). One batched spawn per result.
+			if ((event.toolName === "grep" || event.toolName === "ast_grep") && !event.isError) {
+				const files = searchTrackTargets(event.details, textChunks(event.content), ctx.cwd);
+				if (files.length) await runGate("read-tracker.mjs", { tool_name: "Read", tool_input: { file_paths: files }, session_state });
 				return;
 			}
 			if (event.toolName === "bash") {

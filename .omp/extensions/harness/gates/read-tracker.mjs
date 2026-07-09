@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-// read-tracker.mjs - PostToolUse hook for Read
-// Purpose: Track which files have been read (for context-gate)
+// read-tracker.mjs - tool_result hook for Read + grep/ast_grep search anchors
+// Purpose: Track which files' content the session has seen (for context-gate).
+// Accepts tool_input.file_path (single read) or tool_input.file_paths (batched
+// search anchors — one spawn per grep/ast_grep result, however many files it minted).
 
 import { readFileSync, appendFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
@@ -15,8 +17,10 @@ try {
   process.exit(0);
 }
 
-const filePath = data?.tool_input?.file_path || data?.tool_input?.filePath;
-if (!filePath) process.exit(0);
+const ti = data?.tool_input || {};
+const batch = Array.isArray(ti.file_paths) ? ti.file_paths : [];
+const filePaths = [ti.file_path || ti.filePath, ...batch].filter((p) => typeof p === 'string' && p.length > 0);
+if (!filePaths.length) process.exit(0);
 
 const cwd = data?.session_state?.cwd || process.cwd();
 const stateDir = join(cwd, '.omp', 'harness-state');
@@ -26,14 +30,17 @@ if (!existsSync(stateDir)) {
   mkdirSync(stateDir, { recursive: true });
 }
 
-const normalizedPath = filePath.replace(/^[A-Za-z]:/, '').replace(/\\/g, '/');
-
 const existing = existsSync(readLogPath) ? readFileSync(readLogPath, 'utf-8') : '';
 const existingSet = new Set(existing.split('\n').filter(Boolean));
 
-if (!existingSet.has(filePath) && !existingSet.has(normalizedPath)) {
-  appendFileSync(readLogPath, filePath + '\n');
-  appendFileSync(readLogPath, normalizedPath + '\n');
+let out = '';
+for (const filePath of filePaths) {
+  const normalizedPath = filePath.replace(/^[A-Za-z]:/, '').replace(/\\/g, '/');
+  if (existingSet.has(filePath) || existingSet.has(normalizedPath)) continue;
+  out += filePath + '\n' + normalizedPath + '\n';
+  existingSet.add(filePath);
+  existingSet.add(normalizedPath);
 }
+if (out) appendFileSync(readLogPath, out);
 
 process.exit(0);

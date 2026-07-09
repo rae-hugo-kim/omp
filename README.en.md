@@ -125,6 +125,7 @@ Mechanisms that operate automatically in the kickoff → startdev flow. The `.om
 | `tool_call` (bash, on commit) | commit-gates → acceptance/backpressure/review | Block commits with unmet AC, failed verification, or unreviewed high risk |
 | `tool_call` (mcp__*) | mcp-gate | Warn on destructive MCP calls |
 | `tool_result` (read) | read-tracker | Record files read |
+| `tool_result` (grep/ast_grep) | read-tracker | Record files the search minted `[path#TAG]` anchors for (one batched spawn) |
 | `tool_result` (edit/write success) | write-tracker + backpressure-invalidator | Record written files; invalidate verification state on code edits |
 | `tool_result` (bash) | backpressure-tracker / failure-tracker | Record verification PASS/FAIL |
 | `tool_result` (bash commit·verify / edit·write) | breadcrumb-tracker | Record session-resume breadcrumbs (commits, tests, file changes; no-LLM) |
@@ -139,6 +140,8 @@ Mechanisms that operate automatically in the kickoff → startdev flow. The `.om
 - Runtime state lives in `.omp/harness-state/` (gitignored); gates run standalone via `node --test tests/`
 
 Unlike the Claude Code original, failed bash verifications ARE recorded — the adapter routes bash `tool_result`s with a non-zero `details.exitCode` (or `isError`) to the failure tracker, resolving the original PostToolUseFailure limitation.
+
+omp's `grep`/`ast_grep` also mint per-file `[path#TAG]` edit anchors (whole-file snapshots) that the edit tool accepts as read-equivalent, so the adapter records each search result's certified file list (`details.files`, fallback: bracketed headers) into read-tracker — a grep-anchored edit is no longer false-blocked by context-gate (live-reproduced on 16.3.12, then fixed).
 
 ## Harness Versioning
 

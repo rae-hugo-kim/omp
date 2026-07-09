@@ -135,6 +135,7 @@ kickoff → startdev 흐름에서 자동으로 작동하는 장치들. `.omp/ext
 | `tool_call` (bash, 커밋 시) | commit-gates → acceptance/backpressure/review | 수락 기준 미충족·검증 실패·고위험 무리뷰 커밋 차단 |
 | `tool_call` (mcp__*) | mcp-gate | 파괴적 MCP 호출 경고 |
 | `tool_result` (read) | read-tracker | 읽은 파일 기록 |
+| `tool_result` (grep/ast_grep) | read-tracker | 검색이 `[path#TAG]` 앵커를 발급한 파일 기록 (배치 1회 스폰) |
 | `tool_result` (edit/write 성공) | write-tracker + backpressure-invalidator | 작성 파일 기록, 코드 수정 시 검증 상태 무효화 |
 | `tool_result` (bash) | backpressure-tracker / failure-tracker | 검증 명령 PASS/FAIL 기록 |
 | `tool_result` (bash 커밋·검증 / edit·write) | breadcrumb-tracker | 세션 재개용 breadcrumb 기록 (커밋·테스트·파일변경, no-LLM) |
@@ -149,6 +150,8 @@ kickoff → startdev 흐름에서 자동으로 작동하는 장치들. `.omp/ext
 - 런타임 상태는 `.omp/harness-state/`(gitignored), 게이트 단독 실행·테스트는 `node --test tests/`
 
 Claude Code 원본과 달리, 실패한 bash 검증도 기록됩니다 — 어댑터가 비정상 종료(`details.exitCode`≠0) 또는 도구 오류(`isError`)인 bash `tool_result`를 failure-tracker로 라우팅해, 원본의 PostToolUseFailure 한계가 해소됐습니다.
+
+또한 omp의 `grep`/`ast_grep`는 파일별 `[path#TAG]` 편집 앵커(whole-file snapshot)를 발급하고 편집 도구가 이를 read와 동급으로 인정하므로, 어댑터가 검색 결과의 인증 파일 목록(`details.files`, 폴백: 브래킷 헤더)을 read-tracker에 **배치 1회 스폰**으로 기록합니다 — grep 직후 편집이 context-gate에 오차단되지 않습니다(16.3.12에서 오차단 라이브 재현 후 수정).
 
 ## 하네스 버전 관리
 

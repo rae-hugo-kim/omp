@@ -44,3 +44,35 @@ export function resolvedAstEditFiles(details, cwd) {
 	}
 	return out;
 }
+
+/** Local files a grep/ast_grep result certified with `[path#TAG]` edit anchors.
+ *  omp mints a whole-file snapshot per rendered file (grep.md: recordFileSnapshot)
+ *  and its edit tool accepts those tags as anchors ("from your latest read/search"),
+ *  so context-gate must treat them as read — otherwise a grep-anchored edit
+ *  false-blocks (live-reproduced on omp 16.3.12, 2026-07-09).
+ *
+ *  Primary source: details.files — absolute path strings on BOTH grep and ast_grep,
+ *  single and grouped multi-file results alike (measured on omp 16.3.12). Any array
+ *  there is trusted as-is, including empty (no matches -> nothing anchored).
+ *  Fallback (details.files absent/misshaped): bracketed `[path#TAG]` headers in the
+ *  result text — the single-file output form. Grouped tree headers (`## file.ts#TAG`)
+ *  are deliberately NOT reconstructed: directory-stack parsing is format-coupled and
+ *  a wrong join would track the WRONG file (loosening the gate), while under-tracking
+ *  merely keeps the old strictness. Internal URIs (`://`) never track — virtual
+ *  resources don't mint editable anchors. */
+const SEARCH_ANCHOR_HEADER = /^\[([^\]\n#]+)#[0-9A-Fa-f]{4,}\]\s*$/gm;
+export function searchTrackTargets(details, text, cwd) {
+	const out = new Set();
+	const files = details?.files;
+	if (Array.isArray(files)) {
+		for (const f of files) {
+			if (typeof f === "string" && f && !f.includes("://")) out.add(resolve(cwd, f));
+		}
+		return [...out];
+	}
+	if (typeof text !== "string" || !text) return [];
+	for (const m of text.matchAll(SEARCH_ANCHOR_HEADER)) {
+		if (!m[1].includes("://")) out.add(resolve(cwd, m[1]));
+	}
+	return [...out];
+}
