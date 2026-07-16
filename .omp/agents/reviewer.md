@@ -28,12 +28,11 @@ Read the diff and analyze:
 Spawn the adversary agent — an independent GPT-family reviewer running natively in OMP:
 ```
 task({
-  agent: "adversary",
   context: "Adversarial review of this repo's uncommitted changes (git diff HEAD).",
   tasks: [{
-    id: "AdversaryReview",
-    role: "Heterogeneous-model adversarial reviewer",
-    assignment: "Adversarially review the uncommitted changes (git diff HEAD). Focus on logic defects, security issues, and edge cases. Return findings with severity and file:line evidence."
+    name: "AdversaryReview",
+    agent: "adversary",
+    task: "Adversarially review the uncommitted changes (git diff HEAD). Focus on logic defects, security issues, and edge cases. Return findings with severity and file:line evidence."
   }]
 })
 ```
@@ -46,12 +45,11 @@ codex review --uncommitted "Focus on logic defects, security issues, and edge ca
 Spawn OMC's code-reviewer (discovered by OMP's `task` tool) for severity-rated feedback:
 ```
 task({
-  agent: "code-reviewer",
   context: "Severity-rated review of this repo's uncommitted changes (git diff HEAD).",
   tasks: [{
-    id: "CodeReviewerPass",
-    role: "Severity-rating code reviewer",
-    assignment: "Review the uncommitted changes in this repo. Rate each finding by severity (critical/high/medium/low). Check for logic defects, SOLID violations, performance issues, and security."
+    name: "CodeReviewerPass",
+    agent: "code-reviewer",
+    task: "Review the uncommitted changes in this repo. Rate each finding by severity (critical/high/medium/low). Check for logic defects, SOLID violations, performance issues, and security."
   }]
 })
 ```

@@ -1,6 +1,6 @@
 ---
 name: harness-check
-argument-hint: [--dry-run] [--audit]
+argument-hint: "[--dry-run] [--audit]"
 description: Check harness version drift and auto-sync from the source remote. Use when the user says "harness-check", "harness version", "하네스 버전", or wants to retrofit/update harness files from the source repo.
 ---
 

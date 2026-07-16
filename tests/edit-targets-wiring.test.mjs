@@ -1,4 +1,4 @@
-// edit-targets-wiring.test.mjs — editTargets (index.ts) hashline `edit` target sources.
+// edit-targets-wiring.test.mjs — editTargets의 hashline `edit` 타깃 소스 계약.
 //
 // OMP >=16.1.17 exposes every parsed hashline target on the extension event as
 // `event.input.paths` (and `event.input.path` for single-file calls). The adapter
@@ -6,42 +6,44 @@
 // `MV DEST` path (v16.2.0 op), which never appears in a `[path#TAG]` header — while
 // KEEPING the header-regex fallback for hosts that don't expose parsed targets.
 //
-// editTargets is not exported from the extension entry point, so (matching the
-// wiring assertions in write-tracker.test.mjs) these are source-level checks: the
-// quoted field accesses in the `edit` branch ARE the behavior contract.
+// v17 적응에서 editTargets가 read-path.mjs로 이동·export되어, 과거의 소스-텍스트
+// 검사(regex on index.ts)를 실제 행동 테스트로 대체한다.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+import { editTargets } from '../.omp/extensions/harness/gates/read-path.mjs';
 
-const INDEX_TS = join(dirname(fileURLToPath(import.meta.url)), '..', '.omp', 'extensions', 'harness', 'index.ts');
-const src = readFileSync(INDEX_TS, 'utf-8');
+const CWD = '/work';
 
-function editBranch() {
-  const start = src.indexOf('if (toolName === "edit")');
-  const end = src.indexOf('if (toolName === "ast_edit")');
-  assert.ok(start !== -1 && end > start, 'editTargets must keep distinct edit / ast_edit branches');
-  return src.slice(start, end);
-}
-
-test('edit branch merges the native parsed-target list (input.paths, OMP >=16.1.17)', () => {
-  const branch = editBranch();
-  const native = branch.indexOf('Array.isArray(input.paths)');
-  const fallback = branch.indexOf('HASHLINE_HEADER');
-  assert.ok(native !== -1,
-    'edit targets must consult event.input.paths via real code (Array.isArray guard), not a comment');
-  assert.ok(fallback !== -1 && native < fallback,
-    'native paths handling must precede the header-regex fallback');
+test('edit는 native parsed-target(input.paths)을 병합 — MV DEST처럼 헤더에 없는 경로 포함', () => {
+	const input = {
+		paths: ['src/a.ts', 'dest/moved.ts'],           // host-parsed list (MV DEST는 여기에만 온다)
+		input: '[src/a.ts#AB12]\nMV dest/moved.ts\n',    // 헤더에는 소스 파일만
+	};
+	const targets = editTargets('edit', input, CWD);
+	assert.ok(targets.includes(resolve(CWD, 'dest/moved.ts')),
+		'native paths의 MV DEST가 타깃에 포함되어야 함 (헤더 폴백만으로는 불가능)');
+	assert.ok(targets.includes(resolve(CWD, 'src/a.ts')));
 });
 
-test('edit branch keeps the [path#TAG] header fallback for older hosts', () => {
-  assert.match(editBranch(), /HASHLINE_HEADER/,
-    'header parsing must remain as the pre-16.1.17 fallback');
+test('paths 미제공 호스트에서는 [path#TAG] 헤더 폴백이 타깃을 복원', () => {
+	const input = { input: '[src/only-header.ts#AB12]\nSWAP 1.=1:\n+x\n' };
+	assert.deepEqual(editTargets('edit', input, CWD), [resolve(CWD, 'src/only-header.ts')]);
 });
 
-test('edit branch still honors the direct path field (find/replace-style edits)', () => {
-  assert.match(editBranch(), /input\.path\b/,
-    'single-file edit tools set a direct path field');
+test('direct path 필드(find/replace형 edit)가 존중됨', () => {
+	assert.deepEqual(editTargets('edit', { path: 'src/direct.ts' }, CWD), [resolve(CWD, 'src/direct.ts')]);
+});
+
+test('세 소스가 중복 없이 합집합으로 병합됨', () => {
+	const input = {
+		path: 'src/a.ts',
+		paths: ['src/a.ts', 'src/b.ts'],
+		input: '[src/a.ts#AB12]\n[src/c.ts#CD34]\n',
+	};
+	assert.deepEqual(
+		editTargets('edit', input, CWD).sort(),
+		[resolve(CWD, 'src/a.ts'), resolve(CWD, 'src/b.ts'), resolve(CWD, 'src/c.ts')].sort(),
+	);
 });

@@ -113,14 +113,20 @@ test('regression: a file NOT covered by the search result stays blocked', () => 
   });
 });
 
-test('index.ts wires grep/ast_grep tool_result into the batched read-tracker', () => {
+test('index.ts wires grep(및 xd 검색 디바이스) tool_result를 배치 read-tracker로', () => {
   // searchTrackTargets is imported into the TS entry point (not spawnable here), so —
-  // matching edit-targets-wiring.test.mjs — the quoted accesses ARE the behavior contract.
+  // matching write-tracker.test.mjs — the quoted accesses ARE the behavior contract.
+  // v17: top-level은 grep뿐이고, ast_grep은 xd:// 디바이스로 write에 실려 도착한다 —
+  // 그 경로는 mutationRoute의 "read-anchors" kind가 같은 배치 페이로드로 처리한다
+  // (분류 행동은 xdev-dispatch.test.mjs가 고정).
   const src = readFileSync(INDEX_TS, 'utf-8');
-  assert.match(src, /event\.toolName === "grep" \|\| event\.toolName === "ast_grep"/,
-    'a grep/ast_grep tool_result branch must exist');
+  assert.match(src, /event\.toolName === "grep" && !event\.isError/,
+    'a grep tool_result branch must exist');
   assert.match(src, /searchTrackTargets\(event\.details, textChunks\(event\.content\), ctx\.cwd\)/,
     'anchored files must come from searchTrackTargets (details.files first, header fallback)');
-  assert.match(src, /tool_input: \{ file_paths: files \}/,
-    'the tracker must receive ONE batched file_paths payload, not per-file spawns');
+  assert.match(src, /route\.kind === "read-anchors"/,
+    'xd search dispatches must be routed to read tracking');
+  const batched = src.match(/tool_input: \{ file_paths: /g) || [];
+  assert.ok(batched.length >= 2,
+    'both the grep branch and the read-anchors branch must use ONE batched file_paths payload');
 });

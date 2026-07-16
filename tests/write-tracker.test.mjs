@@ -128,27 +128,28 @@ test('index.ts wires the lifecycle this fix depends on', () => {
     'breadcrumb-surface must surface docs/sum at session_start');
 });
 
-test('index.ts records ast_edit only on the real resolve apply, not the preview (F2)', () => {
-  // ast_edit is preview-first: its tool_result is a PREVIEW (details.applied:false); the real
-  // write lands later as a `resolve` apply (details.sourceToolName === "ast_edit"). The handler
-  // must withhold breadcrumb/write-tracker on the preview (keeping backpressure-invalidator as a
-  // safety fallback) and track the actual written files on the resolve apply.
+test('index.ts records ast_edit only on the real apply, not the preview (F2, v17 라우팅)', () => {
+  // v17: ast_edit rides the xd:// device transport; preview/apply classification lives in
+  // read-path.mjs mutationRoute (behavior unit-tested in xdev-dispatch.test.mjs). The wiring
+  // contract here: index.ts must route mutating tool_results through mutationRoute, run ONLY
+  // backpressure-invalidator on "preview", feed "read-anchors" to read-tracker, and share the
+  // full tracking chain (write-tracker + invalidator + breadcrumb) on apply/files.
   const src = readFileSync(INDEX_TS, 'utf-8');
   assert.match(
     src,
-    /const astEditPreview = event\.toolName === "ast_edit" && event\.details\?\.applied === false/,
-    'preview must be detected via details.applied === false',
+    /mutationRoute\(event\.toolName, event\.input, event\.details, textChunks\(event\.content\), ctx\.cwd\)/,
+    'tool_result mutations must be classified via mutationRoute',
   );
-  assert.match(
-    src,
-    /event\.toolName === "resolve"[\s\S]*?event\.details\?\.sourceToolName === "ast_edit"/,
-    'the resolve-driven apply of an ast_edit must be handled',
-  );
-  assert.match(
-    src,
-    /resolvedAstEditFiles\(event\.details, ctx\.cwd\)/,
-    'resolve apply must extract written files via resolvedAstEditFiles',
-  );
+  const previewBranch = src.match(/route\.kind === "preview"[\s\S]*?return;/);
+  assert.ok(previewBranch, 'a preview branch must exist and return early');
+  assert.match(previewBranch[0], /backpressure-invalidator\.mjs/,
+    'preview must invalidate backpressure');
+  assert.doesNotMatch(previewBranch[0], /write-tracker\.mjs|breadcrumb-tracker\.mjs/,
+    'preview must NOT write-track or breadcrumb (deferred to the apply)');
+  const anchorsBranch = src.match(/route\.kind === "read-anchors"[\s\S]*?return;/);
+  assert.ok(anchorsBranch, 'xd search dispatches must have a read-anchors branch');
+  assert.match(anchorsBranch[0], /read-tracker\.mjs/,
+    'read-anchors must be recorded via read-tracker');
 });
 
 test('parity: write-tracker normalizes paths identically to read-tracker', () => {

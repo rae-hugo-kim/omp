@@ -3,17 +3,19 @@
 // lived in `.claude/settings.json` (PreToolUse/PostToolUse/... hooks).
 //
 // Event mapping (Claude Code -> OMP):
-//   PreToolUse  Edit|Write   -> tool_call  edit|write|ast_edit  : context-gate (blocking)
+//   PreToolUse  Edit|Write   -> tool_call  edit|write            : context-gate (blocking; an
+//     xd://ast_edit device write pre-gates the paths named in its JSON body — read-before-edit holds)
 //   PreToolUse  Bash         -> tool_call  bash                 : destructive-guard (advisory), commit-gates (blocking)
 //   PreToolUse  mcp__*       -> tool_call  mcp__*               : mcp-gate (advisory)
 //   PostToolUse Read         -> tool_result read                : read-tracker
-//   PostToolUse Grep|AstGrep -> tool_result grep|ast_grep      : read-tracker (batched; search-minted [path#TAG] anchors satisfy context-gate)
+//   PostToolUse Grep         -> tool_result grep                 : read-tracker (batched; search-minted [path#TAG] anchors satisfy context-gate)
 //   PostToolUse Bash         -> tool_result bash (ok)           : backpressure-tracker
 //   PostToolUse Bash (ok git commit) -> tool_result bash        : harness-version-check (1h window; drift appended to result)
 //   BeforeAgentStart -> before_agent_start                      : harness-version-check (1h window; agent-facing reminder) + kickoff-detector
 //   PostToolUseFailure Bash  -> tool_result bash (isError)      : backpressure-failure-tracker
-//   PostToolUse Edit|Write   -> tool_result edit|write|ast_edit : write-tracker + backpressure-invalidator + mermaid-check
-//     (ast_edit preview only invalidates backpressure; the REAL apply is tracked via its `resolve` result)
+//   PostToolUse Edit|Write   -> tool_result edit|write           : mutationRoute -> write-tracker + backpressure-invalidator + mermaid-check
+//     (v17 xd:// dispatches ride `write`: ast_edit preview only invalidates backpressure, the REAL
+//      apply is tracked via the xd://resolve dispatch envelope; xd grep/ast_grep results record read anchors)
 //   UserPromptSubmit         -> before_agent_start              : kickoff-detector (message injection)
 //   SessionStart             -> session_start                   : harness-version-check
 //
@@ -37,7 +39,7 @@ import { spawn } from "node:child_process";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isGitCommit } from "./gates/git-commit-detect.mjs";
-import { readTarget, resolvedAstEditFiles, searchTrackTargets } from "./gates/read-path.mjs";
+import { mutationCallTargets, mutationRoute, readTarget, searchTrackTargets } from "./gates/read-path.mjs";
 import { checkMermaidFile, MERMAID_SUPPORTED } from "./mermaid-check";
 
 const GATES_DIR = join(dirname(fileURLToPath(import.meta.url)), "gates");
@@ -45,10 +47,9 @@ const GATE_TIMEOUT_MS = 3_000;
 const COMMIT_GATES_TIMEOUT_MS = 15_000;
 const VERSION_CHECK_TIMEOUT_MS = 15_000;
 
-/** Tools that create or mutate files (Claude Code's Edit|Write matcher). */
-const EDIT_TOOL_NAMES = new Set(["edit", "write", "ast_edit"]);
-/** `[path#TAG]` headers inside a hashline `edit` patch. */
-const HASHLINE_HEADER = /^\[([^\]\n#]+)#[0-9A-Fa-f]{4,}\]\s*$/gm;
+/** Tools that create or mutate files (Claude Code's Edit|Write matcher). v17 moved
+ *  ast_edit behind the xd:// device transport, so it arrives as `write` here. */
+const isEditToolName = (name: string): boolean => name === "edit" || name === "write";
 
 interface ContentChunk {
 	type: string;
@@ -190,43 +191,6 @@ function textChunks(content: unknown): string {
 	return text;
 }
 
-/** Absolute file targets a mutating tool call touches. */
-function editTargets(toolName: string, input: Record<string, unknown> | undefined, cwd: string): string[] {
-	if (!input) return [];
-	if (toolName === "write") {
-		const path = input.path ?? input.file_path ?? input.filePath;
-		return typeof path === "string" && path ? [resolve(cwd, path)] : [];
-	}
-	if (toolName === "edit") {
-		const targets = new Set<string>();
-		// Direct path field (find/replace-style edit tools)...
-		const direct = input.path ?? input.file_path ?? input.filePath;
-		if (typeof direct === "string" && direct) targets.add(resolve(cwd, direct));
-		// ...native parsed-target list — OMP >=16.1.17 exposes every parsed hashline
-		// target as input.paths (single-file calls also set input.path above)...
-		if (Array.isArray(input.paths)) {
-			for (const p of input.paths) {
-				if (typeof p === "string" && p) targets.add(resolve(cwd, p));
-			}
-		}
-		// ...and hashline patch headers `[path#TAG]` as a fallback for hosts that
-		// don't expose parsed targets (pre-16.1.17). Note an `MV DEST` op row names
-		// its destination outside any header; only a host-provided input.paths that
-		// carries the DEST tracks it — the header fallback sees the source file only.
-		const patch = typeof input.input === "string" ? input.input : "";
-		for (const match of patch.matchAll(HASHLINE_HEADER)) {
-			targets.add(resolve(cwd, match[1]));
-		}
-		return [...targets];
-	}
-	if (toolName === "ast_edit") {
-		const paths = Array.isArray(input.paths) ? input.paths : [];
-		// Globs pass through unchanged: context-gate allows non-existent paths.
-		return paths.filter((p): p is string => typeof p === "string" && p.length > 0).map((p) => resolve(cwd, p));
-	}
-	return [];
-}
-
 function latestUserText(event: unknown, ctx: HarnessCtx): string {
 	const evt = event as { prompt?: unknown; text?: unknown } | undefined;
 	if (typeof evt?.prompt === "string" && evt.prompt) return evt.prompt;
@@ -286,8 +250,8 @@ export default function harness(pi: HarnessExtensionApi): void {
 				}
 				return;
 			}
-			if (EDIT_TOOL_NAMES.has(event.toolName)) {
-				for (const filePath of editTargets(event.toolName, event.input, ctx.cwd)) {
+			if (isEditToolName(event.toolName)) {
+				for (const filePath of mutationCallTargets(event.toolName, event.input, ctx.cwd)) {
 					const run = await runGate("context-gate.mjs", { tool_name: "Edit", tool_input: { file_path: filePath }, session_state });
 					if (run.status === 2) return { block: true, reason: run.stderr.trim() || `HARNESS BLOCK: read '${filePath}' before editing it.` };
 					surface(ctx, run, "context-gate");
@@ -317,7 +281,7 @@ export default function harness(pi: HarnessExtensionApi): void {
 			// snapshots, and OMP's edit tool accepts them ("from your latest read/search") —
 			// record the anchored files as read or context-gate false-blocks a grep-anchored
 			// edit (live-reproduced on omp 16.3.12, 2026-07-09). One batched spawn per result.
-			if ((event.toolName === "grep" || event.toolName === "ast_grep") && !event.isError) {
+			if (event.toolName === "grep" && !event.isError) {
 				const files = searchTrackTargets(event.details, textChunks(event.content), ctx.cwd);
 				if (files.length) await runGate("read-tracker.mjs", { tool_name: "Read", tool_input: { file_paths: files }, session_state });
 				return;
@@ -341,36 +305,33 @@ export default function harness(pi: HarnessExtensionApi): void {
 				}
 				return;
 			}
-			if (EDIT_TOOL_NAMES.has(event.toolName) && !event.isError) {
-				// ast_edit is preview-first: this tool_result is the PREVIEW (details.applied:false); the
-				// real write lands later as a `resolve` apply (handled below, with the actual file list).
-				// On the preview we run backpressure-invalidator as a BEST-EFFORT early fallback — it only
-				// invalidates when editTargets resolves to a code-extension path, so a glob/dir target is
-				// invalidated at apply time instead, not here. The breadcrumb (phantom until apply, false
-				// on discard) and write-tracker are deferred to the apply.
-				const astEditPreview = event.toolName === "ast_edit" && event.details?.applied === false;
-				const mermaidProblems: string[] = [];
-				for (const filePath of editTargets(event.toolName, event.input, ctx.cwd)) {
-					const payload: GatePayload = { tool_name: "Write", tool_input: { file_path: filePath }, session_state };
-					if (astEditPreview) { await runGate("backpressure-invalidator.mjs", payload); continue; }
-					await runGate("write-tracker.mjs", payload);
-					await runGate("backpressure-invalidator.mjs", payload);
-					await runGate("breadcrumb-tracker.mjs", payload);
-					for (const problem of await checkMermaidFile(filePath)) {
-						mermaidProblems.push(`${relative(ctx.cwd, filePath)}: ${problem}`);
-					}
+			if (isEditToolName(event.toolName) && !event.isError) {
+				// v17 xd:// device dispatches ride `write` (details.xdev envelope); mutationRoute
+				// classifies them BEFORE plain file targets — structurally fixing the ordering that
+				// let device writes fall into the generic branch and track only the bogus device
+				// path (live-reproduced on omp 17.0.1, 2026-07-16; contract tests: xdev-dispatch).
+				const route = mutationRoute(event.toolName, event.input, event.details, textChunks(event.content), ctx.cwd);
+				// xd grep/ast_grep results mint [path#TAG] edit anchors exactly like the top-level
+				// grep tool — record them as read or context-gate false-blocks an anchored edit.
+				if (route.kind === "read-anchors") {
+					if (route.files.length) await runGate("read-tracker.mjs", { tool_name: "Read", tool_input: { file_paths: route.files }, session_state });
+					return;
 				}
-				return mermaidResultPatch(event, mermaidProblems);
-			}
-			// The hidden `resolve` apply of an ast_edit preview is the REAL write: ast_edit re-runs with
-			// dryRun:false and surfaces as a `resolve` tool_result carrying details.sourceToolName and
-			// details.sourceResultDetails.files. Track those files so the actual apply — not just the
-			// preview — is recorded; ignore discard/failed applies.
-			if (event.toolName === "resolve" && !event.isError
-				&& (event.input?.action ?? event.details?.action) === "apply"
-				&& event.details?.sourceToolName === "ast_edit") {
+				// Staged ast_edit preview: backpressure-invalidator as a BEST-EFFORT early fallback
+				// (from the device args' paths). The breadcrumb (phantom until apply, false on
+				// discard) and write-tracker are deferred to the xd://resolve apply below.
+				if (route.kind === "preview") {
+					for (const filePath of route.files) {
+						await runGate("backpressure-invalidator.mjs", { tool_name: "Write", tool_input: { file_path: filePath }, session_state });
+					}
+					return;
+				}
+				// Other xd devices (generate_image, MCP tools, …) touch no local files.
+				if (route.kind === "device") return;
+				// "apply" (the REAL write of a staged preview, resolved from the dispatch envelope's
+				// inner file list) and "files" (plain write/edit) share full tracking.
 				const mermaidProblems: string[] = [];
-				for (const filePath of resolvedAstEditFiles(event.details, ctx.cwd)) {
+				for (const filePath of route.files) {
 					const payload: GatePayload = { tool_name: "Write", tool_input: { file_path: filePath }, session_state };
 					await runGate("write-tracker.mjs", payload);
 					await runGate("backpressure-invalidator.mjs", payload);
