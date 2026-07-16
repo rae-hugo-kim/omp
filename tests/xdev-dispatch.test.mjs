@@ -180,6 +180,23 @@ test('결과 payload의 files에 URI 항목이 섞여도 원장 오염 없음 (V
 	assert.deepEqual(searchTrackTargets({ files: ['memory://m', '/abs/ok.ts'] }, '', CWD), ['/abs/ok.ts']);
 });
 
+test('단일 슬래시 정규화형 가상 URI도 원장에 못 들어간다 (r2 — session-log:315 xd:/retain 반례)', () => {
+	// omp 이벤트 배관 어딘가에서 xd://가 xd:/ 단일 슬래시로 정규화되어 도착할 수 있다 —
+	// `://` 부분문자열 검사만으로는 통과해 팬텀 edit이 기록됐다 (2026-07-16 12:33 실측).
+	assert.equal(localFileTarget('xd:/retain', CWD), null);
+	assert.equal(localFileTarget('local:/plan.md', CWD), null);
+	assert.equal(localFileTarget('memory:/abc', CWD), null);
+	assert.deepEqual(editTargets('write', { path: 'xd:/retain' }, CWD), []);
+	assert.deepEqual(
+		mutationRoute('write', { path: 'xd:/retain' }, undefined, '', CWD),
+		{ kind: 'files', files: [] },
+	);
+	assert.deepEqual(resolvedAstEditFiles({ sourceResultDetails: { files: ['xd:/x', 'ok.mjs'] } }, CWD),
+		[resolve(CWD, 'ok.mjs')]);
+	// 통상 상대 경로는 계속 추적된다 (콜론 없는 경로 오탐 없음)
+	assert.equal(localFileTarget('src/a.ts', CWD), resolve(CWD, 'src/a.ts'));
+});
+
 // ── tool_call 측: xd://ast_edit 바디의 paths가 pre-edit 게이트 대상 (advisory — V2)
 
 test('mutationCallTargets: xd://ast_edit 바디 paths를 게이트 대상으로 추출', () => {

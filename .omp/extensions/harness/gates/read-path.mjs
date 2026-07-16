@@ -30,12 +30,20 @@ export function readTarget(input, cwd) {
 	return resolve(cwd, raw.replace(READ_SELECTOR, ""));
 }
 
+/** `scheme:/…` prefix — a virtual URI whose double slash was normalized away
+ *  (e.g. `xd:/retain`), observed in live ledger events on omp 17.0.1
+ *  (2026-07-16, session-log `{kind:'edit', file:'xd:/retain'}`). POSIX-relative
+ *  paths never start with `<word>:/`, so this rejects no legitimate target. */
+const URI_SCHEME_PREFIX = /^[a-z][a-z0-9+.-]*:\//i;
+
 /** Absolute path of a mutating tool's target when it names a LOCAL file; null
- *  for URI-scheme targets (xd:// devices, local:// artifacts, memory://, …) —
- *  virtual resources must never enter read/write ledgers as `<cwd>/xd:/…`
- *  garbage (live-reproduced on omp 17.0.1, 2026-07-16). */
+ *  for URI-scheme targets — both the canonical `xd://…` form (`://` anywhere)
+ *  and the single-slash normalized `xd:/…` form. Virtual resources must never
+ *  enter read/write ledgers as `<cwd>/xd:/…` garbage (live-reproduced on omp
+ *  17.0.1, 2026-07-16; r2 counterexample session-log:315). */
 export function localFileTarget(p, cwd) {
-	if (typeof p !== "string" || p.length === 0 || p.includes("://")) return null;
+	if (typeof p !== "string" || p.length === 0) return null;
+	if (p.includes("://") || URI_SCHEME_PREFIX.test(p)) return null;
 	return resolve(cwd, p);
 }
 

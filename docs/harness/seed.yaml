@@ -1,7 +1,6 @@
 name: v17-harness-adaptation
-status: done
-completed: "2026-07-16"
-version: 1
+status: approved
+version: 2
 task_id: "20260716-115803-9497"
 goal: >
   omp 17.0.1 런타임 컷오버(ast_edit/ast_grep/resolve의 xd:// 디바이스 전환)와 하네스 원장
