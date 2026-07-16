@@ -238,6 +238,20 @@ test('read/search 원장 경로도 단일 슬래시 가상 URI를 거부한다 (
 		[resolve(CWD, 'src/b.ts')]);
 });
 
+test('스킴 유사 정당 POSIX 경로는 가상으로 오분류하지 않는다 (r4 adversary — 게이트·원장 동시 탈락 방지)', () => {
+	// POSIX는 파일명에 ':'를 허용한다 — `pkg:/danger.ts`(디렉토리명 `pkg:`)를 가상으로
+	// 버리면 read-before-edit와 write-tracker에서 동시에 빠진다(팬텀보다 나쁜 방향).
+	// 단일 슬래시 거부는 알려진 가상 스킴 allowlist로만.
+	assert.equal(localFileTarget('pkg:/danger.ts', CWD), resolve(CWD, 'pkg:/danger.ts'));
+	assert.equal(readTarget({ path: 'src:/app.ts' }, CWD), resolve(CWD, 'src:/app.ts'));
+	assert.deepEqual(editTargets('write', { path: 'pkg:/danger.ts' }, CWD), [resolve(CWD, 'pkg:/danger.ts')]);
+	assert.deepEqual(searchTrackTargets({ files: ['pkg:/a.ts'] }, '', CWD), [resolve(CWD, 'pkg:/a.ts')]);
+	// 알려진 가상 스킴의 단일 슬래시 형은 계속 거부 (r2/r3 계약 유지)
+	for (const v of ['xd:/retain', 'local:/plan.md', 'memory:/abc', 'artifact:/7', 'agent:/id', 'mcp:/x', 'skill:/s', 'history:/h']) {
+		assert.equal(localFileTarget(v, CWD), null, v);
+	}
+});
+
 // ── 게이트 통합 (V2): xd://ast_edit 대상이 context-gate의 read-before-edit를 그대로 받는다
 
 const GATES = join(dirname(fileURLToPath(import.meta.url)), '..', '.omp', 'extensions', 'harness', 'gates');

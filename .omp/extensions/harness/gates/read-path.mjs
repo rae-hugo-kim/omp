@@ -39,11 +39,16 @@ export function readTarget(input, cwd) {
 	return resolve(cwd, raw.replace(READ_SELECTOR, ""));
 }
 
-/** `scheme:/…` prefix — a virtual URI whose double slash was normalized away
- *  (e.g. `xd:/retain`), observed in live ledger events on omp 17.0.1
- *  (2026-07-16, session-log `{kind:'edit', file:'xd:/retain'}`). POSIX-relative
- *  paths never start with `<word>:/`, so this rejects no legitimate target. */
-const URI_SCHEME_PREFIX = /^[a-z][a-z0-9+.-]*:\//i;
+/** Single-slash prefix of a KNOWN virtual scheme — the omp event plumbing
+ *  normalizes `xd://retain` to `xd:/retain` (live-observed 2026-07-16,
+ *  session-log `xd:/retain`/`xd:/recall`). The allowlist is deliberate (r4):
+ *  POSIX permits `:` in path components, so a generic `<word>:/` rejection
+ *  silently dropped legitimate files like `pkg:/danger.ts` from BOTH the
+ *  pre-edit gate and the ledgers — worse than a phantom entry. An unknown
+ *  future virtual scheme in single-slash form degrades to a phantom (the r2
+ *  failure class, annoying but safe); extend the list when one appears. */
+const URI_SCHEME_PREFIX =
+	/^(?:xd|local|memory|artifact|agent|history|mcp|skill|rule|omp|issue|pr|ssh|https?|file):\//i;
 
 /** Absolute path of a mutating tool's target when it names a LOCAL file; null
  *  for URI-scheme targets — both the canonical `xd://…` form (`://` anywhere)
