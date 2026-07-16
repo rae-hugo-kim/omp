@@ -23,10 +23,19 @@ export const READ_SELECTOR = new RegExp(
 	String.raw`:(?:raw(?::${RANGE})?|conflicts|${RANGE}(?::raw)?)$`,
 );
 
+/** True for any virtual/remote target: canonical `scheme://…` anywhere in the
+ *  string, or the single-slash normalized `scheme:/…` prefix the omp event
+ *  plumbing emits (live-observed: session-log `xd:/retain`, `xd:/recall`).
+ *  Function declaration (hoisted) so every ledger entry point below shares ONE
+ *  guard — r3: readTarget/searchTrackTargets previously checked only `://`. */
+function isVirtualPath(p) {
+	return p.includes("://") || URI_SCHEME_PREFIX.test(p);
+}
+
 /** Local file path a `read` call targets, selector stripped; "" for URLs/internal URIs. */
 export function readTarget(input, cwd) {
 	const raw = input?.path;
-	if (typeof raw !== "string" || !raw || raw.includes("://")) return "";
+	if (typeof raw !== "string" || !raw || isVirtualPath(raw)) return "";
 	return resolve(cwd, raw.replace(READ_SELECTOR, ""));
 }
 
@@ -42,8 +51,7 @@ const URI_SCHEME_PREFIX = /^[a-z][a-z0-9+.-]*:\//i;
  *  enter read/write ledgers as `<cwd>/xd:/…` garbage (live-reproduced on omp
  *  17.0.1, 2026-07-16; r2 counterexample session-log:315). */
 export function localFileTarget(p, cwd) {
-	if (typeof p !== "string" || p.length === 0) return null;
-	if (p.includes("://") || URI_SCHEME_PREFIX.test(p)) return null;
+	if (typeof p !== "string" || p.length === 0 || isVirtualPath(p)) return null;
 	return resolve(cwd, p);
 }
 
@@ -107,13 +115,13 @@ export function searchTrackTargets(details, text, cwd) {
 	const files = details?.files;
 	if (Array.isArray(files)) {
 		for (const f of files) {
-			if (typeof f === "string" && f && !f.includes("://")) out.add(resolve(cwd, f));
+			if (typeof f === "string" && f && !isVirtualPath(f)) out.add(resolve(cwd, f));
 		}
 		return [...out];
 	}
 	if (typeof text !== "string" || !text) return [];
 	for (const m of text.matchAll(SEARCH_ANCHOR_HEADER)) {
-		if (!m[1].includes("://")) out.add(resolve(cwd, m[1]));
+		if (!isVirtualPath(m[1])) out.add(resolve(cwd, m[1]));
 	}
 	return [...out];
 }
@@ -176,9 +184,15 @@ export function editTargets(toolName, input, cwd) {
  *  detection normalizes the same path aliases editTargets honors (path /
  *  file_path / filePath), so an alias-shaped dispatch cannot slip past the gate
  *  (review 2026-07-16 M1 — defense-in-depth; shipped transport sends `path`). */
+/** ast_edit device address — tolerate the single-slash normalized form and
+ *  scheme case variants (r3: exact `xd://ast_edit` match let `xd:/ast_edit`
+ *  fall through to editTargets, whose URI guard DROPPED the path — silently
+ *  skipping read-before-edit for the device's body paths). */
+const AST_EDIT_DEVICE = /^xd:\/{1,2}ast_edit$/i;
+
 export function mutationCallTargets(toolName, input, cwd) {
 	const rawPath = input?.path ?? input?.file_path ?? input?.filePath;
-	if (toolName === "write" && typeof rawPath === "string" && rawPath.trim() === "xd://ast_edit") {
+	if (toolName === "write" && typeof rawPath === "string" && AST_EDIT_DEVICE.test(rawPath.trim())) {
 		return deviceArgPaths(input, cwd);
 	}
 	return editTargets(toolName, input, cwd);

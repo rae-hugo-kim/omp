@@ -27,6 +27,7 @@ import {
 	editTargets,
 	mutationCallTargets,
 	mutationRoute,
+	readTarget,
 } from '../.omp/extensions/harness/gates/read-path.mjs';
 
 const CWD = '/work';
@@ -215,6 +216,26 @@ test('mutationCallTargets: path 별칭(file_path/filePath)으로 온 디바이�
 	const body = '{"ops":[],"paths":["src/x.ts"]}';
 	assert.deepEqual(mutationCallTargets('write', { file_path: 'xd://ast_edit', content: body }, CWD), [resolve(CWD, 'src/x.ts')]);
 	assert.deepEqual(mutationCallTargets('write', { filePath: 'xd://ast_edit', content: body }, CWD), [resolve(CWD, 'src/x.ts')]);
+});
+
+test('mutationCallTargets: 정규화·대소문자 변형 디바이스 경로도 게이트 대상 (r3 adversary medium)', () => {
+	// 이벤트 배관의 단일 슬래시 정규화(xd:/recall 실측, session-log:331-332)가 tool_call에
+	// 나타나면 정확 일치 비교는 분기를 놓쳐 read-before-edit가 통째로 우회된다.
+	const body = '{"ops":[],"paths":["src/unread.ts"]}';
+	for (const p of ['xd:/ast_edit', 'XD://ast_edit', ' xd://ast_edit ']) {
+		assert.deepEqual(mutationCallTargets('write', { path: p, content: body }, CWD),
+			[resolve(CWD, 'src/unread.ts')], p);
+	}
+});
+
+test('read/search 원장 경로도 단일 슬래시 가상 URI를 거부한다 (r3 adversary low)', () => {
+	assert.equal(readTarget({ path: 'xd:/retain' }, CWD), '');
+	assert.equal(readTarget({ path: 'memory:/abc:5-10' }, CWD), '');
+	assert.equal(readTarget({ path: 'src/a.ts:5-10' }, CWD), resolve(CWD, 'src/a.ts'));
+	assert.deepEqual(searchTrackTargets({ files: ['memory:/m', 'src/a.ts'] }, '', CWD),
+		[resolve(CWD, 'src/a.ts')]);
+	assert.deepEqual(searchTrackTargets(undefined, '[xd:/foo#AB12]\n[src/b.ts#CD34]\n', CWD),
+		[resolve(CWD, 'src/b.ts')]);
 });
 
 // ── 게이트 통합 (V2): xd://ast_edit 대상이 context-gate의 read-before-edit를 그대로 받는다
