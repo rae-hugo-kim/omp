@@ -1,25 +1,32 @@
-# Current Scope: autonomy-multisession-controller (autonomy Q3)
+# Current Scope: harness-telemetry (Q11)
 
-**Created**: 2026-06-19
-**Seed**: docs/harness/seed.yaml (`autonomy-multisession-controller`, v1, task_id 20260619-153030-f28d)
-**Thread goal**: Q3 멀티세션 = Q2 루프의 exec 엔진. 얇은 컨트롤러가 이슈를 worktree-격리 `omp --mode rpc` 워커로 fan-out, GitHub=관측·조정 평면, 동적 스케일(cap 기본 3). 테스트가능 결정로직 + worktree/RPC 배선 저작; 라이브 N워커는 옵션. tmux 없음.
+**Created**: 2026-07-10
+**Seed**: docs/harness/seed.yaml (`harness-telemetry`, v2, task_id 20260710-180439-3771)
+**Thread goal**: 각 세션의 하네스 사용(게이트 기회·판정/스킬 호출/세션 메타)·준수를 no-LLM append-only로 캡처, vault+global spool 이중 append로 수집, 배치 집계로 하네스 자체 평가(차단·회복 마찰 후보/스킬 빈도/미사용 후보). 전신 = 분석 doc Q11 (doc-ingest).
 
 ## MUST
-- `.omp/extensions/harness/gh-loop-controller.mjs` — `planPool`/`nextScale`/`assign` 결정로직(gh/git/spawn seam) + 단위테스트 (AC1/AC2/AC3)
-- 컨트롤러 스킬: worktree-per-worker + `omp --mode rpc` spawn + 이벤트 모니터 + 정리 절차 (AC4)
-- GitHub 관측: 라벨(상태)+코멘트(마일스톤, gh-loop-issue throttle 재사용)+트래킹 이슈; 머지 자동금지 (AC5)
-- 전파: 헬퍼 `.omp/extensions/harness/`; 신규 스킬이면 PATHS+README (AC6)
+- usage writer(캡처): runGate 계측(execution/decision 분리, tracker kind 분리) + 스킬 3경로(command/read/message, dedup) + 세션 경계(worker/parent/aggregation_session_id) + mermaid-check in-process 계측 (AC1/AC3/AC4/AC7)
+- commit-gates 디스패처 child별 구조화 기록 (AC2)
+- 수집: per-event `$SUM_VAULT_DIR/_harness/<project_id>/` append + user-global spool `~/.omp/harness-telemetry-spool/<project_id>/` 미러, event_id·project_id 조인 키, fail-open (AC5)
+- 평가: `scripts/telemetry-report` — vault∪spool event_id 병합, 기회/차단/회복(마찰 후보) 집계·스킬 빈도·infra_error 분리·unknown 표기 (AC6)
+- capture→report 관통 통합 검증 — 실제 writer 산출물 + 부분 누락 병합 복원, 타 디렉토리 실행 (AC9)
+- 전파·문서·회귀: README 한/영 + AGENTS.md 표, docs-drift 0/0, 게이트 스위트 그린 (AC8)
 
 ## MUST NOT
-- 라이브 N워커 E2E(옵션), 24/7 컨트롤러, 워커 직접통신, rpc 프로토콜 변경, 데몬/대시보드 제품화(ecc2)
+- 텔레메트리가 게이트 판정/작업을 막는 어떤 경로도 금지 (전 층 fail-open)
+- 이벤트별 git push, LLM 호출, 상시 프로세스
+- parent 매핑 불가 worker 이벤트의 main 추측 귀속·폐기
 
 ## OUT OF SCOPE
-- 라이브 다중구동(비용 N배), 24/7 상시(robo-omp/cloud), 워커↔워커 실시간 통신, 대시보드/데몬
+- 대시보드/데몬/정기 배치(ecc2 경계), 실시간 알림, 미사용 자산 자동 삭제, 타 프로젝트 백필, 서브에이전트 세션별 분리 리포팅(v2)
 
 ## Acceptance Criteria
-- [x] AC1 planPool(tasks,signals,cap)→할당계획(신호↑→워커↑≤cap, cap 캡[정수], 빈입력, 거대 changedFiles 클램프) 단위테스트
-- [x] AC2 nextScale(state,signals,cap)→up/down/hold/retire(부하→up≤cap, idle→down, 분수cap floor) 단위테스트
-- [x] AC3 assign→중복할당 방지(claim된 이슈·배치 내 중복·string/number 정규화 skip) 단위테스트
-- [x] AC4 스킬: worktree-per-worker + RPC spawn + claim 롤백 + 크래시 재조정 절차 명시
-- [x] AC5 GitHub 라벨/코멘트(마일스톤 coalescing)/트래킹 이슈 edit + 머지 자동금지 명시
-- [x] AC6 헬퍼 위치/스킬 PATHS+README 등록 + docs-drift 0/0
+- [ ] AC1 게이트 계측 — runGate 이벤트(execution/decision/failure_reason/ms/target_fp) + tracker kind 분리, 단위테스트
+- [ ] AC2 commit-gates child 분해 — child별 {gate,status,duration,failure} 구조화, 차단자 식별 단위테스트
+- [ ] AC3 스킬 관측 3경로 — command/read/message + invocation_key dedup, 단위테스트
+- [ ] AC4 세션 경계 — session_id/parent_session_id/aggregation_session_id, rotate, 오귀속 방지 테스트 + parent 연결 실측 증거(해석 불가 판명 시 관찰 기록+null-잔류 테스트로 대체 충족)
+- [ ] AC5 수집 — event_id·project_id 부여, vault+spool 이중 append, vault 유/무 fail-open 단위테스트, event_id 병합 catch-up
+- [ ] AC6 평가 스크립트 — 픽스처 기반 집계 단위테스트 (recovery join, infra_error, unknown)
+- [ ] AC7 mermaid-check in-process 계측 — 경고 시 usage 이벤트 존재
+- [ ] AC9 capture→report 관통 — writer 실산출물 통합 테스트 + 부분 누락 event_id 병합 복원(타 디렉토리 실행)
+- [ ] AC8 전파·문서 — README/AGENTS 갱신, docs-drift 0/0, 전체 스위트 그린

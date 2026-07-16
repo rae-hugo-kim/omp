@@ -1,31 +1,27 @@
-# Rubric Report: autonomy-multisession-controller (autonomy Q3)
+# Rubric Report: harness-telemetry (task_id 20260710-180439-3771, seed v2)
 
-**Date**: 2026-06-19 · **Seed**: `docs/harness/seed.yaml` v1 · **task_id**: 20260619-153030-f28d
-**Mode**: doc-ingest ← `claudedocs/harness-auto-capture-analysis.md#Q3` (+ 5 locked design decisions)
+**Date**: 2026-07-10 · **Mode**: doc-ingest (`claudedocs/harness-auto-capture-analysis.md#Q11`) · **판정 대상**: plan-attack amend 반영 후 seed v2
 
-## 판정 (4 clarity + coverage)
+## Result
+- goal_clarity: HIGH — 산출물이 구체적(이벤트 스키마 필드 단위, 파일 경로, 집계 항목·명명까지 확정)
+- constraint_clarity: HIGH — fail-open/no-LLM/오귀속 금지/A1~A10 전부 실행 가능한 불변식, 사용자 결정 3건 반영
+- success_criteria_clarity: HIGH — AC 9개 전부 verify 명시(단위·통합·live 증거, 매핑 불가 시 대체 충족 출구 포함)
+- context_clarity: HIGH — 계측 지점 실코드 참조(index.ts/commit-gates.mjs), 선례 패턴(breadcrumb/sum-vault/audit), 전파 경로, omp 16.3.15 사실 확인(preloadedExtensionPaths)
+- coverage: HIGH — Q11 요구 10건 전부 AC(8건→9건) 또는 out_of_scope 매핑, 잔차 0 (기계 검증: 미매핑 0, 깨진 source 앵커 0)
 
-| 차원 | 판정 | 근거 |
-|---|---|---|
-| `goal_clarity` | HIGH | 결과 중심 — 테스트가능 컨트롤러 로직 + worktree/RPC 배선; 라이브 N워커 deferral 명시 |
-| `constraint_clarity` | HIGH | rpc 워커/worktree 격리/GitHub 버스/로컬 tier/cap 3/ecc2 경계/het — 전부 실행가능 |
-| `success_criteria_clarity` | HIGH | AC1–6 전부 `verify`(단위테스트·스킬 절차·docs-drift) |
-| `context_clarity` | HIGH | Q3 전체 + 기존 자산(gh-loop-issue/runner/detect)·omp://rpc 앵커 |
-| **`coverage`** | **HIGH** | Q3 요구 → AC 6개 + 명시 out_of_scope, 잔차 0; **open decision 0**(5개 전부 사용자 confirmed) |
+## Unmapped Requirements (Residual)
+- 없음 (doc-ingest 매핑표 잔차 0; Q11.4 미결 3건은 2026-07-10 인터뷰로 해소되어 constraints/out_of_scope에 흡수)
 
-## coverage 매핑
-| 요구 (source) | 귀속 |
-|---|---|
-| 워커 풀 shape 결정 (Q3.4/Q3.5) | AC1 |
-| 동적 스케일 (Q3.5) | AC2 |
-| GitHub 조정·중복할당 방지 (Q3.6) | AC3 |
-| worktree 격리 + RPC spawn substrate (Q3.1/Q3.2) | AC4 |
-| GitHub 관측(라벨/코멘트/트래킹) + 머지 자동금지 | AC5 |
-| 전파 | AC6 |
-| 라이브 N워커·24/7·워커직접통신·rpc 프로토콜·데몬화 | **out_of_scope** |
+## Blocking Issues
+- 없음 — plan-attack PASS(CRITICAL 0), HIGH 4·MEDIUM 4는 seed에 반영 완료(plan-attack-report.md 참조)
 
-**미매핑 잔차**: 0. **open decision 0** — worker_runtime/tier/observability/concurrency/build_scope 전부 사용자 confirmed.
+## Recommended Follow-up
+- 구현 초입: 서브에이전트 parent 연결 신호 실측(AC4 분기 결정) 및 writer 지연 ms 실측(R1)
 
 ## Decision
-- default_action: pass (전 차원 HIGH, 잔차 0, 결정 0미결)
-- 비고: 컨트롤러 결정로직(planPool/nextScale/assign)은 단위테스트로 완결 검증(gh/git/spawn seam). 라이브 N워커는 비용 N배라 옵션. ecc2 경계(얇은 오케스트레이터) 준수. 커밋 전 연속 이종 리뷰. 구현 착수.
+- default_action: proceed
+- override_allowed: yes
+- override_used: no
+
+## Override Reason
+- N/A
