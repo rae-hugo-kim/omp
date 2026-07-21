@@ -179,9 +179,16 @@ git commit 시도
      → risk-assess.mjs로 변경 유형 판단
      → low → 통과
      → medium + 리뷰 없음 → 경고
-     → high/critical + 리뷰 없음 → 차단
+     → high/critical + 2차 관점 증거 없음 → 차단
+       (인정 증거: ① 이종 모델 리뷰 — models: 2계열 이상, 또는
+          codex-thread: + primary-model:(adversary와 다른 계열일 때만; adversary-model 미기재 시 gpt 가정),
+          또는 adversary-thread: + primary-model: + 파싱 가능한 adversary-model:(필수 — 미기재/파싱불가 시 불인정; 단독 thread id 불인정)
+        ② human-review — human-reviewed-by: + Verdict: PASS|PASS WITH NOTES
+        ③ 감사된 override)
      → 리뷰 FAIL → 차단
-     → review-skip 플래그 있으면 → 통과
+     → review-skip에 reason/approved-by/diff-hash 필드가 모두 있으면
+       → audit.jsonl에 review_override 기록 후 통과 (bare 플래그는 차단;
+          audit.jsonl이 git 추적 중이면 `git commit -a`에서는 소비 불가 — fail-closed)
 
   전부 통과하면 커밋 성공
 
@@ -219,8 +226,8 @@ flowchart LR
     subgraph override["오버라이드"]
         O1["불필요"]
         O2["불필요"]
-        O3["backpressure-skip<br/>review-skip"]
-        O4["backpressure-skip<br/>review-skip<br/>⚠️ 사용자 확인 필수"]
+        O3["backpressure-skip<br/>review-skip (감사된 override:<br/>reason·approved-by·diff-hash)"]
+        O4["backpressure-skip<br/>review-skip (감사된 override)<br/>⚠️ 사용자 확인 필수"]
     end
 
     R1 --> G1 --> O1

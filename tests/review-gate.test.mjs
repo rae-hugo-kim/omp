@@ -19,7 +19,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync, execSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, chmodSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,7 +34,8 @@ const HIGH = { 'src/big.ts': 'export const x = 1;\n'.repeat(120) }; // code, >10
 const LOW = { 'docs/notes.md': '# notes\nprose\n' };               // prose doc -> low
 const MED = { 'src/small.ts': 'export const x = 1;\n'.repeat(20) };  // code, <100 lines -> medium
 // Heterogeneity evidence the gate now requires for a HIGH/CRITICAL covering review (continuous
-// cross-review policy). A real reviewer doc carries `codex-thread:`/`models:` after the het pass.
+// cross-review policy). A real reviewer doc carries `models:` (>=2 families) after the het pass,
+// or `codex-thread:` + a `primary-model:` from a different family than the adversary's.
 const HET = 'models: claude, codex\n';
 
 function makeRepo(files) {
@@ -373,15 +374,89 @@ test('medium risk + matching review without het -> allow (het enforced only for 
   });
 });
 
-test('het: codex-thread with a real id -> allow; placeholder -> BLOCK', () => {
+// A codex thread id alone proves a codex run happened, NOT that it was a second family: a
+// GPT/Codex-primary deployment running the codex CLI is a same-family self-review. The thread
+// fields therefore count only alongside a `primary-model:` whose family differs from the
+// adversary's. The adversary family is per-key: `adversary-model:` if declared; else gpt for
+// codex-thread/codex-session (a codex CLI thread implies a GPT/Codex run); else NOTHING for
+// adversary-thread/adversary-session (the adversary agent may auth-fall-back to the primary's
+// own family, so a missing/unparseable adversary-model fails closed).
+
+test('het: codex-thread + primary-model of a DIFFERENT family -> allow; placeholder id -> BLOCK', () => {
   withRepo(HIGH, (dir) => {
-    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: 019eda4f-64ee-7db3-9dcb-dafdd4e54aae\nVerdict: PASS\n`);
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: 019eda4f-64ee-7db3-9dcb-dafdd4e54aae\nprimary-model: anthropic/claude-fable-5\nVerdict: PASS\n`);
     assert.equal(runGate(dir).status, 0);
   });
   withRepo(HIGH, (dir) => {
-    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: unavailable\nVerdict: PASS\n`);
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: unavailable\nprimary-model: anthropic/claude-fable-5\nVerdict: PASS\n`);
     assert.equal(runGate(dir).status, 2);
   });
+});
+
+test('het: codex-thread WITHOUT primary-model -> BLOCK (thread id alone is not het evidence)', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: 019eda4f-64ee-7db3-9dcb-dafdd4e54aae\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 2);
+  });
+});
+
+test('het: codex-thread + GPT-family primary-model -> BLOCK (honest same-family declaration)', () => {
+  for (const pm of ['gpt-5.4', 'openai/codex', 'o3']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: 019eda4f-64ee-7db3-9dcb-dafdd4e54aae\nprimary-model: ${pm}\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 2, `should block: primary-model: ${pm}`);
+    });
+  }
+});
+
+test('het: codex-thread + unparseable primary-model -> BLOCK (fail closed)', () => {
+  for (const pm of ['some-inhouse-model', 'my primary model']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: 019eda4f-64ee-7db3-9dcb-dafdd4e54aae\nprimary-model: ${pm}\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 2, `should block: primary-model: ${pm}`);
+    });
+  }
+});
+
+test('het: thread + explicit adversary-model of a DIFFERENT family -> allow (gpt primary is fine then)', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nadversary-thread: 019eda4f64ee7db3\nprimary-model: gpt-5.4\nadversary-model: gemini-2.5-pro\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 0);
+  });
+});
+
+test('het: adversary-thread + claude primary WITHOUT adversary-model -> BLOCK (no gpt default for agent threads)', () => {
+  for (const key of ['adversary-thread', 'adversary-session']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\n${key}: 019eda4f-64ee-7db3-9dcb-dafdd4e54aae\nprimary-model: anthropic/claude-fable-5\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 2, `should block: ${key} without adversary-model`);
+    });
+  }
+});
+
+test('het: adversary-thread + explicit gpt adversary-model + claude primary -> allow', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nadversary-thread: 019eda4f-64ee-7db3-9dcb-dafdd4e54aae\nprimary-model: anthropic/claude-fable-5\nadversary-model: gpt-5.4\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 0);
+  });
+});
+
+test('het: adversary-thread + same-family or unparseable adversary-model + claude primary -> BLOCK', () => {
+  for (const am of ['claude-opus-4', 'anthropic/sonnet-4', 'not-a-model']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nadversary-thread: 019eda4f-64ee-7db3-9dcb-dafdd4e54aae\nprimary-model: claude-fable-5\nadversary-model: ${am}\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 2, `should block: adversary-model: ${am}`);
+    });
+  }
+});
+
+test('het: thread + explicit adversary-model of the SAME family (or unparseable) -> BLOCK', () => {
+  for (const am of ['claude-opus-4', 'anthropic/sonnet-4', 'not-a-model']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: 019eda4f-64ee-7db3-9dcb-dafdd4e54aae\nprimary-model: claude-fable-5\nadversary-model: ${am}\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 2, `should block: adversary-model: ${am}`);
+    });
+  }
 });
 
 test('het: single provider/model or same-family models do NOT count (fail-open fix)', () => {
@@ -414,7 +489,7 @@ test('het: noise/unknown tokens do NOT inflate the family count (fail-open fix)'
 test('het: codex-thread with an INCIDENTAL hex (date/prose) does NOT count (fail-open fix)', () => {
   for (const v of ['missing 20260618', 'not available deadbeef', 'attempted abcdef12']) {
     withRepo(HIGH, (dir) => {
-      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: ${v}\nVerdict: PASS\n`);
+      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: ${v}\nprimary-model: claude-fable-5\nVerdict: PASS\n`);
       assert.equal(runGate(dir).status, 2, `should block: codex-thread: ${v}`);
     });
   }
@@ -465,7 +540,7 @@ test('het v3: codex folds into gpt family (codex, gpt-5 = ONE) -> block; claude,
 
 test('het v3: malformed hyphen-padded thread id (----deadbeef) -> block', () => {
   withRepo(HIGH, (dir) => {
-    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: ----deadbeef\nVerdict: PASS\n`);
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: ----deadbeef\nprimary-model: claude-fable-5\nVerdict: PASS\n`);
     assert.equal(runGate(dir).status, 2);
   });
 });
@@ -486,4 +561,314 @@ test('het v3: negated/quoted-noise model fields do not pass', () => {
       assert.equal(runGate(dir).status, 2, `should block: models: ${m}`);
     });
   }
+});
+
+// --- path (2): human review (verification axis) ---------------------------------
+// A single-model deployment cannot honestly produce het evidence; the gate instead
+// accepts a covering TODAY review with `human-reviewed-by:` (a real identity, not a
+// model name) plus a Verdict on the PASS whitelist (PASS / PASS WITH NOTES).
+
+function humanDoc(hash, extra = '') {
+  return `diff-hash: ${hash}\nhuman-reviewed-by: donghyun\n${extra}Verdict: PASS\n`;
+}
+
+test('human review: covering doc with human-reviewed-by + Verdict -> allow', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-h.md`, humanDoc(stagedHash(dir)));
+    assert.equal(runGate(dir).status, 0);
+  });
+});
+
+test('human review: multi-word identity is accepted', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-h.md`, `diff-hash: ${stagedHash(dir)}\nhuman-reviewed-by: Kim Donghyun\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 0);
+  });
+});
+
+test('human review: identity that is a bare MODEL name does not count (spoof guard)', () => {
+  for (const who of ['claude', 'gpt-5', 'openai/codex']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-h.md`, `diff-hash: ${stagedHash(dir)}\nhuman-reviewed-by: ${who}\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 2, `should block: human-reviewed-by: ${who}`);
+    });
+  }
+});
+
+test('human review: missing Verdict line -> BLOCK (evidence incomplete)', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-h.md`, `diff-hash: ${stagedHash(dir)}\nhuman-reviewed-by: donghyun\nlooks fine to me\n`);
+    assert.equal(runGate(dir).status, 2);
+  });
+});
+
+test('human review: Verdict FAIL still blocks (verification axis honors the verdict)', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-h.md`, `diff-hash: ${stagedHash(dir)}\nhuman-reviewed-by: donghyun\nVerdict: FAIL\n`);
+    const r = runGate(dir);
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /FAIL/);
+  });
+});
+
+test('human review: Verdict PASS WITH NOTES is on the whitelist -> allow', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-h.md`, `diff-hash: ${stagedHash(dir)}\nhuman-reviewed-by: donghyun\nVerdict: PASS WITH NOTES\n`);
+    assert.equal(runGate(dir).status, 0);
+  });
+});
+
+test('human review: empty/pending/unknown verdicts do NOT count -> BLOCK (fail-open fix)', () => {
+  for (const v of ['', ' PENDING', ' NEEDS REVIEW', ' maybe fine', ' PASSABLE']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-h.md`, `diff-hash: ${stagedHash(dir)}\nhuman-reviewed-by: donghyun\nVerdict:${v}\n`);
+      assert.equal(runGate(dir).status, 2, `should block: Verdict:${v}`);
+    });
+  }
+});
+
+test('human review: diff-hash mismatch -> BLOCK, message teaches path 2/3 with the REAL hash', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-h.md`, humanDoc('0'.repeat(64)));
+    const r = runGate(dir);
+    assert.equal(r.status, 2);
+    const hash = stagedHash(dir);
+    assert.ok(r.stderr.includes(hash), 'block message must carry the actual effective diff hash to copy');
+    assert.match(r.stderr, /human-reviewed-by/, 'message must teach the human-review field');
+    assert.match(r.stderr, /approved-by/, 'message must teach the override field');
+    assert.ok(r.stderr.includes(`review-${TODAY}-`), 'message must show the today filename to create');
+  });
+});
+
+// --- path (3): audited override (approval axis) ----------------------------------
+// docs/harness/review-skip is no longer a bare bypass: it must carry
+// reason / approved-by / diff-hash, is bound to THIS commit's hash, is recorded to
+// docs/harness/audit.jsonl as a `review_override` event, and is consumed on success.
+
+function writeSkip(dir, content) {
+  const hd = join(dir, 'docs', 'harness');
+  mkdirSync(hd, { recursive: true });
+  writeFileSync(join(hd, 'review-skip'), content);
+}
+
+const skipPath = (dir) => join(dir, 'docs', 'harness', 'review-skip');
+const auditPath = (dir) => join(dir, 'docs', 'harness', 'audit.jsonl');
+
+test('override: reason + approved-by + matching diff-hash -> allow, audited, consumed', () => {
+  withRepo(HIGH, (dir) => {
+    const hash = stagedHash(dir);
+    writeSkip(dir, `reason: adversary model unavailable, hotfix needed\napproved-by: donghyun\ndiff-hash: ${hash}\n`);
+    const r = runGate(dir);
+    assert.equal(r.status, 0);
+    assert.equal(existsSync(skipPath(dir)), false, 'a valid override is consumed');
+    const events = readFileSync(auditPath(dir), 'utf-8').trim().split('\n').map((l) => JSON.parse(l));
+    const ev = events.find((e) => e.event === 'review_override');
+    assert.ok(ev, 'audit.jsonl must record a review_override event');
+    assert.equal(ev.actor, 'donghyun');
+    assert.equal(ev.meta.diff_hash, hash);
+    assert.match(ev.meta.reason, /adversary model unavailable/);
+    assert.ok(ev.ts, 'event carries a timestamp');
+  });
+});
+
+test('override: BARE review-skip file no longer bypasses -> BLOCK with field guidance', () => {
+  withRepo(HIGH, (dir) => {
+    writeSkip(dir, '');
+    const r = runGate(dir);
+    assert.equal(r.status, 2, 'an empty flag must fail closed');
+    assert.match(r.stderr, /reason/, 'message names the missing reason field');
+    assert.match(r.stderr, /approved-by/, 'message names the missing approver field');
+    assert.ok(r.stderr.includes(stagedHash(dir)), 'message carries the exact hash to write');
+    assert.equal(existsSync(skipPath(dir)), true, 'an invalid flag is kept in place for fixing');
+    assert.equal(existsSync(auditPath(dir)), false, 'no audit event for a rejected override');
+  });
+});
+
+test('override: missing a single field (reason) -> BLOCK', () => {
+  withRepo(HIGH, (dir) => {
+    writeSkip(dir, `approved-by: donghyun\ndiff-hash: ${stagedHash(dir)}\n`);
+    const r = runGate(dir);
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /missing `reason:`/);
+  });
+});
+
+test('override: diff-hash mismatch (stale flag) -> BLOCK naming both hashes', () => {
+  withRepo(HIGH, (dir) => {
+    writeSkip(dir, `reason: r\napproved-by: a\ndiff-hash: ${'0'.repeat(64)}\n`);
+    const r = runGate(dir);
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /diff-hash mismatch/);
+    assert.ok(r.stderr.includes(stagedHash(dir)), 'message shows the current effective hash');
+  });
+});
+
+test('override: literal UNVERIFIABLE on a VERIFIABLE commit -> BLOCK (hash must bind)', () => {
+  withRepo(HIGH, (dir) => {
+    writeSkip(dir, 'reason: r\napproved-by: a\ndiff-hash: UNVERIFIABLE\n');
+    assert.equal(runGate(dir).status, 2);
+  });
+});
+
+test('override: unverifiable commit form + diff-hash: UNVERIFIABLE -> allow + audited', () => {
+  withCommitted((dir, git) => {
+    writeFileSync(join(dir, 'src/big.ts'), BIG);
+    git(['add', 'src/big.ts']);
+    writeSkip(dir, 'reason: pathspec commit needed\napproved-by: donghyun\ndiff-hash: UNVERIFIABLE\n');
+    assert.equal(runGate(dir, 'git commit -m x src/big.ts').status, 0);
+    const ev = readFileSync(auditPath(dir), 'utf-8').trim().split('\n').map((l) => JSON.parse(l))
+      .find((e) => e.event === 'review_override');
+    assert.equal(ev.meta.diff_hash, 'UNVERIFIABLE');
+  });
+});
+
+test('override: unverifiable form BLOCK message tells the user to write UNVERIFIABLE', () => {
+  withCommitted((dir, git) => {
+    writeFileSync(join(dir, 'src/big.ts'), BIG);
+    git(['add', 'src/big.ts']);
+    const r = runGate(dir, 'git commit -m x src/big.ts'); // no skip file at all
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /diff-hash: UNVERIFIABLE/, 'help must show the exact token for this form');
+  });
+});
+
+test('override: valid override bypasses a covering FAIL (approval axis, on the record)', () => {
+  withRepo(HIGH, (dir) => {
+    const hash = stagedHash(dir);
+    writeReview(dir, `review-${TODAY}-f.md`, `diff-hash: ${hash}\nVerdict: FAIL\n`);
+    writeSkip(dir, `reason: risk accepted despite FAIL\napproved-by: donghyun\ndiff-hash: ${hash}\n`);
+    assert.equal(runGate(dir).status, 0);
+    assert.match(readFileSync(auditPath(dir), 'utf-8'), /review_override/);
+  });
+});
+
+// --- override + `git commit -a` TOCTOU -------------------------------------------
+// Consuming an override appends to docs/harness/audit.jsonl and unlinks review-skip
+// BEFORE the commit runs. If either file is git-TRACKED (audit.jsonl is, in this
+// repo), `-a` sweeps those writes into the commit, so the committed diff would no
+// longer be the diff the approver hashed. The gate fails closed on -a when a sweep
+// is possible; a plain commit of the staged diff is unaffected. These tests run the
+// REAL `git commit` the gate allowed and verify the committed diff.
+
+// Track docs/harness/audit.jsonl in the temp repo, like the real repo does.
+function trackAuditLog(dir, git) {
+  mkdirSync(join(dir, 'docs', 'harness'), { recursive: true });
+  writeFileSync(auditPath(dir), '');
+  git(['add', 'docs/harness/audit.jsonl']);
+  git(['commit', '-q', '-m', 'track audit log']);
+}
+
+test('override + git commit -a with TRACKED audit.jsonl -> BLOCK, flag kept, nothing audited', () => {
+  withCommitted((dir, git) => {
+    trackAuditLog(dir, git);
+    writeFileSync(join(dir, 'src/big.ts'), BIG);
+    git(['add', 'src/big.ts']);
+    // Everything staged: -a's effective diff (git diff HEAD) == staged diff, so the flag is
+    // otherwise VALID — only the audit-append sweep makes it unconsumable on this form.
+    writeSkip(dir, `reason: r\napproved-by: donghyun\ndiff-hash: ${diffHash(dir, 'HEAD')}\n`);
+    const r = runGate(dir, 'git commit -am x');
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /commit -a/, 'message names the -a form as the problem');
+    assert.match(r.stderr, /plain `git commit`/, 'message routes to the staged plain-commit form');
+    assert.equal(existsSync(skipPath(dir)), true, 'flag NOT consumed');
+    assert.equal(readFileSync(auditPath(dir), 'utf-8'), '', 'no audit event for a rejected consumption');
+  });
+});
+
+test('INTEGRATION: override + plain commit -> gate allows and the REAL committed diff equals the approved hash', () => {
+  withCommitted((dir, git) => {
+    trackAuditLog(dir, git);
+    writeFileSync(join(dir, 'src/big.ts'), BIG);
+    git(['add', 'src/big.ts']);
+    const approved = diffHash(dir, '--cached');
+    writeSkip(dir, `reason: r\napproved-by: donghyun\ndiff-hash: ${approved}\n`);
+    assert.equal(runGate(dir).status, 0, 'plain form consumes the override');
+    assert.equal(existsSync(skipPath(dir)), false, 'flag consumed');
+    // Run the REAL commit the gate just allowed.
+    git(['commit', '-q', '-m', 'x']);
+    const committed = execSync('git diff HEAD~1 HEAD | shasum -a 256', { cwd: dir, encoding: 'utf-8' }).trim().split(/\s+/)[0];
+    assert.equal(committed, approved, 'committed diff is exactly the approved staged diff');
+    // The gate's audit append stayed OUT of the commit (it is an unstaged change to the tracked file).
+    assert.match(execSync('git status --porcelain', { cwd: dir, encoding: 'utf-8' }), /^ M docs\/harness\/audit\.jsonl$/m);
+    assert.match(readFileSync(auditPath(dir), 'utf-8'), /review_override/);
+  });
+});
+
+test('INTEGRATION: override + git commit -a with UNTRACKED audit/flag -> allowed, real -a commit matches approved hash', () => {
+  withCommitted((dir, git) => {
+    // No trackAuditLog: audit.jsonl and review-skip are untracked, so -a cannot sweep them.
+    writeFileSync(join(dir, 'src/big.ts'), BIG);
+    git(['add', 'src/big.ts']);
+    const approved = diffHash(dir, 'HEAD');
+    writeSkip(dir, `reason: r\napproved-by: donghyun\ndiff-hash: ${approved}\n`);
+    assert.equal(runGate(dir, 'git commit -am x').status, 0, 'no tracked sweep target -> -a override stays consumable');
+    assert.equal(existsSync(skipPath(dir)), false, 'flag consumed');
+    git(['commit', '-q', '-am', 'x']);
+    const committed = execSync('git diff HEAD~1 HEAD | shasum -a 256', { cwd: dir, encoding: 'utf-8' }).trim().split(/\s+/)[0];
+    assert.equal(committed, approved, '-a commit captures exactly the approved diff (untracked files not swept)');
+    assert.match(readFileSync(auditPath(dir), 'utf-8'), /review_override/);
+  });
+});
+
+test('medium risk + valid override + git commit -a (tracked audit) -> warn, NOT consumed, commit proceeds', () => {
+  withCommitted((dir, git) => {
+    trackAuditLog(dir, git);
+    writeFileSync(join(dir, 'src/big.ts'), 'export const x = 1;\n'.repeat(20)); // <100 lines -> medium
+    git(['add', 'src/big.ts']);
+    writeSkip(dir, `reason: r\napproved-by: donghyun\ndiff-hash: ${diffHash(dir, 'HEAD')}\n`);
+    const r = runGate(dir, 'git commit -am x');
+    assert.equal(r.status, 0, 'medium never required review');
+    assert.match(r.stderr, /cannot be consumed under `git commit -a`/i);
+    assert.equal(existsSync(skipPath(dir)), true, 'flag NOT consumed under -a');
+    assert.equal(readFileSync(auditPath(dir), 'utf-8'), '', 'no audit event without consumption');
+  });
+});
+
+// --- risk-level scoping of the new paths ------------------------------------------
+
+test('low risk: unaffected — even a bare review-skip lying around does not block', () => {
+  withRepo(LOW, (dir) => {
+    writeSkip(dir, '');
+    assert.equal(runGate(dir).status, 0);
+    assert.equal(existsSync(skipPath(dir)), true, 'low risk exits before the override check; flag untouched');
+  });
+});
+
+test('medium risk: invalid review-skip is ignored with a warning, not a block', () => {
+  withRepo(MED, (dir) => {
+    writeSkip(dir, '');
+    const r = runGate(dir);
+    assert.equal(r.status, 0, 'medium never required review, so a broken flag must not brick it');
+    assert.match(r.stderr, /not a valid audited override/i);
+    assert.equal(existsSync(skipPath(dir)), true, 'invalid flag is not consumed');
+  });
+});
+
+test('medium risk: VALID override is consumed + audited (can clear a covering FAIL)', () => {
+  withRepo(MED, (dir) => {
+    const hash = stagedHash(dir);
+    writeReview(dir, `review-${TODAY}-m.md`, `diff-hash: ${hash}\nVerdict: FAIL\n`);
+    writeSkip(dir, `reason: r\napproved-by: a\ndiff-hash: ${hash}\n`);
+    assert.equal(runGate(dir).status, 0);
+    assert.equal(existsSync(skipPath(dir)), false);
+    assert.match(readFileSync(auditPath(dir), 'utf-8'), /review_override/);
+  });
+});
+
+// --- first-block message quality (single-model deployment UX) ---------------------
+
+test('high risk + NO review at all: block message alone suffices to write path 2 or 3', () => {
+  withRepo(HIGH, (dir) => {
+    const r = runGate(dir);
+    assert.equal(r.status, 2);
+    const hash = stagedHash(dir);
+    assert.ok(r.stderr.includes(hash), 'carries the exact diff-hash value');
+    assert.ok(r.stderr.includes(`docs/reviews/review-${TODAY}-`), 'carries the exact review filename (today, local date)');
+    assert.match(r.stderr, /human-reviewed-by: /, 'teaches the human-review field');
+    assert.match(r.stderr, /Verdict: PASS/, 'teaches the verdict line');
+    assert.match(r.stderr, /docs\/harness\/review-skip/, 'teaches the override file path');
+    assert.match(r.stderr, /reason: /, 'teaches the reason field');
+    assert.match(r.stderr, /approved-by: /, 'teaches the approver field');
+    assert.match(r.stderr, /audit\.jsonl/, 'discloses that the override is audited');
+  });
 });

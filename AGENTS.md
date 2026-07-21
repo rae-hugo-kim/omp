@@ -121,7 +121,7 @@ If you cannot comply with any MUST:
 
 - See [`rules/agent_routing.md`](rules/agent_routing.md) for full routing rules
   (incl. the 2026-06 retirement of the unused MCP delegation matrix).
-- **reviewer**: SHOULD delegate for code changes ≥10 lines or logic changes. 3-pass adversarial (self + GPT adversary + OMC).
+- **reviewer**: SHOULD delegate for **high/critical-risk** changes (per `risk-assess`: security/auth/migration files touched, or >100 changed lines of code). Low/medium-risk changes need self-review only — no extra spawn. 3-pass adversarial (self + heterogeneous adversary + OMC). This matches what `review-gate` enforces: second-perspective evidence (heterogeneous model review, or a human review with `human-reviewed-by:` + `Verdict:`) is required only for high/critical commits; the only bypass is an audited override (`docs/harness/review-skip` with `reason:`/`approved-by:`/`diff-hash:`, recorded to `docs/harness/audit.jsonl`).
 - **verifier**: MUST delegate before claiming task completion when AC exists. The `task` spawn is non-blocking (async job delivery) — **spawning is not completing; declare done only after the verifier's verdict has actually arrived.**
 
 ## Linked Modules

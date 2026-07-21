@@ -255,8 +255,10 @@ export function isGitCommit(command) {
 //                       captures every tracked change); else -> `git diff --cached`
 //                       (a plain commit captures the index).
 //   verifiable:false => the content cannot be reproduced by a fixed diff in this
-//                       cwd, so the gate fails closed (block on high/critical;
-//                       review-skip is the escape hatch). This covers, deliberately:
+//                       cwd, so the gate fails closed (block on high/critical; the
+//                       audited override — review-skip with reason/approved-by/
+//                       `diff-hash: UNVERIFIABLE` — is the escape hatch). This
+//                       covers, deliberately:
 //                         • pathspec commits (`git commit foo.ts`) — the path set is
 //                           shell-fragile (escapes, globs) and cwd-relative;
 //                         • --amend / --include(-i) / --interactive(-p) /

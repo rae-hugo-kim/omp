@@ -126,7 +126,7 @@ Harness 검증 계약 세부 사항: [`rules/harness_integration_contract.md`](.
 
 - 전체 라우팅 규칙은 [`rules/agent_routing.md`](../rules/agent_routing.md)를 참조합니다
   (2026-06 미사용 MCP 위임 매트릭스 폐기 기록 포함).
-- **reviewer**: 10줄 이상 코드 변경 또는 로직 변경에 SHOULD 위임. 3-패스 적대 리뷰(self + Codex + OMC).
+- **reviewer**: `risk-assess` 기준 **high/critical** 위험 변경(보안/인증/마이그레이션 파일 접촉 또는 코드 100줄 초과)에 SHOULD 위임. low/medium 위험 변경은 셀프 리뷰(추가 스폰 없음)로 충분합니다. 3-패스 적대 리뷰(self + 이종 모델 adversary + OMC) — `review-gate`가 실제로 강제하는 수준과 일치합니다: high/critical 커밋에만 2차 관점 증거(이종 모델 리뷰, 또는 `human-reviewed-by:` + `Verdict:`를 갖춘 human 리뷰)를 요구하며, 유일한 우회는 감사된 override(`docs/harness/review-skip`에 `reason:`/`approved-by:`/`diff-hash:`, `docs/harness/audit.jsonl`에 기록)입니다.
 - **verifier**: AC가 존재할 때 작업 완료 주장 전에 MUST 위임.
 
 ## 연결된 모듈

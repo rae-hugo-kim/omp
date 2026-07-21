@@ -1,48 +1,47 @@
-name: v17-harness-adaptation
-status: done
-completed: "2026-07-16"
-version: 4
-task_id: "20260716-115803-9497"
+name: capability-aware-review-overhaul
+status: approved
+version: 1
+task_id: "20260721-200358-0802"
 goal: >
-  omp 17.0.1 런타임 컷오버(ast_edit/ast_grep/resolve의 xd:// 디바이스 전환)와 하네스 원장
-  배선의 정합을 복원한다 — 디바이스 경로 오염 제거, 프리뷰 적용·검색 앵커의 실파일 추적
-  복원, pre-edit context-gate 불변식 유지.
+  하네스 리뷰·검증 체계를 특정 모델 하드코딩에서 capability/롤 기반으로 개편합니다 —
+  에이전트 정의는 롤 별칭으로, 이종성(heterogeneity) 증거는 실측 계약으로,
+  review-gate는 3경로 증거(이종 모델 리뷰 / human review / 감사된 override)로 강제하고
+  무감사 우회 경로를 제거합니다.
 
 references:
-  - path: .omp/extensions/harness/index.ts
-    reason: "죽은 배선의 소재 (구 resolve/ast_edit/ast_grep toolName 분기, editTargets)"
-  - path: .omp/extensions/harness/gates/read-path.mjs
-    reason: "순수 함수 계층 — 라우팅·타깃 추출이 이식될 테스트 가능 층"
-  - path: tests/xdev-dispatch.test.mjs
-    reason: "회귀 계약 (RED-first)"
-  - note: "실증 프로브 2026-07-16: write xd://ast_edit → xd://resolve apply 후 session-log에 xd:/ 쓰레기 기록 + 실파일(probe-v17-scratch.mjs) 미추적. v17 계약 소스: packages/coding-agent/src/tools/resolve.ts (writeDeviceDispatch/ResolveDetails), docs/resolve-tool-runtime.md"
+  - path: .omp/agents/reviewer.md
+    reason: "3-pass 리뷰 프로토콜과 이종성 실측 계약의 SSOT"
+  - path: .omp/extensions/harness/gates/review-gate.mjs
+    reason: "3경로 증거 강제 게이트 — 본 개편의 핵심 코드"
+  - path: .omp/extensions/harness/gates/git-commit-detect.mjs
+    reason: "commit 형태 파싱(-a/pathspec fail-closed)의 공유 헬퍼"
+  - path: tests/review-gate.test.mjs
+    reason: "게이트 계약 회귀 스위트 (71건)"
+  - note: "사후 문서화 seed — 스코프는 선행 세션에서 확정·구현·검증(verifier PASS) 완료, 본 seed는 kickoff 규약에 따른 추적 산출물 (인터뷰 생략)"
 
 constraints:
-  - 게이트 계약 불변 — exit 2 블록/stderr 경고/fail-open, 기존 게이트 스크립트 무수정
-  - pre-edit read 불변식 유지 — xd://ast_edit 호출의 paths는 context-gate를 계속 통과해야 함 (URI 가드가 게이트를 느슨하게 만들면 안 됨)
-  - 라우팅은 순수 함수로 추출 (read-path.mjs) — index.ts는 배선만, 순서(xdev 봉투 우선)는 구조로 고정
-  - 클린 컷오버 — 단일 머신·단일 omp 바이너리(17.0.1) 전제, 구버전(pre-v17) shim 금지
-  - telemetry seed(20260710-180439-3771) 무접촉 — 별도 스레드, git 체크포인트 653b302로 보존됨
+  - 게이트 fail-closed 원칙 유지 — 무감사 우회 경로(bare review-skip 등) 금지
+  - 증거는 실측만 — models: 라인은 adversary 트랜스크립트 실측 확인 시에만 기재
+  - 검증 불가 커밋 형태(pathspec, --amend 등)는 fail-closed, plain git commit이 표준 경로
+  - 타 세션 워킹트리 변경분 무접촉
 
 acceptance_criteria:
-  - "V1 URI 스킴 원장 오염 0 — xd://·local:// 타깃이 read-log/session-log에 로컬 경로로 기록되지 않음 (단위 + 라이브 프로브)"
-  - "V2 xd://ast_edit 호출의 pre-edit context-gate 유지 — 미read 파일 BLOCK(negative) + read 후 통과(positive) 게이트 통합 테스트"
-  - "V3 xd://resolve apply 실파일 추적 — write-tracker·backpressure-invalidator·breadcrumb 발화 (단위 + 라이브 프로브에서 실파일 edit 기록)"
-  - "V4 xd://ast_grep 앵커 read 추적 — inner.files + 렌더 텍스트 폴백 (단위)"
-  - "V5 회귀 0 — 기존 342 테스트 + 신규 xdev 스위트 전부 그린"
-  - "V6 문서 부패 스위프 — 제거된 도구 참조(resolve/irc/job/launch/report_finding) 갱신, docs-drift 그린"
+  - "AC1 에이전트 3종(verifier/reviewer/adversary) frontmatter가 롤 기반 — 모델 하드코딩 0"
+  - "AC2 reviewer 위임이 high/critical 위험 변경에 한정"
+  - "AC3 이종성 증거 실측 계약 — adversary 트랜스크립트 model_change 확인, models:는 실측 시에만 기재"
+  - "AC4 review-gate 3경로 증거(이종 리뷰/human-review/감사된 override) 강제 + 무감사 skip 제거"
+  - "AC5 thread 계열 검증(codex-thread만 gpt 기본값 함의) + Verdict 화이트리스트 + git commit -a TOCTOU 가드"
+  - "AC6 review-gate 테스트 71건 포함 전체 399건 그린"
 
 out_of_scope:
-  - telemetry 계측 자체 (별도 seed 20260710-180439-3771 — 재개 시 git 복원 + thread-scope open)
+  - 타 세션 소유 파일 (claudedocs/harness-auto-capture-analysis.md, docs/upstream-issues.md, .serena/)
   - upstream(oh-my-pi) 수정·이슈
-  - hub 도구를 활용하는 하네스 신기능
-  - grep/ast_grep 외 검색 디바이스의 신규 앵커 지원
+  - human-review 경로 자기선언의 암호학적 검증 (수용된 위협 모델 — 리뷰 문서에 잔존 한계로 기록)
 
 assumptions:
-  - 이 머신의 모든 레포는 단일 omp 바이너리를 공유한다 (17.0.1)
-  - ast_edit/ast_grep은 xd:// 디바이스로만 도착한다 (top-level 도구 부재)
-  - xdev 봉투 계약은 v17.0.1 소스 기준 {tool, mode, inner} (tools/resolve.ts writeDeviceDispatch)
+  - primary=claude 계열, adversary=@advisor(gpt 계열) 모델 배치가 유지된다
+  - 커밋은 plain git commit으로 수행된다 (staged diff = 리뷰 대상)
 
 risks:
-  - xdev 봉투 형태가 upstream 마이너에서 변할 수 있음 → 계약을 단위 테스트로 고정하고 소스 라인을 references에 기록, 변화 시 harness-check 의례에서 재대조
-  - 프리뷰 paths가 글롭일 때 context-gate 대상이 넓어질 수 있음 → 기존 v16 의미론(글롭 통과, 비존재 허용) 유지
+  - human-review 경로의 자기선언 스푸핑 잔존 — 수용된 위협 모델, truthfulness는 인간에 귀속
+  - override 감사 이벤트(audit.jsonl)의 로컬 비내구성 — pre-commit 훅 구조 한계, 후속 docs 커밋으로 완화

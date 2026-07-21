@@ -60,12 +60,21 @@ Use concrete checks, not assumptions.
 - State: `.omp/harness-state/backpressure-status`, `.omp/harness-state/test-history.json`
 - **Failure recording**: the OMP adapter routes a failed bash `tool_result` to `backpressure-failure-tracker`, so failed build/test/lint runs ARE recorded — `backpressure-gate` sees explicit FAIL state, not just absence of recent success. Failure means `isError: true` OR non-zero `details.exitCode` (OMP keeps `isError` false for non-zero command exits and reports the code in `details.exitCode`; verified empirically). Residual dependence: a failing command that still exits 0 (a runner that swallows the exit code) is recorded as success.
 
-### 4) `kickoff-detector`
+### 4) `review-gate`
+
+- File: `.omp/extensions/harness/gates/review-gate.mjs` (spawned via `commit-gates`)
+- Log: `.omp/harness-state/hook-debug.log` (written only when `HARNESS_DEBUG` is set)
+- Reads: `docs/reviews/review-<today>*.md` (diff-hash coverage; second-perspective evidence = `models:` >=2 families / a thread field + `primary-model:` of a family DIFFERENT from the adversary's — for `codex-thread:`/`codex-session:` the adversary is `adversary-model:` if declared, else assumed gpt; for `adversary-thread:`/`adversary-session:` a parseable `adversary-model:` is REQUIRED (agent may auth-fall-back to the primary's family — missing/unparseable fails closed); a thread id alone or a same-family/missing `primary-model:` does not count **or** `human-reviewed-by:` + a `Verdict:` on the PASS whitelist (`PASS` / `PASS WITH NOTES` only)), `docs/harness/review-skip` (audited override: `reason:` / `approved-by:` / `diff-hash:` fields — commit-diff-bound, consumed on use, audited)
+- Writes: `docs/harness/audit.jsonl` — a `review_override` event (`{ts,event,actor,meta}`, cf. `adversarial_override`) when a valid override is consumed
+- A **bare** `review-skip` flag no longer bypasses the gate: there is no unaudited escape hatch. An invalid flag fails closed on high/critical with the exact field syntax (including the current diff hash) in the BLOCK message.
+- Override + `git commit -a` TOCTOU: consuming an override writes `audit.jsonl` (git-tracked) before the commit runs, which `-a` would sweep into the commit and desync the approved hash — so when `audit.jsonl`/`review-skip` is tracked (checked live via `git ls-files`), the override is NOT consumable under `-a/--all`: high/critical fails closed with stage-plus-plain-commit guidance, medium warns and ignores the flag.
+
+### 5) `kickoff-detector`
 
 - File: `.omp/extensions/harness/gates/kickoff-detector.mjs`
 - Reads: `docs/harness/kickoff-done` (suppresses reminder if exists)
 
-### 5) Architect verification + Completion Attack Gate
+### 6) Architect verification + Completion Attack Gate
 
 - Provided by oh-my-claudecode `architect` agent (discovered via OMP's task tool)
 - Not a file gate — invoked via agent delegation
@@ -119,6 +128,7 @@ When downgrading, final report MUST include:
 | Gate file not found in `.omp/extensions/harness/gates/` | Partial clone or deleted gate file | Re-clone template or restore from git; if blocked, activate manual checklist downgrade |
 | Gate exists but no events in `.omp/harness-state/hook-debug.log` | Debug logging is OFF by default (gated behind `HARNESS_DEBUG`) | An empty/absent log does NOT mean the gate is unwired. Set `HARNESS_DEBUG=1` to enable logging, then verify the `runGate(...)` reference in `.omp/extensions/harness/index.ts` and re-run a benign trigger. |
 | `acceptance-gate` repeatedly blocks completion | Missing evidence or unchecked AC in `current-scope.md` | Check off completed criteria or create `docs/harness/acceptance-done` override |
+| `review-gate` blocks a high/critical commit | No second-perspective evidence for the effective diff | Run the reviewer agent (heterogeneous evidence), write a human review doc (`diff-hash:` + `human-reviewed-by:` + `Verdict: PASS`), or create an audited override (`docs/harness/review-skip` with `reason:`/`approved-by:`/`diff-hash:`). The BLOCK message prints the exact hash and syntax. |
 | `backpressure-gate` loops on failures | Underlying failing test/check never addressed | Stop retries, fix root cause, then re-run once with documented rationale |
 | `context-gate` blocks unexpectedly | `read-log.txt` missing or stale | Read the file first; if persistent, check `read-tracker` is wired in `.omp/extensions/harness/index.ts` |
 | Architect log missing for completed task | oh-my-claudecode not installed or architect agent unavailable | Run manual two-pass verification and mark Architect as downgraded in report |

@@ -99,7 +99,7 @@ node .omp/extensions/harness/gh-loop-controller.mjs scale --state-json "$STATE" 
 | 워커 루프 | `gh-loop` 스킬(per-issue) |
 | 워커 로깅 throttle/dedup | `gh-loop-issue.mjs` |
 | finding→이슈 소스 | `gh-loop-detect.mjs` |
-| 워커 커밋 리뷰 | het-gate(review-gate) — 위험 변경 이종 리뷰 강제 |
+| 워커 커밋 리뷰 | review-gate — 위험 변경에 2차 관점(이종 모델/휴먼 리뷰) 또는 감사된 override 강제 |
 | 워커 substrate | `omp --mode rpc`(omp://rpc.md) |
 
 ## Scope / limits
