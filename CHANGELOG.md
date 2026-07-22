@@ -4,6 +4,7 @@
 
 ## [Unreleased]
 
+- **feat(harness)**: 네이티브 3-pass 실동작화 + 배포 자립성 + codex CLI 폴백 제거 — reviewer frontmatter `spawns: adversary, code-reviewer`로 중첩 스폰 허용(top-level 실스폰·model_change 실측: gpt 계열 확인), Pass 3용 `code-reviewer`를 `.omp/agents/` 프로젝트 에이전트로 신설(OMC 미설치 바닐라 OMP에서도 3-pass 전체 실스폰 — 롤 별칭 모델, read-only), reviewer.md의 codex CLI 폴백 섹션 삭제 및 Pass 1–3 리뷰 스코프 staged-first(`git diff --cached`, 미스테이징 시 HEAD 폴백) 정렬, review-gate isHetEvidence의 thread/session 증거 경로 전체 삭제(증거 = 실측 `models:` / human-review / 감사된 override 3형태), 유일 자동 증거가 된 `models:` 파서 강화 — 키 정확 일치(`models-*` 변형 키 배제), modelFamily 세그먼트 문법(부정 단어 세그먼트 정확 일치 거부: `-skipped`/`-unavailable`/`-not-run-2` 등 숫자 포함 변형까지 — 세그먼트 융합형은 구 정규식도 수용하던 선재 간극으로 리뷰 문서에 후속 기록, malformed 토큰 거부, `o3-mini` 등 변형 별칭 정상 매핑), 증거 4축(커버리지·FAIL 판정·het·human) 동일 sanitized 뷰(evidenceLines: 라인 단위 단일 패스로 펜스 상태를 HTML 주석 제거보다 먼저 추적 — 펜스 내부 주석은 리터럴이라 백틱 융합 조기 닫힘 불가, 닫는 펜스는 CommonMark 3컬럼 들여쓰기 제한으로 탭 들여쓰기 불인정, 다중행 HTML 주석 제외) 통일 및 `diff-hash` 키 문법 제한(괄호 한정어만 커버리지 인정), evidenceHelp·contract·lifecycle·routing·AGENTS 문서 정합, thread 필드 비증거(BLOCK)·우회 케이스별 BLOCK 회귀 테스트 추가 (review-gate 82건 포함 전체 스위트 410건 그린 실측)
 - **feat(harness)**: review-gate 증거 3경로화 — ① 이종 모델 리뷰(현행) ② human-review(`human-reviewed-by:` + `Verdict:`, diff-hash 바인딩) ③ 감사된 override(review-skip에 reason/approved-by/diff-hash 필수, `review_override`로 audit.jsonl 기록·소비); bare review-skip 무감사 우회 제거, BLOCK 메시지가 정확한 해시·문법 안내
 - **fix(harness)**: `grep`/`ast_grep` 검색 앵커를 read-log에 기록 — context-gate 오차단 해소 (`a609925`)
 

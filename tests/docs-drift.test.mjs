@@ -172,13 +172,27 @@ test('real repo: commit-gates delegated gates + imported helpers are reachable',
   }
 });
 
-test('real repo: docs-drift exits 0 with no drift', () => {
+test('real repo: docs-drift exits 0; only the pre-delivery Closeout-pending WARN is tolerated', () => {
   const result = spawnSync(process.execPath, [driftPath], {
     cwd: repoRoot,
     encoding: 'utf8',
   });
   assert.equal(result.status, 0, `docs-drift should exit 0; stdout:\n${result.stdout}`);
-  assert.match(result.stdout, /\[docs:drift\] OK/, 'expected a clean OK report');
+  // Between "all ACs checked" and delivery (compr/compush flips seed status: approved -> done),
+  // the closeoutConsistency lane emits a "Closeout pending" WARNING BY CONTRACT
+  // (docs/rules/closeout_contract.md 비고: PR-4 verification lane). Demanding an unconditional
+  // OK here contradicted that contract. Accept a clean OK, or EXACTLY that single warning —
+  // any error, any other warning, or a second warning is still drift.
+  // Branch on ANY warn-ish output (not on the OK marker) so an "OK + stray warnings" regression
+  // cannot slip through the OK branch: any WARN/WARNING text must be the exact single-warning form.
+  if (/WARN/.test(result.stdout)) {
+    assert.match(result.stdout, /\[docs:drift\] WARN \(0 errors, 1 warnings\)/,
+      'only a zero-error, single-warning report is tolerated');
+    assert.match(result.stdout, /1\. Closeout pending/,
+      'the sole tolerated warning is the pre-delivery Closeout-pending transient');
+  } else {
+    assert.match(result.stdout, /\[docs:drift\] OK/, 'expected a clean OK report');
+  }
   assert.ok(!/Orphan gate file/.test(result.stdout), 'no orphan-gate warnings expected');
 });
 

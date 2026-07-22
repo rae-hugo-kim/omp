@@ -142,9 +142,9 @@ MCP 필요 시:
    → 실패하면 [tool_result, exitCode≠0/isError] backpressure-failure-tracker가 FAIL 기록
 
 2. reviewer 호출 (코드 변경 ≥10줄 or 로직 변경)
-   → Pass 1: reviewer 자체 분석 (Opus)
-   → Pass 2: codex review --uncommitted (GPT-5.4)
-   → Pass 3: Agent(oh-my-claudecode:code-reviewer) (별도 Opus)
+   → Pass 1: reviewer 자체 분석 (@slow 롤)
+   → Pass 2: adversary 에이전트 중첩 스폰 (@advisor 롤, 이종 계열 — 트랜스크립트 model_change 실측)
+   → Pass 3: code-reviewer 에이전트 중첩 스폰 (`.omp/agents/` 프로젝트 정의 — OMC 불요)
    → 3개 결과 교차 검증
    → docs/reviews/review-YYYY-MM-DD-HHMMSS.md 기록
    → Verdict: PASS / PASS WITH NOTES / FAIL
@@ -180,9 +180,8 @@ git commit 시도
      → low → 통과
      → medium + 리뷰 없음 → 경고
      → high/critical + 2차 관점 증거 없음 → 차단
-       (인정 증거: ① 이종 모델 리뷰 — models: 2계열 이상, 또는
-          codex-thread: + primary-model:(adversary와 다른 계열일 때만; adversary-model 미기재 시 gpt 가정),
-          또는 adversary-thread: + primary-model: + 파싱 가능한 adversary-model:(필수 — 미기재/파싱불가 시 불인정; 단독 thread id 불인정)
+       (인정 증거: ① 이종 모델 리뷰 — 실측 models: 2계열 이상
+          (thread/session id 필드는 증거 불인정)
         ② human-review — human-reviewed-by: + Verdict: PASS|PASS WITH NOTES
         ③ 감사된 override)
      → 리뷰 FAIL → 차단
@@ -276,8 +275,8 @@ sequenceDiagram
 
     M->>RV: "변경사항 리뷰"
     Note over RV: Pass 1: 자체 분석
-    Note over RV: Pass 2: codex review
-    Note over RV: Pass 3: OMC code-reviewer
+    Note over RV: Pass 2: adversary 중첩 스폰 (이종 계열)
+    Note over RV: Pass 3: code-reviewer 중첩 스폰
     RV-->>M: PASS WITH NOTES (docs/reviews/에 기록)
 
     M->>VF: "AC 검증"

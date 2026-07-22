@@ -8,9 +8,8 @@
 //
 // Accepted evidence for HIGH/CRITICAL — the verification axis and the approval axis are separate:
 //   (1) heterogeneous model review [verification] — a covering review doc (docs/reviews/review-<today>*)
-//       carrying the effective diff hash plus `models:` (>=2 families) or a thread field + a
-//       `primary-model:` from a DIFFERENT family than the adversary's (`codex-thread:` defaults the
-//       adversary to gpt; `adversary-thread:` requires an explicit `adversary-model:`).
+//       carrying the effective diff hash plus a measured `models:` line naming >=2 distinct model
+//       families (the reviewer writes it only after transcript-verifying the adversary's family).
 //   (2) human review [verification] — a covering review doc carrying the effective diff hash plus a
 //       `human-reviewed-by:` identity and an explicit `Verdict:` line. For single-model deployments
 //       that cannot honestly produce (1), the USER reading the diff is the second perspective.
@@ -48,85 +47,138 @@ function getStateDir(cwd) {
 // - matchedCurrent is true/false when a hash exists, or null when it could not be
 //   computed (the gate treats null as "unverified" and fails closed on high/critical).
 // Map a token to a model FAMILY, or null if it is not a single clean model name. The token must be
-// ENTIRELY `[provider/]<alias><version-suffix?>` — the alias is a known model word, optionally followed
-// by a version that starts with `-`/`.`/digit. This rejects substrings ("octopus"!="opus", "gptscript",
-// "bardic") and trailing-word phrases ("codex skipped", "no codex") — only a bare model name maps.
+// ENTIRELY `[provider/]<alias><suffix?>` — the alias is a known model word; the suffix is analyzed
+// SEGMENT BY SEGMENT (split on `-`/`.`), and every segment must be one of:
+//   - a version segment starting with a digit ("4", "5.6", "8x7b") or letter+digit codename ("r1", "4o"),
+//   - a same-family sub-alias ("claude-opus-4-8", "claude-3-5-sonnet"),
+//   - a known variant descriptor ("o3-mini", "gemini-2.5-pro", "gpt-4-turbo"),
+//   - or, once a version segment has appeared, any plain word codename ("gpt-5.6-sol").
+// A NEGATION word anywhere ("not", "skipped", "unavailable", …) rejects the whole token — so
+// "gpt-skipped", "claude-unavailable-5", "gpt-not-run-2" are negated declarations, not versions,
+// no matter how many digits they carry. Empty segments ("claude...4", "gpt--5") are malformed and
+// reject. Unknown words BEFORE any version digit reject (fail-closed: "octopus", "gptscript",
+// "codex skipped", bare providers all stay non-models).
 // Codex folds into the gpt (OpenAI) family, so "codex, gpt-5" is ONE family, while "claude, codex" is two.
+const MODEL_ALIAS = /^(?:claude|sonnet|opus|haiku|codex|gpt|o[1-9]|gemini|bard|grok|llama|mistral|mixtral|deepseek|qwen)$/;
+const NEGATION_WORD = /^(?:not?|none|never|nil|null|na|void|skip|skipped|skipping|unavailable|unverified|unused|unrun|missing|absent|omitted|pending|disabled|failed|fail|failing|error|errored|without|run)$/;
+const VARIANT_WORD = /^(?:mini|nano|micro|lite|tiny|small|medium|large|max|plus|ultra|pro|air|flash|turbo|preview|exp|experimental|latest|stable|beta|alpha|instruct|chat|coder|vision|thinking|reasoner|sonic|high|low)$/;
+function familyOf(alias) {
+  if (/^(?:claude|sonnet|opus|haiku)$/.test(alias)) return 'claude';
+  if (/^(?:codex|gpt|o[1-9])$/.test(alias)) return 'gpt';
+  if (/^(?:gemini|bard)$/.test(alias)) return 'gemini';
+  return alias; // grok | llama | mistral | mixtral | deepseek | qwen
+}
 function modelFamily(tok) {
   const e = String(tok).toLowerCase().trim().replace(/^[a-z][a-z0-9.-]*\//, ''); // drop one provider/ prefix
-  const m = e.match(/^(claude|sonnet|opus|haiku|codex|gpt|o[1-9]|gemini|bard|grok|llama|mistral|mixtral|deepseek|qwen)(?:[-.\d][a-z0-9.-]*)?$/);
+  const m = e.match(/^(claude|sonnet|opus|haiku|codex|gpt|o[1-9]|gemini|bard|grok|llama|mistral|mixtral|deepseek|qwen)([-.][a-z0-9.-]*|\d[a-z0-9.-]*)?$/);
   if (!m) return null;
-  const a = m[1];
-  if (/^(?:claude|sonnet|opus|haiku)$/.test(a)) return 'claude';
-  if (/^(?:codex|gpt|o[1-9])$/.test(a)) return 'gpt';
-  if (/^(?:gemini|bard)$/.test(a)) return 'gemini';
-  return a; // grok | llama | mistral | mixtral | deepseek | qwen
+  const family = familyOf(m[1]);
+  if (!m[2]) return family;
+  let versionStarted = false;
+  for (const seg of m[2].replace(/^[-.]/, '').split(/[-.]/)) {
+    if (!seg) return null;                                        // "claude...4", "gpt--5": malformed
+    if (NEGATION_WORD.test(seg)) return null;                     // negation anywhere kills the token
+    if (/^\d|^[a-z]\d/.test(seg)) { versionStarted = true; continue; } // "4", "5", "8x7b", "r1", "4o"
+    if (MODEL_ALIAS.test(seg)) {                                  // sub-alias must agree in family
+      if (familyOf(seg) !== family) return null;
+      continue;
+    }
+    if (VARIANT_WORD.test(seg)) continue;                         // "mini", "pro", "turbo", …
+    if (versionStarted && /^[a-z][a-z0-9]*$/.test(seg)) continue; // post-version codename ("5.6-sol")
+    return null;                                                  // unknown word before a version: not a model
+  }
+  return family;
+}
+
+// Reduce a doc to the lines that ASSERT something in the rendered review — the single sanitized
+// view every evidence axis (coverage, FAIL detection, het, human) reads. ONE pass, line by line,
+// with FENCE STATE CHECKED FIRST: in CommonMark everything inside a code fence is literal text,
+// including `<!-- -->`, so comment stripping must never touch fenced lines. (Stripping comments
+// over the whole text first let a fenced "`<!--x-->``" fuse into "```" and close the fence early,
+// leaking the quoted evidence below it as live lines — fail-open.)
+//   1) Markdown code fences (``` / ~~~): an opening fence may carry an info string, but a CLOSING
+//      fence is the same character, at least the opening length, nothing else on the line, and
+//      indented at most 3 COLUMNS — a tab advances to the next multiple of 4, so any tab-indented
+//      delimiter is fence CONTENT, not a close. An unterminated fence runs to EOF. Fenced lines
+//      and the delimiters themselves are never yielded: a fenced `models:` line is an EXAMPLE
+//      being quoted (e.g. the reviewer.md template), not a declaration.
+//   2) HTML comments OUTSIDE fences are stripped — commented-out text is invisible in rendered
+//      Markdown, so a `models:`/`diff-hash:`/`Verdict:` line inside `<!-- … -->` asserts nothing.
+//      A multi-line comment leaves its opening line's prefix and closing line's remainder on
+//      SEPARATE output lines, so surrounding text can never fuse into a new field line. An
+//      unterminated `<!--` swallows the rest of the doc (fail-closed: hidden text can only
+//      remove evidence, never add it).
+function evidenceLines(content) {
+  const out = [];
+  let open = null;     // { ch, len } of the active opening fence
+  let comment = false; // inside a multi-line HTML comment (outside any fence)
+  for (const raw of String(content).split(/\r?\n/)) {
+    if (open) {
+      const c = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(raw);
+      if (c && c[1][0] === open.ch && c[1].length >= open.len) open = null;
+      continue; // inside the fence, or its closing delimiter: never yielded
+    }
+    let line = raw;
+    if (comment) {
+      const end = line.indexOf('-->');
+      if (end === -1) continue; // whole line is comment-hidden
+      comment = false;
+      line = line.slice(end + 3);
+    }
+    line = line.replace(/<!--[\s\S]*?-->/g, '');
+    const start = line.indexOf('<!--');
+    if (start !== -1) { comment = true; line = line.slice(0, start); }
+    const f = /^[ \t]{0,3}(`{3,}|~{3,})/.exec(line);
+    if (f) { open = { ch: f[1][0], len: f[1].length }; continue; }
+    out.push(line);
+  }
+  return out;
 }
 
 // Parse simple `key: value` fields from a small text file / review doc — the SAME line grammar
-// the het parser tolerates (Markdown list/quote/bold prefixes, CRLF, HTML comments, backticks).
+// the het parser tolerates (Markdown list/quote/bold prefixes, CRLF, backticks), over the SAME
+// sanitized view (evidenceLines: fenced or comment-hidden lines are quoted examples, not fields).
 // Returns lowercased key -> first non-empty value seen.
 function parseFields(content) {
   const fields = {};
-  for (const raw of String(content).split(/\r?\n/)) {
+  for (const raw of evidenceLines(content)) {
     const m = /^[ \t>*-]*(?:\d+[.)][ \t]*)?\*{0,2}([a-z][a-z-]*)\*{0,2}[ \t]*:\*{0,2}[ \t]*(.*)$/i.exec(raw);
     if (!m) continue;
     const key = m[1].toLowerCase();
-    const val = m[2].replace(/<!--[\s\S]*?-->/g, '').replace(/[*`]/g, '').trim();
+    const val = m[2].replace(/[*`]/g, '').trim();
     if (val && !(key in fields)) fields[key] = val;
   }
   return fields;
 }
 
-// Heterogeneity evidence for a HIGH/CRITICAL review (continuous-cross-review policy). Accepts EITHER:
-//   (a) a `codex-thread:`/`codex-session:`/`adversary-thread:`/`adversary-session:` field whose
-//       value's FIRST token is a real id (>=8 leading hex, optionally `-hex` groups) — but ONLY when
-//       the doc also carries a `primary-model:` field that parses to a family (see modelFamily)
-//       DIFFERENT from the adversary's family. The adversary family resolves PER KEY:
-//         - `codex-thread`/`codex-session`: `adversary-model:` when present (unparseable → not
-//           evidence), else `gpt` — a codex CLI thread implies a GPT/Codex execution, so the
-//           default is safe for these keys.
-//         - `adversary-thread`/`adversary-session`: a parseable `adversary-model:` is REQUIRED.
-//           An adversary AGENT thread implies no particular family (the agent may have
-//           auth-fallen-back to the primary's own family, e.g. Claude), so a missing or
-//           unparseable `adversary-model:` is NOT evidence — fail closed.
-//       A thread id alone proves a run happened, not that it was a SECOND family: a GPT/Codex-primary
-//       deployment running the codex CLI is a same-family self-review, so an honest
-//       `primary-model: gpt-…` next to a codex thread is mechanically rejected here and routed to
-//       the human-review / audited-override paths. A missing or unparseable `primary-model:` also
-//       does not count — fail closed, same routing.
-//   (b) a `models`/`models-*` field where EVERY token is a clean model name (see modelFamily) AND
-//       >=2 DISTINCT families are named. A single stray non-model token (noise, a negated
-//       "no codex"/"codex skipped", a bare provider) makes the whole list not count.
-// Markdown emphasis, list/quote/numbered prefixes, CRLF, and HTML comments are tolerated. The gate
-// enforces that real evidence is PRESENT and internally consistent; truthfulness of the declaration
-// is still the reviewer contract's job.
+// Heterogeneity evidence for a HIGH/CRITICAL review (continuous-cross-review policy). Accepts ONLY
+// a field whose key is EXACTLY `models` — `models-*`/`models_*` variants ("models-not-run:",
+// "models-attempted:") are somebody describing models, not the contract's declaration, and matching
+// them was a fail-open — where EVERY token is a clean model name (see modelFamily) AND >=2 DISTINCT
+// families are named. A single stray non-model token (noise, a negated "no codex"/"codex skipped"/
+// "codex-skipped"/"gpt-not-run-2", a bare provider) makes the whole list not count. Lines inside
+// Markdown code fences or HTML comments are ignored (see evidenceLines): a quoted or commented-out
+// template example is not evidence. Thread/session id fields (`codex-thread:`,
+// `adversary-session:`, …) are deliberately NOT evidence: an id proves a run happened, not that a
+// SECOND family reviewed the diff — the reviewer contract requires the adversary transcript's
+// `model_change` to be measured and expressed as `models:` (or the doc is routed to the
+// human-review / audited-override paths).
+// Markdown emphasis, list/quote/numbered prefixes, CRLF, and inline HTML comments are tolerated.
+// The gate enforces that real evidence is PRESENT and internally consistent; truthfulness of the
+// declaration is still the reviewer contract's job.
 function isHetEvidence(content) {
-  const fields = parseFields(content);
-  const famOf = (v) => (v ? modelFamily(v.split(/\s+/)[0]) : null);
-  for (const raw of String(content).split(/\r?\n/)) {
+  for (const raw of evidenceLines(content)) {
     const m = /^[ \t>*-]*(?:\d+[.)][ \t]*)?\*{0,2}([a-z][a-z-]*)\*{0,2}[ \t]*:\*{0,2}[ \t]*(.*)$/i.exec(raw);
     if (!m) continue;
-    const key = m[1].toLowerCase();
-    const val = m[2].replace(/<!--[\s\S]*?-->/g, '').replace(/[*`]/g, '').trim();
+    if (m[1].toLowerCase() !== 'models') continue;
+    const val = m[2].replace(/[*`]/g, '').trim();
     if (!val) continue;
-    if (/^(?:codex|adversary)-(?:thread|session)$/.test(key)) {
-      const id = val.split(/\s+/)[0];
-      if (!/^[0-9a-f]{8,}(?:-[0-9a-f]+)*$/i.test(id)) continue; // real id shape, not "----deadbeef"
-      const primaryFam = famOf(fields['primary-model']);
-      if (!primaryFam) continue; // no honest primary declaration -> thread proves nothing about heterogeneity
-      const advFam = 'adversary-model' in fields ? famOf(fields['adversary-model'])
-        : key.startsWith('codex-') ? 'gpt' // codex CLI thread implies a GPT/Codex run
-        : null; // adversary-* thread implies NO family (auth-fallback possible) -> not evidence without adversary-model
-      if (advFam && advFam !== primaryFam) return true;
-    } else if (/^models(?:[-_]|$)/.test(key)) {
-      const toks = val.split(/[,&+/]|\s+/).map((s) => s.trim()).filter(Boolean);
-      if (toks.length < 2) continue;
-      const fams = new Set();
-      let allModels = true;
-      for (const tok of toks) { const f = modelFamily(tok); if (!f) { allModels = false; break; } fams.add(f); }
-      if (allModels && fams.size >= 2) return true;
-    }
+    const toks = val.split(/[,&+/]|\s+/).map((s) => s.trim()).filter(Boolean);
+    if (toks.length < 2) continue;
+    const fams = new Set();
+    let allModels = true;
+    for (const tok of toks) { const f = modelFamily(tok); if (!f) { allModels = false; break; } fams.add(f); }
+    if (allModels && fams.size >= 2) return true;
   }
   return false;
 }
@@ -137,29 +189,39 @@ function isHetEvidence(content) {
 // AND a `Verdict:` whose value is on the explicit PASS whitelist: `PASS` or `PASS WITH NOTES`.
 // An empty, pending, or unknown verdict (`Verdict:`, `Verdict: PENDING`, `Verdict: NEEDS REVIEW`)
 // states no accepted outcome and does NOT count — fail closed (a covering FAIL additionally blocks
-// via hasFail). Coverage (the diff-hash field) is checked by evaluateReviews like any other review,
-// and the doc must be a TODAY review (filename scan) — that supplies the timestamp requirement.
-// As with het evidence, the gate enforces the evidence is PRESENT and well-formed; truthfulness of
-// the declaration rests with the human who wrote it.
+// via hasFail). Both fields are read from the sanitized view (evidenceLines): a fenced or
+// commented-out `human-reviewed-by:`/`Verdict: PASS` is a quoted example, not a declaration.
+// Coverage (the diff-hash field) is checked by evaluateReviews like any other review, and the doc
+// must be a TODAY review (filename scan) — that supplies the timestamp requirement. As with het
+// evidence, the gate enforces the evidence is PRESENT and well-formed; truthfulness of the
+// declaration rests with the human who wrote it.
 function isHumanEvidence(content) {
   const who = parseFields(content)['human-reviewed-by'];
   if (!who || modelFamily(who.split(/\s+/)[0])) return false;
-  const m = /^[ \t>*#-]*\*{0,2}verdict\*{0,2}[ \t]*:\*{0,2}[ \t]*(.*)$/im.exec(content);
+  const m = /^[ \t>*#-]*\*{0,2}verdict\*{0,2}[ \t]*:\*{0,2}[ \t]*(.*)$/im.exec(evidenceLines(content).join('\n'));
   if (!m) return false;
-  const verdict = m[1].replace(/<!--[\s\S]*?-->/g, '').replace(/[*`]/g, '').trim().toUpperCase();
+  const verdict = m[1].replace(/[*`]/g, '').trim().toUpperCase();
   return /^PASS(?:\s+WITH\s+NOTES)?$/.test(verdict);
 }
 
 function evaluateReviews(reviews, currentHash) {
-  // ^ + optional "[ \t>*-]" markers + word-bounded "diff-hash" field + the hash.
+  // EVERY axis — coverage, FAIL detection, het, human — reads the SAME sanitized view
+  // (evidenceLines): a diff-hash or Verdict line inside a code fence or HTML comment is a
+  // quotation, not an assertion. Consistency matters both ways: a fenced diff-hash must not
+  // grant coverage (fail-open), and a fenced `Verdict: FAIL` example must not veto a doc whose
+  // real verdict is PASS (over-blocking).
+  // Coverage grammar: the field must BE `diff-hash`, optionally followed by ONE parenthesized
+  // qualifier — "diff-hash: <h>", "diff-hash (initial review): <h>", "- **diff-hash: <h>**"
+  // cover; "previous-diff-hash: <h>" and "diff-hash-not-reviewed: <h>" describe, so they don't.
+  const sanitized = reviews.map((r) => ({ name: r.name, text: evidenceLines(r.content).join('\n'), content: r.content }));
   const covers = currentHash
-    ? (content) => new RegExp(`^[ \\t>*-]*diff-hash\\b[^\\n:]*:[ \\t]*${currentHash}\\b`, 'm').test(content)
+    ? (text) => new RegExp(`^[ \\t>*-]*\\*{0,2}diff-hash\\b(?:[ \\t]*\\([^()\\n]*\\))?\\*{0,2}[ \\t]*:\\*{0,2}[ \\t]*${currentHash}\\b`, 'm').test(text)
     : () => false;
   // Heterogeneity is detected by isHetEvidence() (family-counting parser, above): a single-model or
   // placeholder-field review does not satisfy it. Human review is detected by isHumanEvidence().
-  const matching = currentHash ? reviews.filter((r) => covers(r.content)) : [];
-  const failScope = matching.length > 0 ? matching : (currentHash ? [] : reviews);
-  const hasFail = failScope.some((r) => /Verdict:\s*FAIL/i.test(r.content));
+  const matching = currentHash ? sanitized.filter((r) => covers(r.text)) : [];
+  const failScope = matching.length > 0 ? matching : (currentHash ? [] : sanitized);
+  const hasFail = failScope.some((r) => /Verdict:\s*FAIL/i.test(r.text));
   const matchedCurrent = currentHash ? matching.length > 0 : null;
   const matchedHet = currentHash ? matching.some((r) => isHetEvidence(r.content)) : null;
   const matchedHuman = currentHash ? matching.some((r) => isHumanEvidence(r.content)) : null;
@@ -173,7 +235,7 @@ function evidenceHelp(currentHash, today) {
   const h = currentHash || 'UNVERIFIABLE';
   const lines = [
     'A HIGH/CRITICAL commit needs ONE of:',
-    '  (1) heterogeneous model review [verification]: run the reviewer agent; its doc in docs/reviews/ must carry `diff-hash: <hash>` plus `models: <fam1>, <fam2>` (>=2 model families, e.g. `models: claude, codex`) or `codex-thread: <id>` TOGETHER WITH `primary-model: <your model>` from a different family than the adversary (`adversary-model:` if present, else assumed gpt/codex). An `adversary-thread: <id>` (adversary agent) counts ONLY with an explicit parseable `adversary-model:` of a different family — the agent may auth-fall-back to your own family, so no default is assumed. If your primary model IS GPT/Codex-family, a codex thread is same-family and cannot satisfy (1) — use (2) or (3).',
+    '  (1) heterogeneous model review [verification]: run the reviewer agent; its doc in docs/reviews/ must carry `diff-hash: <hash>` plus a MEASURED `models: <fam1>, <fam2>` line (>=2 model families, e.g. `models: claude, gpt`) — written only after the adversary transcript confirmed a different family actually ran. Thread/session ids are not evidence. If only your own family ran, (1) cannot honestly be satisfied — use (2) or (3).',
   ];
   if (currentHash) {
     lines.push(
@@ -419,7 +481,7 @@ if (matchedCurrent !== true) {
 }
 
 // Second-perspective enforcement: a covering review for a HIGH/CRITICAL change must evidence either
-// a heterogeneous model review (>=2 model families, e.g. a codex pass) or a human review. A
+// a heterogeneous model review (measured `models:` >=2 families) or a human review. A
 // single-model self-review covering the diff is treated as not-yet-reviewed for risky changes.
 // (Medium keeps review optional, so it is not subject to this; the audited override remains the
 // recorded approval-axis escape.)

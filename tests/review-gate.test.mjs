@@ -34,8 +34,8 @@ const HIGH = { 'src/big.ts': 'export const x = 1;\n'.repeat(120) }; // code, >10
 const LOW = { 'docs/notes.md': '# notes\nprose\n' };               // prose doc -> low
 const MED = { 'src/small.ts': 'export const x = 1;\n'.repeat(20) };  // code, <100 lines -> medium
 // Heterogeneity evidence the gate now requires for a HIGH/CRITICAL covering review (continuous
-// cross-review policy). A real reviewer doc carries `models:` (>=2 families) after the het pass,
-// or `codex-thread:` + a `primary-model:` from a different family than the adversary's.
+// cross-review policy). A real reviewer doc carries a measured `models:` line (>=2 families)
+// after the transcript-verified adversary pass — the ONLY het evidence form the gate accepts.
 const HET = 'models: claude, codex\n';
 
 function makeRepo(files) {
@@ -374,89 +374,39 @@ test('medium risk + matching review without het -> allow (het enforced only for 
   });
 });
 
-// A codex thread id alone proves a codex run happened, NOT that it was a second family: a
-// GPT/Codex-primary deployment running the codex CLI is a same-family self-review. The thread
-// fields therefore count only alongside a `primary-model:` whose family differs from the
-// adversary's. The adversary family is per-key: `adversary-model:` if declared; else gpt for
-// codex-thread/codex-session (a codex CLI thread implies a GPT/Codex run); else NOTHING for
-// adversary-thread/adversary-session (the adversary agent may auth-fall-back to the primary's
-// own family, so a missing/unparseable adversary-model fails closed).
+// Thread/session id fields are NO LONGER evidence (codex CLI fallback removed): an id proves a
+// run happened, not that a SECOND family reviewed the diff. The only het evidence is a measured
+// `models:` line (>=2 distinct families). Regression guards below pin the removal — every
+// combination the old thread path accepted now BLOCKS.
 
-test('het: codex-thread + primary-model of a DIFFERENT family -> allow; placeholder id -> BLOCK', () => {
+test('het regression: codex-thread + different-family primary-model -> BLOCK (thread path removed)', () => {
   withRepo(HIGH, (dir) => {
     writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: 019eda4f-64ee-7db3-9dcb-dafdd4e54aae\nprimary-model: anthropic/claude-fable-5\nVerdict: PASS\n`);
-    assert.equal(runGate(dir).status, 0);
-  });
-  withRepo(HIGH, (dir) => {
-    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: unavailable\nprimary-model: anthropic/claude-fable-5\nVerdict: PASS\n`);
     assert.equal(runGate(dir).status, 2);
   });
 });
 
-test('het: codex-thread WITHOUT primary-model -> BLOCK (thread id alone is not het evidence)', () => {
-  withRepo(HIGH, (dir) => {
-    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: 019eda4f-64ee-7db3-9dcb-dafdd4e54aae\nVerdict: PASS\n`);
-    assert.equal(runGate(dir).status, 2);
-  });
-});
-
-test('het: codex-thread + GPT-family primary-model -> BLOCK (honest same-family declaration)', () => {
-  for (const pm of ['gpt-5.4', 'openai/codex', 'o3']) {
-    withRepo(HIGH, (dir) => {
-      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: 019eda4f-64ee-7db3-9dcb-dafdd4e54aae\nprimary-model: ${pm}\nVerdict: PASS\n`);
-      assert.equal(runGate(dir).status, 2, `should block: primary-model: ${pm}`);
-    });
-  }
-});
-
-test('het: codex-thread + unparseable primary-model -> BLOCK (fail closed)', () => {
-  for (const pm of ['some-inhouse-model', 'my primary model']) {
-    withRepo(HIGH, (dir) => {
-      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: 019eda4f-64ee-7db3-9dcb-dafdd4e54aae\nprimary-model: ${pm}\nVerdict: PASS\n`);
-      assert.equal(runGate(dir).status, 2, `should block: primary-model: ${pm}`);
-    });
-  }
-});
-
-test('het: thread + explicit adversary-model of a DIFFERENT family -> allow (gpt primary is fine then)', () => {
-  withRepo(HIGH, (dir) => {
-    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nadversary-thread: 019eda4f64ee7db3\nprimary-model: gpt-5.4\nadversary-model: gemini-2.5-pro\nVerdict: PASS\n`);
-    assert.equal(runGate(dir).status, 0);
-  });
-});
-
-test('het: adversary-thread + claude primary WITHOUT adversary-model -> BLOCK (no gpt default for agent threads)', () => {
-  for (const key of ['adversary-thread', 'adversary-session']) {
-    withRepo(HIGH, (dir) => {
-      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\n${key}: 019eda4f-64ee-7db3-9dcb-dafdd4e54aae\nprimary-model: anthropic/claude-fable-5\nVerdict: PASS\n`);
-      assert.equal(runGate(dir).status, 2, `should block: ${key} without adversary-model`);
-    });
-  }
-});
-
-test('het: adversary-thread + explicit gpt adversary-model + claude primary -> allow', () => {
+test('het regression: adversary-thread + explicit different-family adversary-model -> BLOCK', () => {
   withRepo(HIGH, (dir) => {
     writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nadversary-thread: 019eda4f-64ee-7db3-9dcb-dafdd4e54aae\nprimary-model: anthropic/claude-fable-5\nadversary-model: gpt-5.4\nVerdict: PASS\n`);
-    assert.equal(runGate(dir).status, 0);
+    assert.equal(runGate(dir).status, 2);
   });
 });
 
-test('het: adversary-thread + same-family or unparseable adversary-model + claude primary -> BLOCK', () => {
-  for (const am of ['claude-opus-4', 'anthropic/sonnet-4', 'not-a-model']) {
+test('het regression: every thread/session key + full model fields -> BLOCK', () => {
+  for (const key of ['codex-thread', 'codex-session', 'adversary-thread', 'adversary-session']) {
     withRepo(HIGH, (dir) => {
-      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nadversary-thread: 019eda4f-64ee-7db3-9dcb-dafdd4e54aae\nprimary-model: claude-fable-5\nadversary-model: ${am}\nVerdict: PASS\n`);
-      assert.equal(runGate(dir).status, 2, `should block: adversary-model: ${am}`);
+      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\n${key}: 019eda4f64ee7db3\nprimary-model: gpt-5.4\nadversary-model: gemini-2.5-pro\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 2, `should block: ${key}`);
     });
   }
 });
 
-test('het: thread + explicit adversary-model of the SAME family (or unparseable) -> BLOCK', () => {
-  for (const am of ['claude-opus-4', 'anthropic/sonnet-4', 'not-a-model']) {
-    withRepo(HIGH, (dir) => {
-      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: 019eda4f-64ee-7db3-9dcb-dafdd4e54aae\nprimary-model: claude-fable-5\nadversary-model: ${am}\nVerdict: PASS\n`);
-      assert.equal(runGate(dir).status, 2, `should block: adversary-model: ${am}`);
-    });
-  }
+test('het regression: a thread field does not poison a doc that ALSO carries measured models: -> allow', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: 019eda4f-64ee-7db3-9dcb-dafdd4e54aae\nmodels: claude, gpt-5\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 0);
+  });
 });
 
 test('het: single provider/model or same-family models do NOT count (fail-open fix)', () => {
@@ -482,15 +432,6 @@ test('het: noise/unknown tokens do NOT inflate the family count (fail-open fix)'
     withRepo(HIGH, (dir) => {
       writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nmodels: ${m}\nVerdict: PASS\n`);
       assert.equal(runGate(dir).status, 2, `should block: models: ${m}`);
-    });
-  }
-});
-
-test('het: codex-thread with an INCIDENTAL hex (date/prose) does NOT count (fail-open fix)', () => {
-  for (const v of ['missing 20260618', 'not available deadbeef', 'attempted abcdef12']) {
-    withRepo(HIGH, (dir) => {
-      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: ${v}\nprimary-model: claude-fable-5\nVerdict: PASS\n`);
-      assert.equal(runGate(dir).status, 2, `should block: codex-thread: ${v}`);
     });
   }
 });
@@ -538,13 +479,6 @@ test('het v3: codex folds into gpt family (codex, gpt-5 = ONE) -> block; claude,
   });
 });
 
-test('het v3: malformed hyphen-padded thread id (----deadbeef) -> block', () => {
-  withRepo(HIGH, (dir) => {
-    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\ncodex-thread: ----deadbeef\nprimary-model: claude-fable-5\nVerdict: PASS\n`);
-    assert.equal(runGate(dir).status, 2);
-  });
-});
-
 test('het v3: codex-flagged substring spoofs (allama/ogpt/codexical) are rejected', () => {
   for (const m of ['allama, ogpt', 'codexical, claude', 'claude, ogpt']) {
     withRepo(HIGH, (dir) => {
@@ -561,6 +495,170 @@ test('het v3: negated/quoted-noise model fields do not pass', () => {
       assert.equal(runGate(dir).status, 2, `should block: models: ${m}`);
     });
   }
+});
+
+// --- het v4: sole-path hardening (models: is the only automatic evidence after thread removal) ---
+
+test('het v4: a `models-*` variant key (models-not-run:) is NOT the models field -> BLOCK', () => {
+  for (const key of ['models-not-run', 'models-attempted', 'models-skipped']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\n${key}: claude, gpt\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 2, `should block: ${key}: claude, gpt`);
+    });
+  }
+});
+
+test('het v4: negation pseudo-versions (claude-unavailable, codex-skipped) are NOT models -> BLOCK', () => {
+  for (const m of ['claude-unavailable, codex-skipped', 'gpt-skipped, claude-not-run', 'claude, codex-unavailable']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nmodels: ${m}\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 2, `should block: models: ${m}`);
+    });
+  }
+});
+
+test('het v4: real digit-bearing version suffixes still map (claude-opus-4-8, gpt-5.6-sol) -> allow', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nmodels: claude-opus-4-8, gpt-5.6-sol\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 0);
+  });
+});
+
+test('het v4: a models: line inside a Markdown code fence is a quoted example, not evidence -> BLOCK', () => {
+  for (const fence of ['```', '````', '~~~']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-x.md`,
+        `diff-hash: ${stagedHash(dir)}\n${fence}markdown\nmodels: claude, gpt\n${fence}\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 2, `should block: models: fenced with ${fence}`);
+    });
+  }
+});
+
+test('het v4: an UNTERMINATED fence swallows the rest of the doc (fail-closed) -> BLOCK', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\n\`\`\`\nmodels: claude, gpt\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 2);
+  });
+});
+
+test('het v4: a real models: line AFTER a properly closed fence still counts -> allow', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`,
+      `diff-hash: ${stagedHash(dir)}\n\`\`\`\nmodels: fenced, example\n\`\`\`\nmodels: claude, gpt\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 0);
+  });
+});
+
+// --- het v5: second-round hardening (digit-bearing negations, sanitized coverage, comment/fence edges) ---
+
+test('het v5: negation pseudo-versions survive digits (gpt-not-run-2 etc.) -> BLOCK', () => {
+  for (const m of ['claude-4, gpt-not-run-2', 'claude, codex-unavailable-2', 'gpt-5.6-skipped, claude', 'claude-unavailable-5, gpt']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nmodels: ${m}\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 2, `should block: models: ${m}`);
+    });
+  }
+});
+
+test('het v5: malformed tokens (empty segments) are not models -> BLOCK', () => {
+  for (const m of ['claude...4, gpt--5', 'claude-, gpt-5']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nmodels: ${m}\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 2, `should block: models: ${m}`);
+    });
+  }
+});
+
+test('het v5: real variant/codename aliases map (o3-mini, deepseek-r1, claude-3-5-sonnet) -> allow', () => {
+  for (const m of ['claude, o3-mini', 'deepseek-r1, claude-3-5-sonnet', 'gemini-2.5-pro, gpt-4-turbo-preview']) {
+    withRepo(HIGH, (dir) => {
+      writeReview(dir, `review-${TODAY}-x.md`, `diff-hash: ${stagedHash(dir)}\nmodels: ${m}\nVerdict: PASS\n`);
+      assert.equal(runGate(dir).status, 0, `should allow: models: ${m}`);
+    });
+  }
+});
+
+test('coverage v5: a diff-hash line inside a code fence is a quotation, not coverage -> BLOCK', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`,
+      `\`\`\`\ndiff-hash: ${stagedHash(dir)}\n\`\`\`\nmodels: claude, gpt\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 2);
+  });
+});
+
+test('coverage v5: evidence wrapped in a MULTI-LINE HTML comment is invisible -> BLOCK', () => {
+  // Rendered Markdown shows an empty doc; the gate must agree (het AND human paths).
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`,
+      `<!--\ndiff-hash: ${stagedHash(dir)}\nmodels: claude, gpt\nhuman-reviewed-by: donghyun\nVerdict: PASS\n-->\n`);
+    assert.equal(runGate(dir).status, 2);
+  });
+});
+
+test('coverage v5: commented-out models:/human fields do not count even when the hash line is live -> BLOCK', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`,
+      `diff-hash: ${stagedHash(dir)}\n<!--\nmodels: claude, gpt\nhuman-reviewed-by: donghyun\nVerdict: PASS\n-->\n`);
+    assert.equal(runGate(dir).status, 2);
+  });
+});
+
+test('het v5: a fence line with trailing text does NOT close the fence (CommonMark) -> BLOCK', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`,
+      `diff-hash: ${stagedHash(dir)}\n\`\`\`md\n\`\`\`not-a-close\nmodels: claude, gpt\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 2);
+  });
+});
+
+test('coverage v5: `diff-hash-<suffix>:` variant keys do not cover; a parenthesized qualifier does', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash-not-reviewed: ${stagedHash(dir)}\nmodels: claude, gpt\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 2);
+  });
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`, `diff-hash (initial review): ${stagedHash(dir)}\nmodels: claude, gpt\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 0);
+  });
+});
+
+test('fail-detect v5: a fenced `Verdict: FAIL` example does not veto a real PASS review -> allow', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`,
+      `diff-hash: ${stagedHash(dir)}\nmodels: claude, gpt\n\`\`\`\nVerdict: FAIL\n\`\`\`\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 0);
+  });
+});
+
+// --- sanitizer v6: 3rd-round review reproductions (fence state must be tracked FIRST) ---
+// Both attacks render as ONE code block containing the quoted evidence; the gate must agree.
+
+test('sanitizer v6: inline comment inside a fence must NOT fuse into a premature close -> BLOCK', () => {
+  // CommonMark: `<!--x-->` inside a fence is literal text. Stripping comments before fence
+  // tracking fused "`<!--x-->``" into "```", closing the fence and leaking the quoted
+  // diff-hash/models/Verdict lines below as live evidence (3rd-round review, confirmed #1).
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`,
+      `\`\`\`\n\`<!--x-->\`\`\ndiff-hash: ${stagedHash(dir)}\nmodels: claude, gpt\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 2);
+  });
+});
+
+test('sanitizer v6: a TAB-indented ``` is fence content, not a close (CommonMark 3-column limit) -> BLOCK', () => {
+  // A tab advances to column 4, past the 3-column fence-indent limit, so "\t```" inside an
+  // open fence is content — the old /^[ \t]{0,3}/ accepted it as a close and leaked the
+  // quoted evidence below (3rd-round review, confirmed #2).
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`,
+      `\`\`\`\n\t\`\`\`\ndiff-hash: ${stagedHash(dir)}\nmodels: claude, gpt\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 2);
+  });
+  // Guard the fail-closed direction too: a close indented <=3 SPACES is still a real close.
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-x.md`,
+      `\`\`\`\nquoted example\n   \`\`\`\ndiff-hash: ${stagedHash(dir)}\nmodels: claude, gpt\nVerdict: PASS\n`);
+    assert.equal(runGate(dir).status, 0);
+  });
 });
 
 // --- path (2): human review (verification axis) ---------------------------------
@@ -587,7 +685,7 @@ test('human review: multi-word identity is accepted', () => {
 });
 
 test('human review: identity that is a bare MODEL name does not count (spoof guard)', () => {
-  for (const who of ['claude', 'gpt-5', 'openai/codex']) {
+  for (const who of ['claude', 'gpt-5', 'openai/codex', 'o3-mini', 'deepseek-r1']) {
     withRepo(HIGH, (dir) => {
       writeReview(dir, `review-${TODAY}-h.md`, `diff-hash: ${stagedHash(dir)}\nhuman-reviewed-by: ${who}\nVerdict: PASS\n`);
       assert.equal(runGate(dir).status, 2, `should block: human-reviewed-by: ${who}`);
@@ -625,6 +723,14 @@ test('human review: empty/pending/unknown verdicts do NOT count -> BLOCK (fail-o
       assert.equal(runGate(dir).status, 2, `should block: Verdict:${v}`);
     });
   }
+});
+
+test('human review: fenced human-reviewed-by/Verdict lines are quoted examples, not evidence -> BLOCK', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${TODAY}-h.md`,
+      `diff-hash: ${stagedHash(dir)}\n\`\`\`\nhuman-reviewed-by: donghyun\nVerdict: PASS\n\`\`\`\n`);
+    assert.equal(runGate(dir).status, 2);
+  });
 });
 
 test('human review: diff-hash mismatch -> BLOCK, message teaches path 2/3 with the REAL hash', () => {
