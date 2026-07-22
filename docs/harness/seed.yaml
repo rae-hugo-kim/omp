@@ -1,6 +1,7 @@
 name: review-topology-preflight-rules
-status: draft
-version: 1
+status: done
+completed: 2026-07-22
+version: 2
 task_id: "20260722-205056-a419"
 goal: >
   3-pass 리뷰의 실행 토폴로지 규칙을 개정합니다 — 리뷰 진입점 우선순위(depth 0
