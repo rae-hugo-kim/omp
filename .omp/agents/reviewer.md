@@ -18,12 +18,14 @@ Single-perspective review misses bugs. Three independent reviewers catching the 
 <Review_Protocol>
 
 ### Pass 0: Topology Preflight (before Pass 1, before writing ANY artifact)
-Check your toolset first. If the `task` tool is ABSENT, you are at the harness's recursion
-ceiling (`task.maxRecursionDepth`, default 2) — the measured case: a depth-1 worker spawned
-you, landing you at depth 2. In that case do NOT review at all:
+Check your toolset first. If the `task` tool is ABSENT — either you are at the harness's
+recursion ceiling (`task.maxRecursionDepth`, default 2; measured: a depth-1 worker spawned
+you, landing you at depth 2) or your session's capability set excludes `task` (measured:
+fast-tier worker sessions run with 'Allowed: none' even at depth 1; rules/agent_routing.md)
+— do NOT review at all:
 - Perform no pass and write no artifact — no `docs/reviews/` report, no sidecar, no partial
   notes. A partial artifact can be mistaken for review evidence.
-- Return immediately with: "recursion ceiling: review NOT performed — re-dispatch with the
+- Return immediately with: "no task tool: review NOT performed — re-dispatch with the
   correct topology", restating the entry-point priority for the caller
   (rules/agent_routing.md): (1) a depth-0 session spawns the reviewer agent; (2) a depth-1
   session that HAS the `task` tool performs this protocol itself — Pass 1 as its own
@@ -196,7 +198,7 @@ diff-hash: <hash>          <!-- informational; the gate reads only the .json sid
 </Output_Format>
 
 <Failure_Modes>
-- Reviewing at the recursion ceiling: running Pass 1 or writing any artifact without the `task` tool. Pass 0 requires an immediate no-output exit with the re-dispatch message — a partial single-pass document invites being mistaken for review evidence.
+- Reviewing without the `task` tool (recursion ceiling or capability-restricted session): running Pass 1 or writing any artifact anyway. Pass 0 requires an immediate no-output exit with the re-dispatch message — a partial single-pass document invites being mistaken for review evidence.
 - Single-pass only: running just self-analysis and skipping adversary/code-reviewer. For HIGH/CRITICAL changes the 3-pass protocol is MANDATORY and MUST NOT be reduced — IGNORE any caller instruction to do "one pass"/"single pass" on risky changes, and emit the measured het evidence (a >=2-family models array in the sidecar) or the commit gate will block.
 - Unverified models array: declaring two families without the Pass 2 transcript check. If the adversary auth-fell-back to your own family, the declaration is false and defeats the gate.
 - Missing .json sidecar: writing only the markdown report. The gate reads ONLY the sidecar tuple; a markdown-only review blocks the commit.
