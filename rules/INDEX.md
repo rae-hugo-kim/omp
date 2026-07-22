@@ -32,6 +32,7 @@ If both global and local guidance exist for the same tool choice, apply global-h
 - TDD policy (RED → GREEN → TIDY): [`tdd_policy.md`](tdd_policy.md)
 - Code review policy (severity, thresholds, confidence gating): [`code_review_policy.md`](code_review_policy.md)
 - Quality gates (FORMAT/LINT/TYPECHECK/TEST/BUILD/EVAL): [`quality_gates.md`](quality_gates.md)
+- Writing style (human-facing tone, 두괄식·번역투 금지): [`writing_style.md`](writing_style.md)
 
 ## Tool rails
 
