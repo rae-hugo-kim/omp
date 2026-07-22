@@ -151,6 +151,7 @@ Harness 검증 계약 세부 사항: [`rules/harness_integration_contract.md`](.
 - Learning policy: [`rules/learning_policy.md`](../rules/learning_policy.md)
 - Coding standards: [`rules/coding_standards.md`](../rules/coding_standards.md)
 - Documentation standards: [`rules/doc_standards.md`](../rules/doc_standards.md)
+- Writing style (human-facing tone): [`rules/writing_style.md`](../rules/writing_style.md)
 - Agent security: [`rules/agent_security.md`](../rules/agent_security.md)
 - Hook recipes: [`rules/hook_recipes.md`](../rules/hook_recipes.md)
 - Session persistence: [`rules/session_persistence.md`](../rules/session_persistence.md)
