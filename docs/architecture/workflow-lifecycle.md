@@ -146,7 +146,8 @@ MCP 필요 시:
    → Pass 2: adversary 에이전트 중첩 스폰 (@advisor 롤, 이종 계열 — 트랜스크립트 model_change 실측)
    → Pass 3: code-reviewer 에이전트 중첩 스폰 (`.omp/agents/` 프로젝트 정의 — OMC 불요)
    → 3개 결과 교차 검증
-   → docs/reviews/review-YYYY-MM-DD-HHMMSS.md 기록
+   → docs/reviews/review-YYYY-MM-DD-HHMMSS.md (사람용 보고서)
+     + 동일 베이스명 .json 사이드카 (기계 증거 — 게이트가 읽는 유일한 파일)
    → Verdict: PASS / PASS WITH NOTES / FAIL
 
 3. verifier 호출 (AC 있을 때 필수)
@@ -180,13 +181,18 @@ git commit 시도
      → low → 통과
      → medium + 리뷰 없음 → 경고
      → high/critical + 2차 관점 증거 없음 → 차단
-       (인정 증거: ① 이종 모델 리뷰 — 실측 models: 2계열 이상
-          (thread/session id 필드는 증거 불인정)
-        ② human-review — human-reviewed-by: + Verdict: PASS|PASS WITH NOTES
+       (기계 증거 = 오늘자 review-*.json 사이드카의 strict 위치 기반 JSON tuple:
+          ["omp-review-evidence/v1", diff_hash(hex64),
+           "PASS"|"PASS WITH NOTES"|"FAIL", models|null, human|null, reviewer]
+        — 마크다운은 파싱하지 않음(.md는 사람용 보고서); tuple에는 키가 없어
+          중복 키 last-wins 주입이 구조적으로 불가, 스키마 위반 파일은 경고 후 무시)
+       (증거축: ① 이종 모델 리뷰 — 실측 models 배열 2계열 이상
+          (thread/session id는 증거 불인정)
+        ② human-review — human_reviewed_by에 사람 식별자 (모델명 불인정)
         ③ 감사된 override)
-     → 리뷰 FAIL → 차단
-     → review-skip에 reason/approved-by/diff-hash 필드가 모두 있으면
-       → audit.jsonl에 review_override 기록 후 통과 (bare 플래그는 차단;
+     → 커버하는 tuple의 verdict FAIL → 차단
+     → review-skip이 ["omp-review-override/v1", reason, approved_by, diff_hash] tuple이면
+       → audit.jsonl에 review_override 기록 후 통과 (bare/비-tuple 플래그는 차단;
           audit.jsonl이 git 추적 중이면 `git commit -a`에서는 소비 불가 — fail-closed)
 
   전부 통과하면 커밋 성공
@@ -225,8 +231,8 @@ flowchart LR
     subgraph override["오버라이드"]
         O1["불필요"]
         O2["불필요"]
-        O3["backpressure-skip<br/>review-skip (감사된 override:<br/>reason·approved-by·diff-hash)"]
-        O4["backpressure-skip<br/>review-skip (감사된 override)<br/>⚠️ 사용자 확인 필수"]
+        O3["backpressure-skip<br/>review-skip (감사된 override tuple:<br/>omp-review-override/v1·reason·approved_by·diff_hash)"]
+        O4["backpressure-skip<br/>review-skip (감사된 override tuple)<br/>⚠️ 사용자 확인 필수"]
     end
 
     R1 --> G1 --> O1
@@ -277,7 +283,7 @@ sequenceDiagram
     Note over RV: Pass 1: 자체 분석
     Note over RV: Pass 2: adversary 중첩 스폰 (이종 계열)
     Note over RV: Pass 3: code-reviewer 중첩 스폰
-    RV-->>M: PASS WITH NOTES (docs/reviews/에 기록)
+    RV-->>M: PASS WITH NOTES (docs/reviews/에 md 보고서 + json 사이드카 기록)
 
     M->>VF: "AC 검증"
     VF-->>M: PASS (4/4 AC 충족)

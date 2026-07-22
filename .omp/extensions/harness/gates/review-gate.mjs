@@ -6,21 +6,50 @@
 // - medium risk + no review → WARNING (recommend reviewer)
 // - low risk → PASS (docs/config don't need adversarial review)
 //
+// MACHINE EVIDENCE IS JSON, NEVER MARKDOWN. Seven adversarial review rounds each produced a fresh
+// CommonMark quoting/hiding bypass against the previous line-based markdown evidence parser
+// (fences, tabs, blockquotes, indented code, list indents, comment-manufactured openers, lazy
+// continuation, opener/closer state inversion). Emulating a markdown renderer line-by-line was
+// judged non-convergent as a security boundary, so the gate no longer reads .md files AT ALL.
+// Review markdown under docs/reviews/ is a human report; the gate reads only the same-basename
+// .json sidecar.
+//
+// Evidence sidecar — docs/reviews/review-<YYYY-MM-DD-HHMMSS>.json — is a single FIXED-ARITY
+// POSITIONAL JSON ARRAY (tuple). A tuple has no keys, so duplicate-key last-wins injection
+// ({"verdict":"FAIL",…,"verdict":"PASS"} under JSON.parse) is structurally impossible and no
+// hand-rolled raw-text scanning is needed:
+//   ["omp-review-evidence/v1",
+//    "<diff_hash: 64 lowercase hex>",
+//    "<verdict: PASS | PASS WITH NOTES | FAIL>",
+//    ["<model>", "<model>", …] | null,       // models: transcript-MEASURED, >=2 distinct families
+//    "<human_reviewed_by>" | null,           // a person's identity — never a model name
+//    "<reviewer>"]                           // who produced the evidence (non-empty)
+// Validation = JSON.parse + Array.isArray + exact arity + per-position type/enum/pattern checks.
+// Anything else — object form, wrong magic, extra/missing elements, unknown verdict, non-hex hash,
+// an unparseable model token, a single-family models list, unfilled <placeholder> values, or a
+// PASS-family verdict with both evidence axes null — makes the FILE invalid: it is ignored with a
+// warning (fail-closed; an ignored file grants nothing). A FAIL verdict is exempt from the
+// evidence-axis requirement: it is a block signal, not a grant, and an honest FAIL must stay
+// valid so a covering PASS can never outrank it.
+//
 // Accepted evidence for HIGH/CRITICAL — the verification axis and the approval axis are separate:
-//   (1) heterogeneous model review [verification] — a covering review doc (docs/reviews/review-<today>*)
-//       carrying the effective diff hash plus a measured `models:` line naming >=2 distinct model
-//       families (the reviewer writes it only after transcript-verifying the adversary's family).
-//   (2) human review [verification] — a covering review doc carrying the effective diff hash plus a
-//       `human-reviewed-by:` identity and an explicit `Verdict:` line. For single-model deployments
-//       that cannot honestly produce (1), the USER reading the diff is the second perspective.
-//   (3) audited override [approval, no verification] — docs/harness/review-skip carrying
-//       `reason:` / `approved-by:` / `diff-hash:` fields. The gate binds it to THIS commit's diff,
-//       appends a `review_override` event to docs/harness/audit.jsonl ({ts,event,actor,meta} — the
-//       adversarial_override precedent), and consumes the flag. A BARE review-skip file no longer
-//       bypasses anything: there is deliberately no unaudited escape hatch.
+//   (1) heterogeneous model review [verification] — a covering evidence tuple (diff_hash matches
+//       the effective committed diff) whose models array names >=2 distinct model families,
+//       written only after the reviewer transcript-verified the adversary's resolved family.
+//   (2) human review [verification] — a covering evidence tuple whose human_reviewed_by is a real
+//       identity (not a model name). For single-model deployments that cannot honestly produce
+//       (1), the USER reading the diff is the second perspective.
+//   (3) audited override [approval, no verification] — docs/harness/review-skip containing the
+//       override tuple ["omp-review-override/v1", "<reason>", "<approved_by>", "<diff_hash>"].
+//       The gate binds it to THIS commit's diff, appends a `review_override` event to
+//       docs/harness/audit.jsonl ({ts,event,actor,meta} — the adversarial_override precedent),
+//       and consumes the flag. A BARE or non-tuple review-skip file bypasses nothing: there is
+//       deliberately no unaudited escape hatch.
+// A covering tuple with verdict FAIL blocks regardless of any covering PASS (the block signal
+// wins); when the diff hash cannot be computed the gate fails closed on high/critical.
 // Exit 0 = allow, Exit 2 = block
 
-import { readFileSync, existsSync, appendFileSync, mkdirSync, readdirSync, unlinkSync } from 'fs';
+import { readFileSync, readSync, existsSync, appendFileSync, mkdirSync, opendirSync, unlinkSync, openSync, fstatSync, closeSync, constants as fsConstants } from 'fs';
 import { join } from 'path';
 import { execSync } from 'child_process';
 import { assessRisk } from './risk-assess.mjs';
@@ -32,22 +61,9 @@ function getStateDir(cwd) {
   return dir;
 }
 
-// Decide whether today's reviews cover the current diff and whether any covering
-// review is a FAIL. `reviews` is [{ name, content }]; `currentHash` is the
-// effective committed-diff hash (or null when it could not be produced).
-// - A review "covers" the diff when it carries the hash in a `diff-hash` FIELD at
-//   the start of a line (optionally behind Markdown list/quote/bold markers), e.g.
-//   "diff-hash: <h>" or "diff-hash (initial review): <h>" or "- **diff-hash: <h>**".
-//   A bare hash in prose, or a different field like "previous-diff-hash:", does NOT
-//   count — the field must begin the line so it asserts coverage, not just mention it.
-// - ALL of today's reviews are scanned (not just the lexicographically-last one),
-//   so several PRs landing the same day don't shadow each other.
-// - FAIL blocks only when it covers the current diff; if the hash is unknown we
-//   fall back to any of today's reviews so an explicit FAIL still blocks.
-// - matchedCurrent is true/false when a hash exists, or null when it could not be
-//   computed (the gate treats null as "unverified" and fails closed on high/critical).
-// Map a token to a model FAMILY, or null if it is not a single clean model name. The token must be
-// ENTIRELY `[provider/]<alias><suffix?>` — the alias is a known model word; the suffix is analyzed
+// Map a token to a model FAMILY, or null if it is not a single clean model name. Used to validate
+// the models array (position 3) of an evidence tuple. The token must be ENTIRELY
+// `[provider/]<alias><suffix?>` — the alias is a known model word; the suffix is analyzed
 // SEGMENT BY SEGMENT (split on `-`/`.`), and every segment must be one of:
 //   - a version segment starting with a digit ("4", "5.6", "8x7b") or letter+digit codename ("r1", "4o"),
 //   - a same-family sub-alias ("claude-opus-4-8", "claude-3-5-sonnet"),
@@ -57,10 +73,18 @@ function getStateDir(cwd) {
 // "gpt-skipped", "claude-unavailable-5", "gpt-not-run-2" are negated declarations, not versions,
 // no matter how many digits they carry. Empty segments ("claude...4", "gpt--5") are malformed and
 // reject. Unknown words BEFORE any version digit reject (fail-closed: "octopus", "gptscript",
-// "codex skipped", bare providers all stay non-models).
-// Codex folds into the gpt (OpenAI) family, so "codex, gpt-5" is ONE family, while "claude, codex" is two.
+// bare providers all stay non-models).
+// Codex folds into the gpt (OpenAI) family, so ["codex", "gpt-5"] is ONE family, while
+// ["claude", "codex"] is two.
 const MODEL_ALIAS = /^(?:claude|sonnet|opus|haiku|codex|gpt|o[1-9]|gemini|bard|grok|llama|mistral|mixtral|deepseek|qwen)$/;
-const NEGATION_WORD = /^(?:not?|none|never|nil|null|na|void|skip|skipped|skipping|unavailable|unverified|unused|unrun|missing|absent|omitted|pending|disabled|failed|fail|failing|error|errored|without|run)$/;
+const NEGATION_STEMS = 'not?|none|never|nil|null|na|void|skip|skipped|skipping|unavailable|unverified|unused|unrun|missing|absent|omitted|pending|disabled|failed|fail|failing|error|errored|without|run';
+const NEGATION_WORD = new RegExp(`^(?:${NEGATION_STEMS})$`);
+// Prefix form: a fused negation ("skippedrun", "notactuallyrun") or a negation-shaped provider
+// ("skipped/gpt-5") is a negated declaration too — the freedom the codename/provider positions
+// grant must not launder a negation word into a "model". Over-blocks exotic legit names that
+// happen to start with a negation stem (e.g. a "nousresearch/" provider prefix); the reviewer can
+// always write the bare canonical model id instead — fail-closed.
+const NEGATION_PREFIX = new RegExp(`^(?:${NEGATION_STEMS})`);
 const VARIANT_WORD = /^(?:mini|nano|micro|lite|tiny|small|medium|large|max|plus|ultra|pro|air|flash|turbo|preview|exp|experimental|latest|stable|beta|alpha|instruct|chat|coder|vision|thinking|reasoner|sonic|high|low)$/;
 function familyOf(alias) {
   if (/^(?:claude|sonnet|opus|haiku)$/.test(alias)) return 'claude';
@@ -69,7 +93,10 @@ function familyOf(alias) {
   return alias; // grok | llama | mistral | mixtral | deepseek | qwen
 }
 function modelFamily(tok) {
-  const e = String(tok).toLowerCase().trim().replace(/^[a-z][a-z0-9.-]*\//, ''); // drop one provider/ prefix
+  const raw = String(tok).toLowerCase().trim();
+  const prov = raw.match(/^([a-z][a-z0-9.-]*)\//);                // at most one provider/ prefix
+  if (prov && NEGATION_PREFIX.test(prov[1])) return null;         // "skipped/gpt-5" is a negation, not a provider
+  const e = prov ? raw.slice(prov[0].length) : raw;
   const m = e.match(/^(claude|sonnet|opus|haiku|codex|gpt|o[1-9]|gemini|bard|grok|llama|mistral|mixtral|deepseek|qwen)([-.][a-z0-9.-]*|\d[a-z0-9.-]*)?$/);
   if (!m) return null;
   const family = familyOf(m[1]);
@@ -84,199 +111,209 @@ function modelFamily(tok) {
       continue;
     }
     if (VARIANT_WORD.test(seg)) continue;                         // "mini", "pro", "turbo", …
-    if (versionStarted && /^[a-z][a-z0-9]*$/.test(seg)) continue; // post-version codename ("5.6-sol")
+    if (versionStarted && /^[a-z][a-z0-9]*$/.test(seg) && !NEGATION_PREFIX.test(seg)) continue; // post-version codename ("5.6-sol"), never negation-shaped ("skippedrun")
     return null;                                                  // unknown word before a version: not a model
   }
   return family;
 }
 
-// Reduce a doc to the lines that ASSERT something in the rendered review — the single sanitized
-// view every evidence axis (coverage, FAIL detection, het, human) reads. ONE pass, line by line,
-// with FENCE STATE CHECKED FIRST: in CommonMark everything inside a code fence is literal text,
-// including `<!-- -->`, so comment stripping must never touch fenced lines. (Stripping comments
-// over the whole text first let a fenced "`<!--x-->``" fuse into "```" and close the fence early,
-// leaking the quoted evidence below it as live lines — fail-open.)
-//   1) Markdown code fences (``` / ~~~): an opening fence may carry an info string, but a CLOSING
-//      fence is the same character, at least the opening length, nothing else on the line, and
-//      indented at most 3 COLUMNS — a tab advances to the next multiple of 4, so any tab-indented
-//      delimiter is fence CONTENT, not a close. An unterminated fence runs to EOF. Fenced lines
-//      and the delimiters themselves are never yielded: a fenced `models:` line is an EXAMPLE
-//      being quoted (e.g. the reviewer.md template), not a declaration.
-//   2) HTML comments OUTSIDE fences are stripped — commented-out text is invisible in rendered
-//      Markdown, so a `models:`/`diff-hash:`/`Verdict:` line inside `<!-- … -->` asserts nothing.
-//      A multi-line comment leaves its opening line's prefix and closing line's remainder on
-//      SEPARATE output lines, so surrounding text can never fuse into a new field line. An
-//      unterminated `<!--` swallows the rest of the doc (fail-closed: hidden text can only
-//      remove evidence, never add it).
-function evidenceLines(content) {
-  const out = [];
-  let open = null;     // { ch, len } of the active opening fence
-  let comment = false; // inside a multi-line HTML comment (outside any fence)
-  for (const raw of String(content).split(/\r?\n/)) {
-    if (open) {
-      const c = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(raw);
-      if (c && c[1][0] === open.ch && c[1].length >= open.len) open = null;
-      continue; // inside the fence, or its closing delimiter: never yielded
-    }
-    let line = raw;
-    if (comment) {
-      const end = line.indexOf('-->');
-      if (end === -1) continue; // whole line is comment-hidden
-      comment = false;
-      line = line.slice(end + 3);
-    }
-    line = line.replace(/<!--[\s\S]*?-->/g, '');
-    const start = line.indexOf('<!--');
-    if (start !== -1) { comment = true; line = line.slice(0, start); }
-    const f = /^[ \t]{0,3}(`{3,}|~{3,})/.exec(line);
-    if (f) { open = { ch: f[1][0], len: f[1].length }; continue; }
-    out.push(line);
-  }
-  return out;
-}
+const EVIDENCE_MAGIC = 'omp-review-evidence/v1';
+const OVERRIDE_MAGIC = 'omp-review-override/v1';
+const HEX64 = /^[0-9a-f]{64}$/;
+const VERDICTS = new Set(['PASS', 'PASS WITH NOTES', 'FAIL']);
 
-// Parse simple `key: value` fields from a small text file / review doc — the SAME line grammar
-// the het parser tolerates (Markdown list/quote/bold prefixes, CRLF, backticks), over the SAME
-// sanitized view (evidenceLines: fenced or comment-hidden lines are quoted examples, not fields).
-// Returns lowercased key -> first non-empty value seen.
-function parseFields(content) {
-  const fields = {};
-  for (const raw of evidenceLines(content)) {
-    const m = /^[ \t>*-]*(?:\d+[.)][ \t]*)?\*{0,2}([a-z][a-z-]*)\*{0,2}[ \t]*:\*{0,2}[ \t]*(.*)$/i.exec(raw);
-    if (!m) continue;
-    const key = m[1].toLowerCase();
-    const val = m[2].replace(/[*`]/g, '').trim();
-    if (val && !(key in fields)) fields[key] = val;
-  }
-  return fields;
+const isNonEmptyString = (v) => typeof v === 'string' && v.trim().length > 0;
+// An unfilled template placeholder ("<your name>", "<who accepts the risk>") pasted verbatim from
+// the BLOCK message must never count as a real value — identities/reasons may not contain angle
+// brackets at all (fail-closed; no plausible identity needs them).
+const hasPlaceholder = (v) => /[<>]/.test(v);
+// Zero-width/format characters can smuggle a model name past token checks ("\u200bclaude").
+const stripInvisible = (v) => v.replace(/[\u00ad\u200b-\u200f\u2060\ufeff]/g, '');
+// True when ANY whitespace token of the identity (punctuation-trimmed, invisibles stripped)
+// parses as a model name — "OpenAI GPT-5" is a model description, not a person.
+function namesAModel(identity) {
+  return stripInvisible(identity).split(/\s+/).some((t) => {
+    const tok = t.replace(/^[^0-9a-z]+|[^0-9a-z]+$/gi, '');
+    return tok !== '' && modelFamily(tok) !== null;
+  });
 }
+const clip = (s, n) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
-// Heterogeneity evidence for a HIGH/CRITICAL review (continuous-cross-review policy). Accepts ONLY
-// a field whose key is EXACTLY `models` — `models-*`/`models_*` variants ("models-not-run:",
-// "models-attempted:") are somebody describing models, not the contract's declaration, and matching
-// them was a fail-open — where EVERY token is a clean model name (see modelFamily) AND >=2 DISTINCT
-// families are named. A single stray non-model token (noise, a negated "no codex"/"codex skipped"/
-// "codex-skipped"/"gpt-not-run-2", a bare provider) makes the whole list not count. Lines inside
-// Markdown code fences or HTML comments are ignored (see evidenceLines): a quoted or commented-out
-// template example is not evidence. Thread/session id fields (`codex-thread:`,
-// `adversary-session:`, …) are deliberately NOT evidence: an id proves a run happened, not that a
-// SECOND family reviewed the diff — the reviewer contract requires the adversary transcript's
-// `model_change` to be measured and expressed as `models:` (or the doc is routed to the
-// human-review / audited-override paths).
-// Markdown emphasis, list/quote/numbered prefixes, CRLF, and inline HTML comments are tolerated.
-// The gate enforces that real evidence is PRESENT and internally consistent; truthfulness of the
-// declaration is still the reviewer contract's job.
-function isHetEvidence(content) {
-  for (const raw of evidenceLines(content)) {
-    const m = /^[ \t>*-]*(?:\d+[.)][ \t]*)?\*{0,2}([a-z][a-z-]*)\*{0,2}[ \t]*:\*{0,2}[ \t]*(.*)$/i.exec(raw);
-    if (!m) continue;
-    if (m[1].toLowerCase() !== 'models') continue;
-    const val = m[2].replace(/[*`]/g, '').trim();
-    if (!val) continue;
-    const toks = val.split(/[,&+/]|\s+/).map((s) => s.trim()).filter(Boolean);
-    if (toks.length < 2) continue;
-    const fams = new Set();
-    let allModels = true;
-    for (const tok of toks) { const f = modelFamily(tok); if (!f) { allModels = false; break; } fams.add(f); }
-    if (allModels && fams.size >= 2) return true;
+// Parse + validate one evidence sidecar. Returns
+//   { ok: true, diffHash, verdict, families (Set|null), human (string|null), reviewer }
+// or
+//   { ok: false, problems: [...] }   — the caller warns and IGNORES the file (fail-closed).
+// Every check is positional and exact: no key allowlists, no duplicate-key scanning, no
+// case-folding, no markdown tolerance. The templates in evidenceHelp() carry the real hash;
+// their <placeholder> parts MUST be filled in — pasting them verbatim is rejected, not accepted.
+// Iterative (explicit-stack) container-depth probe — the guard itself must be recursion-free or a
+// deep payload would blow OUR stack, which is the exact crash it exists to prevent. A legitimate
+// tuple has containers at depth 1 (the tuple) and depth 2 (the models array) only.
+function tooDeep(v, maxDepth) {
+  const stack = [[v, 1]];
+  while (stack.length > 0) {
+    const [node, d] = stack.pop();
+    if (node === null || typeof node !== 'object') continue;
+    if (d > maxDepth) return true;
+    for (const child of (Array.isArray(node) ? node : Object.values(node))) {
+      if (child !== null && typeof child === 'object') stack.push([child, d + 1]);
+    }
   }
   return false;
 }
 
-// Human-review evidence (verification axis, path 2): the USER read the diff. Requires a
-// `human-reviewed-by:` field whose first token is a real identity — non-empty and NOT a bare model
-// name (`human-reviewed-by: claude` is a spoof, not a person; same anti-spoof stance as modelFamily) —
-// AND a `Verdict:` whose value is on the explicit PASS whitelist: `PASS` or `PASS WITH NOTES`.
-// An empty, pending, or unknown verdict (`Verdict:`, `Verdict: PENDING`, `Verdict: NEEDS REVIEW`)
-// states no accepted outcome and does NOT count — fail closed (a covering FAIL additionally blocks
-// via hasFail). Both fields are read from the sanitized view (evidenceLines): a fenced or
-// commented-out `human-reviewed-by:`/`Verdict: PASS` is a quoted example, not a declaration.
-// Coverage (the diff-hash field) is checked by evaluateReviews like any other review, and the doc
-// must be a TODAY review (filename scan) — that supplies the timestamp requirement. As with het
-// evidence, the gate enforces the evidence is PRESENT and well-formed; truthfulness of the
-// declaration rests with the human who wrote it.
-function isHumanEvidence(content) {
-  const who = parseFields(content)['human-reviewed-by'];
-  if (!who || modelFamily(who.split(/\s+/)[0])) return false;
-  const m = /^[ \t>*#-]*\*{0,2}verdict\*{0,2}[ \t]*:\*{0,2}[ \t]*(.*)$/im.exec(evidenceLines(content).join('\n'));
-  if (!m) return false;
-  const verdict = m[1].replace(/[*`]/g, '').trim().toUpperCase();
-  return /^PASS(?:\s+WITH\s+NOTES)?$/.test(verdict);
+function parseEvidence(text) {
+  let t;
+  try {
+    t = JSON.parse(text); // a pathologically deep payload throws RangeError here — caught, invalid
+  } catch (e) {
+    return { ok: false, problems: [`not valid JSON (${clip(String(e.message), 120)})`] };
+  }
+  if (!Array.isArray(t)) return { ok: false, problems: ['not a JSON array — evidence is a positional tuple, not an object'] };
+  if (t.length !== 6) return { ok: false, problems: [`wrong arity: expected exactly 6 elements, got ${t.length}`] };
+  // Depth gate BEFORE any per-element work: everything below may only ever see flat values, so no
+  // later step (including diagnostics) can recurse into attacker-shaped nesting.
+  if (tooDeep(t, 2)) return { ok: false, problems: ['nesting too deep — a tuple holds only strings, null, and the flat models string array'] };
+  const problems = [];
+  if (t[0] !== EVIDENCE_MAGIC) problems.push(`element 0 must be the literal "${EVIDENCE_MAGIC}"`);
+  if (typeof t[1] !== 'string' || !HEX64.test(t[1])) problems.push('element 1 (diff_hash) must be 64 lowercase hex chars (git diff … | shasum -a 256)');
+  if (typeof t[2] !== 'string' || !VERDICTS.has(t[2])) problems.push('element 2 (verdict) must be exactly "PASS", "PASS WITH NOTES", or "FAIL"');
+  let families = null;
+  if (t[3] !== null) {
+    if (!Array.isArray(t[3]) || t[3].length === 0) {
+      problems.push('element 3 (models) must be null or a non-empty array of model-name strings');
+    } else if (t[3].length > 16) {
+      problems.push('element 3 (models) has implausibly many entries (max 16)');
+    } else {
+      families = new Set();
+      for (let i = 0; i < t[3].length; i++) {
+        const entry = t[3][i];
+        if (typeof entry !== 'string') { problems.push(`element 3 (models) entry ${i} must be a string`); families = null; break; }
+        const fam = modelFamily(entry);
+        if (!fam) { problems.push(`element 3 (models) entry "${clip(entry, 60)}" is not a clean model name`); families = null; break; }
+        families.add(fam);
+      }
+      if (families && families.size < 2) {
+        problems.push('element 3 (models) must name >=2 DISTINCT model families (codex folds into gpt) — a single-family list is not heterogeneity evidence; use null and the human path instead');
+        families = null;
+      }
+    }
+  }
+  let human = null;
+  if (t[4] !== null) {
+    if (!isNonEmptyString(t[4])) {
+      problems.push('element 4 (human_reviewed_by) must be null or a non-empty identity string');
+    } else if (hasPlaceholder(t[4])) {
+      problems.push('element 4 (human_reviewed_by) looks like an unfilled template placeholder — write the actual identity, without angle brackets');
+    } else if (namesAModel(t[4])) {
+      problems.push(`element 4 (human_reviewed_by) "${clip(t[4], 60)}" names a model, not a person`);
+    } else {
+      human = t[4];
+    }
+  }
+  // The evidence axis (measured models or a human identity) is required to GRANT anything —
+  // i.e. for the PASS-whitelist verdicts. A FAIL is a block signal, not a grant: an honest FAIL
+  // with both axes null must stay valid, or ignoring it would let a covering PASS win over a
+  // covering FAIL (fail-open). Unknown verdicts already invalidate the file above.
+  if (t[2] !== 'FAIL' && t[3] === null && t[4] === null) problems.push('one evidence axis is required for a PASS verdict: element 3 (models, >=2 families) or element 4 (human_reviewed_by)');
+  if (!isNonEmptyString(t[5])) problems.push('element 5 (reviewer) must be a non-empty string');
+  else if (hasPlaceholder(t[5])) problems.push('element 5 (reviewer) looks like an unfilled template placeholder — write the actual reviewer identity, without angle brackets');
+  if (problems.length > 0) return { ok: false, problems };
+  return { ok: true, diffHash: t[1], verdict: t[2], families, human, reviewer: t[5] };
 }
 
-function evaluateReviews(reviews, currentHash) {
-  // EVERY axis — coverage, FAIL detection, het, human — reads the SAME sanitized view
-  // (evidenceLines): a diff-hash or Verdict line inside a code fence or HTML comment is a
-  // quotation, not an assertion. Consistency matters both ways: a fenced diff-hash must not
-  // grant coverage (fail-open), and a fenced `Verdict: FAIL` example must not veto a doc whose
-  // real verdict is PASS (over-blocking).
-  // Coverage grammar: the field must BE `diff-hash`, optionally followed by ONE parenthesized
-  // qualifier — "diff-hash: <h>", "diff-hash (initial review): <h>", "- **diff-hash: <h>**"
-  // cover; "previous-diff-hash: <h>" and "diff-hash-not-reviewed: <h>" describe, so they don't.
-  const sanitized = reviews.map((r) => ({ name: r.name, text: evidenceLines(r.content).join('\n'), content: r.content }));
-  const covers = currentHash
-    ? (text) => new RegExp(`^[ \\t>*-]*\\*{0,2}diff-hash\\b(?:[ \\t]*\\([^()\\n]*\\))?\\*{0,2}[ \\t]*:\\*{0,2}[ \\t]*${currentHash}\\b`, 'm').test(text)
-    : () => false;
-  // Heterogeneity is detected by isHetEvidence() (family-counting parser, above): a single-model or
-  // placeholder-field review does not satisfy it. Human review is detected by isHumanEvidence().
-  const matching = currentHash ? sanitized.filter((r) => covers(r.text)) : [];
-  const failScope = matching.length > 0 ? matching : (currentHash ? [] : sanitized);
-  const hasFail = failScope.some((r) => /Verdict:\s*FAIL/i.test(r.text));
-  const matchedCurrent = currentHash ? matching.length > 0 : null;
-  const matchedHet = currentHash ? matching.some((r) => isHetEvidence(r.content)) : null;
-  const matchedHuman = currentHash ? matching.some((r) => isHumanEvidence(r.content)) : null;
+// Validate the audited-override flag file (path 3) — the SAME strict-tuple grammar as evidence:
+//   ["omp-review-override/v1", "<reason>", "<approved_by>", "<diff_hash | UNVERIFIABLE>"]
+// diff_hash must equal the effective committed-diff hash, or be the literal UNVERIFIABLE when
+// (and only when) no hash exists — binding each override to ONE specific commit so a stale or
+// pre-written flag can never silently cover different content. Returns
+//   { fields: {reason, approvedBy, diffHash} | null, problems: [...] }  ([] = valid).
+function parseOverride(text, currentHash, form) {
+  let t;
+  try {
+    t = JSON.parse(text);
+  } catch (e) {
+    return { fields: null, problems: [`not valid JSON (${clip(String(e.message), 120)}) — the override is a positional tuple, not key: value lines`] };
+  }
+  if (!Array.isArray(t)) return { fields: null, problems: ['not a JSON array — the override is a positional tuple, not an object'] };
+  if (t.length !== 4) return { fields: null, problems: [`wrong arity: expected exactly 4 elements, got ${t.length}`] };
+  if (tooDeep(t, 1)) return { fields: null, problems: ['nesting too deep — the override tuple holds only strings'] };
+  const problems = [];
+  if (t[0] !== OVERRIDE_MAGIC) problems.push(`element 0 must be the literal "${OVERRIDE_MAGIC}"`);
+  if (!isNonEmptyString(t[1])) problems.push('element 1 (reason) must be a non-empty string — why review is being skipped');
+  else if (hasPlaceholder(t[1])) problems.push('element 1 (reason) looks like an unfilled template placeholder — write the actual reason, without angle brackets');
+  if (!isNonEmptyString(t[2])) problems.push('element 2 (approved_by) must be a non-empty string — who accepts the risk');
+  else if (hasPlaceholder(t[2])) problems.push('element 2 (approved_by) looks like an unfilled template placeholder — write the actual approver, without angle brackets');
+  const dh = t[3];
+  if (!isNonEmptyString(dh)) {
+    problems.push(`element 3 (diff_hash) must be ${currentHash ? `"${currentHash}"` : 'the literal "UNVERIFIABLE" for this commit form'}`);
+  } else if (currentHash) {
+    if (dh !== currentHash) problems.push(`diff_hash mismatch: the flag has ${dh} but the effective committed diff is ${currentHash} (the staged/committed content changed since the flag was written)`);
+  } else if (dh !== 'UNVERIFIABLE') {
+    problems.push(form.verifiable
+      ? 'the effective diff hash could not be computed (git/shasum error) — write "UNVERIFIABLE" as element 3 to acknowledge overriding an unhashable commit'
+      : 'this commit form is unverifiable (pathspec/--amend/compound line/...) so no hash exists — write "UNVERIFIABLE" as element 3 to acknowledge, or use a standalone plain `git commit`');
+  }
+  if (problems.length > 0) return { fields: null, problems };
+  return { fields: { reason: t[1], approvedBy: t[2], diffHash: dh }, problems: [] };
+}
+
+// Decide whether today's evidence tuples cover the current diff and whether any covering tuple
+// is a FAIL. `evidences` is [{ name, ev }] (already-valid parses only); `currentHash` is the
+// effective committed-diff hash (or null when it could not be produced).
+// - A tuple "covers" when its diff_hash equals currentHash. ALL of today's sidecars are scanned
+//   (not just the lexicographically-last one), so several PRs landing the same day don't shadow
+//   each other.
+// - FAIL blocks only when it covers the current diff; if the hash is unknown ANY of today's valid
+//   FAIL tuples still blocks (the explicit block signal fails closed).
+// - matchedCurrent is true/false when a hash exists, or null when it could not be computed (the
+//   gate treats null as "unverified" and fails closed on high/critical).
+// - Schema validity guarantees a covering PASS-verdict tuple carries one evidence axis
+//   (>=2-family models or a human identity), so acceptance = covering + PASS-whitelist verdict +
+//   no covering FAIL. matchedHet/matchedHuman are reported for the log.
+function evaluateEvidence(evidences, currentHash) {
+  const covering = currentHash ? evidences.filter(({ ev }) => ev.diffHash === currentHash) : [];
+  const failScope = currentHash ? covering : evidences;
+  const hasFail = failScope.some(({ ev }) => ev.verdict === 'FAIL');
+  const passing = covering.filter(({ ev }) => ev.verdict === 'PASS' || ev.verdict === 'PASS WITH NOTES');
+  const matchedCurrent = currentHash ? passing.length > 0 : null;
+  const matchedHet = currentHash ? passing.some(({ ev }) => ev.families !== null) : null;
+  const matchedHuman = currentHash ? passing.some(({ ev }) => ev.human !== null) : null;
   return { hasFail, matchedCurrent, matchedHet, matchedHuman };
 }
 
 // The three accepted evidence paths, spelled out so a user blocked for the FIRST time can write
 // path (2) or (3) from this message alone — single-model deployments cannot honestly produce (1),
-// and this message is their entire UX. Always prints the ACTUAL values to copy (hash, today's date).
-function evidenceHelp(currentHash, today) {
-  const h = currentHash || 'UNVERIFIABLE';
+// and this message is their entire UX. Always prints COPYABLE JSON tuples carrying the ACTUAL
+// values (hash, today's date, the diff command this commit form is hashed with). The markdown
+// report is for humans; the gate reads only .json. Placeholders are angle-bracketed on purpose:
+// pasting them UNFILLED is rejected by the placeholder check, never silently accepted.
+function evidenceHelp(currentHash, today, diffCmd) {
   const lines = [
-    'A HIGH/CRITICAL commit needs ONE of:',
-    '  (1) heterogeneous model review [verification]: run the reviewer agent; its doc in docs/reviews/ must carry `diff-hash: <hash>` plus a MEASURED `models: <fam1>, <fam2>` line (>=2 model families, e.g. `models: claude, gpt`) — written only after the adversary transcript confirmed a different family actually ran. Thread/session ids are not evidence. If only your own family ran, (1) cannot honestly be satisfied — use (2) or (3).',
+    'A HIGH/CRITICAL commit needs ONE of (machine evidence is a JSON tuple — the gate does NOT read markdown):',
   ];
   if (currentHash) {
     lines.push(
-      `  (2) human review [verification]: read the diff yourself (git diff --cached), then create docs/reviews/review-${today}-HHMMSS.md (any HHMMSS) containing exactly:`,
-      `        diff-hash: ${h}`,
-      '        human-reviewed-by: <your name>',
-      '        Verdict: PASS',
-      '      (accepted verdicts: PASS or PASS WITH NOTES — an empty/PENDING/other verdict does not count)',
+      '  (1) heterogeneous model review [verification]: run the reviewer agent. It writes a human report',
+      '      docs/reviews/review-<ts>.md PLUS the machine sidecar docs/reviews/review-<ts>.json containing exactly:',
+      `        ["omp-review-evidence/v1", "${currentHash}", "PASS", ["<model1>", "<model2>"], null, "reviewer"]`,
+      '      where <model1>/<model2> are replaced with the transcript-MEASURED model ids, >=2 distinct families',
+      '      (e.g. ["claude-opus-4", "gpt-5"]; codex counts as gpt). If only your own family actually ran,',
+      '      (1) cannot honestly be satisfied — use (2) or (3).',
+      `  (2) human review [verification]: read the diff yourself (${diffCmd} — the diff this commit form captures), then create docs/reviews/review-${today}-HHMMSS.json (any HHMMSS) containing exactly:`,
+      `        ["omp-review-evidence/v1", "${currentHash}", "PASS", null, "<your name>", "<your name>"]`,
+      '      with <your name> replaced by your actual identity (verdict "PASS" or "PASS WITH NOTES" only;',
+      '      the identity must be a person, not a model name, and unfilled <placeholders> are rejected)',
     );
   } else {
-    lines.push('  (2) human review [verification] is unavailable for this commit form (no diff hash to bind it to) — prefer a standalone plain `git commit` of the staged diff, which makes (1) and (2) usable.');
+    lines.push('  (1)/(2) reviewer / human-review evidence is unavailable for this commit form (no diff hash to bind it to) — prefer a standalone plain `git commit` of the staged diff, which makes both usable.');
   }
   lines.push(
     '  (3) audited override [approval — accept the risk UNREVIEWED]: create docs/harness/review-skip containing exactly:',
-    '        reason: <why review is being skipped>',
-    '        approved-by: <who accepts the risk>',
-    `        diff-hash: ${h}`,
-    '      The gate records it as a `review_override` event in docs/harness/audit.jsonl and consumes the flag. A bare/incomplete review-skip file does NOT bypass this gate.',
+    `        ["omp-review-override/v1", "<why review is being skipped>", "<who accepts the risk>", "${currentHash || 'UNVERIFIABLE'}"]`,
+    '      with the <placeholders> replaced (unfilled ones are rejected). The gate records it as a `review_override` event in docs/harness/audit.jsonl and consumes the flag. A bare/incomplete review-skip file does NOT bypass this gate.',
   );
   return lines.join('\n');
-}
-
-// Validate the audited-override flag file (path 3). All three fields are REQUIRED; `diff-hash:`
-// must equal the effective committed-diff hash, or be the literal UNVERIFIABLE when (and only
-// when) no hash exists — binding each override to ONE specific commit so a stale or pre-written
-// flag can never silently cover different content. Returns a list of problems ([] = valid).
-function validateOverride(fields, currentHash, form) {
-  const problems = [];
-  if (!fields['reason']) problems.push('missing `reason:` (why review is being skipped)');
-  if (!fields['approved-by']) problems.push('missing `approved-by:` (who accepts the risk)');
-  const dh = fields['diff-hash'];
-  if (!dh) {
-    problems.push(`missing \`diff-hash:\` (must be ${currentHash || 'the literal UNVERIFIABLE for this commit form'})`);
-  } else if (currentHash) {
-    if (dh !== currentHash) problems.push(`diff-hash mismatch: the flag has ${dh} but the effective committed diff is ${currentHash} (the staged/committed content changed since the flag was written)`);
-  } else if (dh.toUpperCase() !== 'UNVERIFIABLE') {
-    problems.push(form.verifiable
-      ? 'the effective diff hash could not be computed (git/shasum error) — write `diff-hash: UNVERIFIABLE` to acknowledge overriding an unhashable commit'
-      : 'this commit form is unverifiable (pathspec/--amend/compound line/...) so no hash exists — write `diff-hash: UNVERIFIABLE` to acknowledge, or use a standalone plain `git commit`');
-  }
-  return problems;
 }
 
 const input = readFileSync(0, 'utf-8');
@@ -341,12 +378,58 @@ const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0'
 // matchedCurrent !== true branch below). execSync runs through a shell, so the pipe
 // needs no `shell` option; both diff commands are constant (no user input on the line).
 let currentHash = null;
+const diffCmd = form.all ? 'git diff HEAD' : 'git diff --cached';
 if (form.verifiable) {
-  const diffCmd = form.all ? 'git diff HEAD' : 'git diff --cached';
   try {
     currentHash = execSync(`${diffCmd} | shasum -a 256`, { cwd, encoding: 'utf-8' }).trim().split(/\s+/)[0];
   } catch {
     currentHash = null;
+  }
+}
+
+// I/O bounds. The dispatcher (commit-gates.mjs) kills a gate that exceeds its time/output budget
+// and then FAILS CLOSED — a gate that cannot render a verdict blocks the commit. That closes the
+// old drive-the-gate-over-budget review bypass, but it also turns an over-budget gate into a block
+// on EVERY commit, so this gate must still stay inside those budgets on attacker-controlled files:
+//   - readBounded opens with O_NOFOLLOW|O_NONBLOCK and fstat-checks the OPEN fd: a symlink (even
+//     symlink→regular-file) fails the open, a FIFO/device/socket opens without blocking and is
+//     rejected as not-a-regular-file. Evidence must be a plain regular file, nothing else.
+//   - the read itself is capped at MAX_EVIDENCE_BYTES by a fixed-size readSync — a pre-read stat
+//     check alone would race a concurrently growing file (see readBounded). A real sidecar/flag
+//     is a one-line tuple, well under 1KiB.
+//   - the docs/reviews scan is incremental and bounded: more than MAX_SIDECARS same-day sidecars
+//     BLOCKS the moment the cap is crossed (an implausible volume that could push covering
+//     evidence out of any bounded window — no subset selection, no push-out bypass), and more
+//     than MAX_SCAN_ENTRIES directory entries of ANY name BLOCKS outright (see the scan below).
+//   - never print more than MAX_FILE_WARNINGS per-file diagnostics (the rest are summarized).
+// Rejected/unreadable files are IGNORED, which grants nothing — fail-closed.
+const MAX_EVIDENCE_BYTES = 64 * 1024;
+const MAX_SIDECARS = 32;
+const MAX_SCAN_ENTRIES = 10000; // total docs/reviews entries the gate will enumerate before failing closed
+const MAX_FILE_WARNINGS = 5;
+function readBounded(path) {
+  let fd = null;
+  try {
+    fd = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
+    if (!fstatSync(fd).isFile()) return { ok: false, why: 'not a regular file (FIFO/device/socket rejected)' };
+    // The size cap rides on the READ, not on a pre-read stat: readFileSync(fd) re-stats internally
+    // and reads to EOF, so a file that grows between a stat check and the read (concurrent append)
+    // would be read whole. POSIX permits short reads before EOF, so keep filling the fixed MAX+1
+    // buffer until it is full or readSync returns zero; a short read can neither masquerade as EOF
+    // nor hide overflow, and concurrent growth can never make the gate read beyond the buffer.
+    const buf = Buffer.allocUnsafe(MAX_EVIDENCE_BYTES + 1);
+    let bytesRead = 0;
+    while (bytesRead < buf.length) {
+      const n = readSync(fd, buf, bytesRead, buf.length - bytesRead, bytesRead);
+      if (n === 0) break;
+      bytesRead += n;
+    }
+    if (bytesRead > MAX_EVIDENCE_BYTES) return { ok: false, why: `implausibly large (max ${MAX_EVIDENCE_BYTES} bytes) — a real tuple is one short line` };
+    return { ok: true, text: buf.toString('utf-8', 0, bytesRead) };
+  } catch (e) {
+    return { ok: false, why: e && e.code === 'ELOOP' ? 'a symlink (evidence must be a plain regular file)' : 'the file could not be read' };
+  } finally {
+    if (fd !== null) try { closeSync(fd); } catch { /* already reported */ }
   }
 }
 
@@ -367,14 +450,15 @@ if (form.verifiable) {
 // `git ls-files` (in THIS repo audit.jsonl is tracked; review-skip is gitignored) — a repo that
 // ignores both files has no sweep and keeps the -a override; a failed check fails closed.
 if (existsSync(skipFile)) {
-  let fields = {};
-  let readProblem = null;
+  let parsed;
   try {
-    fields = parseFields(readFileSync(skipFile, 'utf-8'));
+    const r = readBounded(skipFile);
+    parsed = r.ok ? parseOverride(r.text, currentHash, form)
+      : { fields: null, problems: [`the flag file is ${r.why}`] };
   } catch {
-    readProblem = 'the flag file could not be read';
+    parsed = { fields: null, problems: ['the flag file could not be validated'] };
   }
-  const problems = readProblem ? [readProblem] : validateOverride(fields, currentHash, form);
+  const { fields, problems } = parsed;
   let swept = [];
   if (problems.length === 0 && form.all) {
     try {
@@ -387,8 +471,8 @@ if (existsSync(skipFile)) {
   if (swept.length > 0) {
     if (risk.level === 'critical' || risk.level === 'high') {
       log(`BLOCKED: valid review-skip override, but git commit -a would sweep the gate's own writes (${swept.join(', ')}) into the commit`);
-      console.error(`HARNESS BLOCK: the audited override cannot be consumed under \`git commit -a/--all\`: recording it writes ${swept.join(' and ')} (git-tracked) BEFORE the commit runs, so -a would sweep those writes into the commit and the committed diff would no longer match the approved diff-hash.`);
-      console.error('Stage exactly what you intend to ship (git add ...), then use a plain `git commit`; the flag was NOT consumed and its diff-hash must match the STAGED diff (git diff --cached | shasum -a 256).');
+      console.error(`HARNESS BLOCK: the audited override cannot be consumed under \`git commit -a/--all\`: recording it writes ${swept.join(' and ')} (git-tracked) BEFORE the commit runs, so -a would sweep those writes into the commit and the committed diff would no longer match the approved diff_hash.`);
+      console.error('Stage exactly what you intend to ship (git add ...), then use a plain `git commit`; the flag was NOT consumed and its diff_hash must match the STAGED diff (git diff --cached | shasum -a 256).');
       process.exit(2);
     }
     log('WARNING: valid review-skip override ignored under git commit -a (tracked audit/flag sweep); medium risk proceeds without it');
@@ -399,24 +483,22 @@ if (existsSync(skipFile)) {
     const event = {
       ts: new Date().toISOString(),
       event: 'review_override',
-      actor: fields['approved-by'],
-      meta: { reason: fields['reason'], diff_hash: currentHash || 'UNVERIFIABLE', risk: risk.level, risk_reason: risk.reason },
+      actor: fields.approvedBy,
+      meta: { reason: fields.reason, diff_hash: currentHash || 'UNVERIFIABLE', risk: risk.level, risk_reason: risk.reason },
     };
     appendFileSync(join(harnessDir, 'audit.jsonl'), JSON.stringify(event) + '\n');
     unlinkSync(skipFile);
-    log(`review override accepted (approved-by: ${fields['approved-by']}), audited + consumed`);
-    console.error(`HARNESS NOTE: review override by ${fields['approved-by']} accepted — recorded as review_override in docs/harness/audit.jsonl; flag consumed.`);
+    log(`review override accepted (approved_by: ${fields.approvedBy}), audited + consumed`);
+    console.error(`HARNESS NOTE: review override by ${fields.approvedBy} accepted — recorded as review_override in docs/harness/audit.jsonl; flag consumed.`);
     process.exit(0);
   } else if (risk.level === 'critical' || risk.level === 'high') {
     log(`BLOCKED: invalid review-skip override (${problems.join('; ')})`);
     console.error(`HARNESS BLOCK: docs/harness/review-skip exists but is not a valid audited override — ${problems.join('; ')}.`);
     console.error([
-      'An audited override must contain ALL of (fix the file in place, it was NOT consumed):',
-      '  reason: <why review is being skipped>',
-      '  approved-by: <who accepts the risk>',
-      `  diff-hash: ${currentHash || 'UNVERIFIABLE'}`,
+      'An audited override is ONE JSON tuple (fix the file in place, it was NOT consumed):',
+      `  ["omp-review-override/v1", "<why review is being skipped>", "<who accepts the risk>", "${currentHash || 'UNVERIFIABLE'}"]`,
       'Or delete the file and provide review evidence instead (reviewer agent / human review — see below).',
-      evidenceHelp(currentHash, today),
+      evidenceHelp(currentHash, today, diffCmd),
     ].join('\n'));
     process.exit(2);
   } else {
@@ -425,32 +507,93 @@ if (existsSync(skipFile)) {
   }
 }
 
-let todayReviews = [];
+// Machine evidence: today's .json sidecars ONLY. Same-basename .md files are human reports the
+// gate never reads. Invalid sidecars are warned about and IGNORED (they grant nothing and they
+// veto nothing) — fail-closed both ways.
+//
+// The scan is INCREMENTAL (opendirSync) with two fail-closed bounds, so the enumeration work
+// itself stays bounded — a readdirSync of the whole directory would materialize and sort every
+// entry BEFORE any cap could run, so a big enough flood could push the gate past the dispatcher
+// budget without the cap ever firing (3rd-round review):
+//   - the moment the (MAX_SIDECARS+1)th same-day sidecar is seen the gate BLOCKS: selecting any
+//     bounded subset would let an attacker push a covering FAIL out of the window while a
+//     covering PASS stays in (2nd-round review, CRITICAL 3), and no plausible legitimate day
+//     produces this many sidecars;
+//   - the moment the (MAX_SCAN_ENTRIES+1)th directory entry of ANY name is seen the gate BLOCKS:
+//     a real docs/reviews/ is orders of magnitude smaller, so this only fires on a flood of
+//     non-matching names built to burn the enumeration budget.
+// Only the <= MAX_SIDECARS surviving matches are sorted — deterministic processing order.
+let todaySidecars = [];
 if (existsSync(reviewDir)) {
-  todayReviews = readdirSync(reviewDir).filter(f => f.startsWith(`review-${today}`));
+  let dirh = null;
+  try {
+    dirh = opendirSync(reviewDir);
+    let scanned = 0;
+    for (let ent = dirh.readSync(); ent !== null; ent = dirh.readSync()) {
+      scanned += 1;
+      if (scanned > MAX_SCAN_ENTRIES) {
+        log(`BLOCKED: docs/reviews holds more than ${MAX_SCAN_ENTRIES} entries`);
+        console.error(`HARNESS BLOCK: docs/reviews/ holds more than ${MAX_SCAN_ENTRIES} entries — an implausible volume the gate refuses to enumerate, so it fails closed. Clean docs/reviews/ and retry.`);
+        process.exit(2);
+      }
+      const f = ent.name;
+      if (!f.startsWith(`review-${today}`) || !f.endsWith('.json')) continue;
+      todaySidecars.push(f);
+      if (todaySidecars.length > MAX_SIDECARS) {
+        log(`BLOCKED: ${todaySidecars.length} same-day sidecars exceed the scan cap (${MAX_SIDECARS})`);
+        console.error(`HARNESS BLOCK: ${todaySidecars.length} sidecars named review-${today}*.json exceed the scan cap (${MAX_SIDECARS}) — an implausible volume that could hide covering evidence, so the gate fails closed. Clean docs/reviews/ down to today's real review sidecars and retry.`);
+        process.exit(2);
+      }
+    }
+  } catch {
+    console.error('HARNESS WARNING: docs/reviews could not be listed; treating as no evidence.');
+    todaySidecars = [];
+  } finally {
+    if (dirh !== null) try { dirh.closeSync(); } catch { /* nothing left to release */ }
+  }
+  todaySidecars.sort();
 }
 
-if (todayReviews.length === 0) {
+const evidences = [];
+let warned = 0;
+const warnFile = (f, why) => {
+  log(`WARNING: sidecar ${f} ignored (${why})`);
+  if (warned < MAX_FILE_WARNINGS) console.error(`HARNESS WARNING: docs/reviews/${f} is not a valid evidence tuple (${clip(why, 300)}); ignoring it.`);
+  warned += 1;
+};
+for (const f of todaySidecars) {
+  const r = readBounded(join(reviewDir, f));
+  if (!r.ok) {
+    warnFile(f, `the file is ${r.why}`);
+    continue;
+  }
+  let parsed;
+  try {
+    parsed = parseEvidence(r.text);
+  } catch {
+    parsed = { ok: false, problems: ['the file could not be validated'] }; // belt-and-braces: a parser bug must not crash the gate — the dispatcher fails closed on a crash, blocking every commit until the gate is fixed
+  }
+  if (!parsed.ok) {
+    warnFile(f, parsed.problems.join('; '));
+    continue;
+  }
+  evidences.push({ name: f, ev: parsed });
+}
+if (warned > MAX_FILE_WARNINGS) console.error(`HARNESS WARNING: ${warned - MAX_FILE_WARNINGS} more invalid sidecar(s) ignored (diagnostics suppressed).`);
+
+if (evidences.length === 0) {
   if (risk.level === 'critical' || risk.level === 'high') {
-    log(`BLOCKED: ${risk.level} risk with no review`);
+    log(`BLOCKED: ${risk.level} risk with no valid review evidence`);
     console.error(`HARNESS BLOCK: ${risk.level} risk changes (${risk.reason}) require review evidence.`);
-    console.error(evidenceHelp(currentHash, today));
+    console.error(evidenceHelp(currentHash, today, diffCmd));
     process.exit(2);
   }
-  log(`WARNING: ${risk.level} risk with no review`);
+  log(`WARNING: ${risk.level} risk with no review evidence`);
   console.error(`HARNESS WARNING: ${risk.level} risk changes without review. Consider running reviewer agent.`);
   process.exit(0);
 }
 
-const reviews = todayReviews.map((f) => {
-  try {
-    return { name: f, content: readFileSync(join(reviewDir, f), 'utf-8') };
-  } catch {
-    return { name: f, content: '' };
-  }
-});
-
-const { hasFail, matchedCurrent, matchedHet, matchedHuman } = evaluateReviews(reviews, currentHash);
+const { hasFail, matchedCurrent, matchedHet, matchedHuman } = evaluateEvidence(evidences, currentHash);
 
 // A FAIL verdict covering the current diff blocks regardless of risk level.
 if (hasFail) {
@@ -459,38 +602,27 @@ if (hasFail) {
   process.exit(2);
 }
 
-// A review must positively cover this diff. matchedCurrent === true means a today
-// review carries the current diff hash. Both false (no match) and null (hash could
-// not be computed) mean "unverified" — high/critical fails closed, matching the
-// harness's fail-closed-on-unknown stance (cf. backpressure-gate). The audited
-// override (handled above) is the deliberate, recorded escape hatch.
+// Evidence must positively cover this diff. matchedCurrent === true means a today sidecar carries
+// the current diff hash with a PASS-whitelist verdict (and, by schema, a valid evidence axis —
+// >=2-family models or a human identity). Both false (no match) and null (hash could not be
+// computed) mean "unverified" — high/critical fails closed, matching the harness's
+// fail-closed-on-unknown stance (cf. backpressure-gate). The audited override (handled above) is
+// the deliberate, recorded escape hatch.
 if (matchedCurrent !== true) {
   const detail = currentHash
-    ? 'no review matches the current changes'
+    ? 'no valid review evidence matches the current changes'
     : (form.verifiable
         ? 'could not compute the diff hash (git/shasum error)'
         : 'the commit form is unverifiable (an output redirection like `2>&1`, a compound `&&`/`;` line, a pathspec, --amend, or -a with unstaged changes) — run a STANDALONE `git commit` (no trailing `2>&1`/`; …`, no `cd … &&` prefix) so the staged diff can be hashed');
   if (risk.level === 'critical' || risk.level === 'high') {
     log(`BLOCKED: ${detail}`);
     console.error(`HARNESS BLOCK: ${detail}.`);
-    console.error(evidenceHelp(currentHash, today));
+    console.error(evidenceHelp(currentHash, today, diffCmd));
     process.exit(2);
   }
   log(`WARNING: ${detail}`);
   console.error(`HARNESS WARNING: ${detail}. Consider re-running reviewer.`);
 }
 
-// Second-perspective enforcement: a covering review for a HIGH/CRITICAL change must evidence either
-// a heterogeneous model review (measured `models:` >=2 families) or a human review. A
-// single-model self-review covering the diff is treated as not-yet-reviewed for risky changes.
-// (Medium keeps review optional, so it is not subject to this; the audited override remains the
-// recorded approval-axis escape.)
-if (matchedCurrent === true && matchedHet !== true && matchedHuman !== true && (risk.level === 'critical' || risk.level === 'high')) {
-  log('BLOCKED: covering review shows neither heterogeneous-review nor human-review evidence');
-  console.error('HARNESS BLOCK: the review covering these changes is a single-model self-review — a HIGH/CRITICAL change needs a second perspective.');
-  console.error(evidenceHelp(currentHash, today));
-  process.exit(2);
-}
-
-log(`Review check passed (${todayReviews.length} today, matchedCurrent=${matchedCurrent}, het=${matchedHet}, human=${matchedHuman})`);
+log(`Review check passed (${evidences.length} valid today, matchedCurrent=${matchedCurrent}, het=${matchedHet}, human=${matchedHuman})`);
 process.exit(0);

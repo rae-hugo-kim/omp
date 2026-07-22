@@ -1,6 +1,6 @@
 name: capability-aware-review-overhaul
 status: approved
-version: 5
+version: 7
 task_id: "20260721-200358-0802"
 goal: >
   하네스 리뷰·검증 체계를 특정 모델 하드코딩에서 capability/롤 기반으로 개편합니다 —
@@ -16,12 +16,13 @@ references:
   - path: .omp/extensions/harness/gates/git-commit-detect.mjs
     reason: "commit 형태 파싱(-a/pathspec fail-closed)의 공유 헬퍼"
   - path: tests/review-gate.test.mjs
-    reason: "게이트 계약 회귀 스위트 (82건 — models: 단일 경로 강화 v4/v5 + 3차 리뷰 sanitizer v6 회귀 포함, 실측)"
+    reason: "게이트 계약 회귀 스위트 (79건 — strict JSON tuple 스키마 검증(arity/enum/hex64/모델 계열/증거축/중복 키 구조적 불가) + 커밋 형태 fail-closed + override tuple + -a TOCTOU 통합, 실측; 마크다운 우회 회귀 v4–v9는 AC8의 마크다운 파싱 제거로 공격면 소멸·삭제)"
   - note: "사후 문서화 seed — 스코프는 선행 세션에서 확정·구현·검증(verifier PASS) 완료, 본 seed는 kickoff 규약에 따른 추적 산출물 (인터뷰 생략)"
 
 constraints:
   - 게이트 fail-closed 원칙 유지 — 무감사 우회 경로(bare review-skip 등) 금지
-  - 증거는 실측만 — models: 라인은 adversary 트랜스크립트 실측 확인 시에만 기재
+  - 기계 증거는 마크다운을 파싱하지 않음 — strict 위치 기반 JSON tuple 단일 경로(수제 마크다운/키-값 파서 재도입 금지)
+  - 증거는 실측만 — models 배열은 adversary 트랜스크립트 실측 확인 시에만 기재
   - 검증 불가 커밋 형태(pathspec, --amend 등)는 fail-closed, plain git commit이 표준 경로
   - 타 세션 워킹트리 변경분 무접촉
 
@@ -31,8 +32,9 @@ acceptance_criteria:
   - "AC3 이종성 증거 실측 계약 — adversary 트랜스크립트 model_change 확인, models:는 실측 시에만 기재"
   - "AC4 review-gate 3경로 증거(이종 리뷰/human-review/감사된 override) 강제 + 무감사 skip 제거"
   - "AC5 Verdict 화이트리스트 + git commit -a TOCTOU 가드 (v2까지의 thread 계열 검증 서술은 AC7의 thread 증거 경로 전체 삭제로 대체·철회 — v3에서 모순 해소)"
-  - "AC6 review-gate 테스트 82건 포함 전체 410건 그린 (node --test tests/*.test.mjs 실측 410/410 — models: 단일 경로 강화 회귀 v4 7건 + 2차 리뷰 대응 v5 9건 + 3차 리뷰 대응 sanitizer v6 2건(펜스-우선 순서·탭 닫힘 오인 재현) 포함, docs-drift real-repo 테스트는 closeout_contract PR-4 계약대로 Closeout-pending 단일 경고만 허용하도록 정합)"
-  - "AC7 네이티브 3-pass 실동작화 + 배포 자립성 + codex CLI 폴백 및 게이트 thread 증거 경로 제거 — reviewer frontmatter spawns:로 adversary/code-reviewer 중첩 스폰 허용(top-level 실스폰·model_change 실측), Pass 3용 code-reviewer를 .omp/agents/ 프로젝트 에이전트로 신설(OMC 미설치 바닐라 OMP에서도 3-pass 전체 실스폰, 롤 별칭 모델·read-only), reviewer.md 폴백 섹션 삭제 및 Pass 1–3 리뷰 스코프 staged-first(git diff --cached, 미스테이징 시 HEAD 폴백) 정렬, review-gate isHetEvidence의 codex-thread/codex-session/adversary-thread/adversary-session 경로 전체 삭제(증거 = models: 실측 / human-review / 감사된 override 3형태), 유일 자동 증거가 된 models: 파서 강화(키 정확 일치 — models-* 변형 키 배제; modelFamily 세그먼트 문법 — 부정 단어 세그먼트 정확 일치 거부(-skipped/-unavailable/-not-run-2 등 숫자 포함 변형; 세그먼트 융합형은 구 정규식도 수용하던 선재 간극으로 리뷰 문서에 후속 기록)·malformed 토큰 거부·o3-mini 등 변형 별칭 정상 매핑), 증거 4축(커버리지·FAIL 판정·het·human) 전부 동일 sanitized 뷰(evidenceLines: 라인 단위 단일 패스로 펜스 상태를 HTML 주석 제거보다 먼저 추적 — 펜스 내부 주석은 리터럴, 닫는 펜스는 CommonMark 3컬럼 들여쓰기 제한으로 탭 불인정, 다중행 HTML 주석 제외) 사용 및 diff-hash 키 문법 제한(괄호 한정어만 허용), evidenceHelp·문서 정합, thread 필드 비증거(BLOCK) + 우회 케이스별 BLOCK 회귀 테스트 + 전체 스위트 그린"
+  - "AC6 review-gate 테스트 79건 포함 전체 407건 그린 (node --test tests/*.test.mjs 실측 407/407 — v6까지의 마크다운 우회 회귀 스위트(sanitizer v4–v9 등 96건 체계)는 AC8의 마크다운 증거 파싱 전량 삭제로 공격면이 소멸해 삭제, strict JSON tuple 스키마 검증 스위트로 대체: 유효/무효 JSON·object형 거부·중복 키 주입 구조적 불가·arity·verdict enum·hex64·모델 계열(≥2 distinct, codex→gpt 폴딩, 부정/노이즈 토큰 거부)·human 모델명 스푸핑 가드·증거축 필수·커밋 형태 fail-closed(-a/pathspec/--amend/2>&1/--inc/heredoc)·override tuple(구 필드 문법 차단 포함)·-a TOCTOU 실커밋 통합·위험도 스코핑·차단 메시지 tuple 템플릿 파싱 가능성 + 1차 tuple 리뷰 대응 하드닝 11건: placeholder 거부·전 토큰 human 스푸핑·FAIL 증거축 면제·negation prefix 스푸핑·I/O 바운드(초과 크기/경고 캡/스캔 캡)·-a 도움말 diff 커맨드)"
+  - "AC7 네이티브 3-pass 실동작화 + 배포 자립성 + codex CLI 폴백 및 게이트 thread 증거 경로 제거 — reviewer frontmatter spawns:로 adversary/code-reviewer 중첩 스폰 허용(top-level 실스폰·model_change 실측), Pass 3용 code-reviewer를 .omp/agents/ 프로젝트 에이전트로 신설(OMC 미설치 바닐라 OMP에서도 3-pass 전체 실스폰, 롤 별칭 모델·read-only), reviewer.md 폴백 섹션 삭제 및 Pass 1–3 리뷰 스코프 staged-first(git diff --cached, 미스테이징 시 HEAD 폴백) 정렬, review-gate isHetEvidence의 codex-thread/codex-session/adversary-thread/adversary-session 경로 전체 삭제(증거 = models: 실측 / human-review / 감사된 override 3형태), 유일 자동 증거가 된 models: 파서 강화(키 정확 일치 — models-* 변형 키 배제; modelFamily 세그먼트 문법 — 부정 단어 세그먼트 정확 일치 거부(-skipped/-unavailable/-not-run-2 등 숫자 포함 변형; 세그먼트 융합형은 구 정규식도 수용하던 선재 간극으로 리뷰 문서에 후속 기록)·malformed 토큰 거부·o3-mini 등 변형 별칭 정상 매핑), 증거 4축(커버리지·FAIL 판정·het·human)의 sanitized 뷰를 fail-open 방향에 따라 축별 분리(증거축=통과 신호는 상태 없는 보수적 제외 — 첫 펜스 구분자 형태 라인(임의 들여쓰기·리스트 마커 중첩 허용)에서 증거 스캔 종료(evidence order rule: 상태 추적이 없어 컨테이너 맥락에 의한 펜스 상태 반전이 원천 불가), 인용 시작 라인(리스트 마커 중첩 뒤 `>` 포함: `> q`·`- > q`) 전체 + lazy continuation(공백 라인까지) 제외, 4컬럼 indented code 제외, HTML 주석 제외, 필드 문법은 컨테이너 인지형(선행 ≤3스페이스, 리스트 마커 1개+1-4스페이스만 허용 — `>` 접두·`-     field:` 리스트 상대 indented code 불인정); FAIL 탐지축=차단 신호는 보수적 유지 — 컬럼-0 여는 펜스(컨테이너 해석이 불가능한 유일 형태 — 1-3스페이스 들여쓰기 구분자는 리스트 계속 들여쓰기 펜스일 수 있어 미은닉)와 HTML 주석만 숨김 인정, opener 판정은 주석 제거 이전의 원문 라인 기준(backtick 펜스 info string에 backtick 불허 — 완결형 인라인 주석 제거로 가짜 opener 제조 불가), 탭 여는 펜스·컨테이너 펜스는 미은닉; 공통: 펜스/주석 상태 우선순위 유지, 닫는 펜스 CommonMark 3컬럼 제한, 다중행 HTML 주석 제외) 적용 및 diff-hash 키 문법 제한(괄호 한정어만 허용), evidenceHelp·문서 정합, thread 필드 비증거(BLOCK) + 우회 케이스별 BLOCK 회귀 테스트 + 전체 스위트 그린"
+  - "AC8 리뷰 증거 strict JSON 사이드카 전환 — 7차례 적대 리뷰의 CommonMark 우회 실증으로 라인 기반 마크다운 증거 파싱을 수렴 불가 판정, 게이트에서 전량 삭제(evidenceLines/failLines/makeCommentStripper/parseFields/isHetEvidence/isHumanEvidence — 게이트는 .md를 더 이상 읽지 않음). 기계 증거 = docs/reviews/review-<YYYY-MM-DD-HHMMSS>.json 사이드카의 고정 arity 위치 기반 tuple [\"omp-review-evidence/v1\", diff_hash(hex64), verdict(PASS|PASS WITH NOTES|FAIL 정확 일치), models|null, human_reviewed_by|null, reviewer] — 검증은 JSON.parse+Array.isArray+정확 arity+위치별 타입/enum/패턴 체크, 키 부재로 중복 키 last-wins 주입 구조적 불가. 증거축 택1(실측 models ≥2 distinct family 또는 human_reviewed_by 비모델명), 스키마 위반 파일은 경고 후 무시(fail-closed). override도 동일 문법 [\"omp-review-override/v1\", reason, approved_by, diff_hash|UNVERIFIABLE](-a TOCTOU 가드·audit 기록·소비 유지). BLOCK 메시지는 실제 해시가 담긴 복사 가능한 tuple 템플릿 출력, reviewer 계약은 md 보고서+json 사이드카 동시 산출(이종성 실측 계약 유지). 1차 tuple 리뷰 FAIL 대응 하드닝: 디스패처(commit-gates) fail-open 예산을 넘길 수 없도록 I/O 바운드(64KiB 초과 파일 미독 스킵, 사이드카 스캔 32개 캡, 파일별 경고 5건 캡+요약, 진단 메시지 클리핑), 미기입 <placeholder> 값 거부(증거·override 전 위치), human 스푸핑 가드 전 토큰+제로폭 문자 스캔, FAIL verdict는 증거축 면제(정직한 FAIL이 covering PASS에 밀리지 않음 — PASS만 증거축 필수), modelFamily 부정 prefix 거부(skipped/gpt-5·gpt-5-skippedrun), -a 폼 도움말이 git diff HEAD 지시. 2차 tuple 리뷰 FAIL 대응 CRITICAL 3건 봉인(3차): ① parseEvidence/parseOverride에 반복적(스택 기반) 깊이 게이트(tooDeep — 중첩 payload가 JSON.stringify/재귀 진단을 크래시시켜 디스패처 fail-open을 유도하던 경로 제거, 진단 메시지에서 비-문자열 stringify 제거, 호출부 try/catch 이중 방어) ② readBounded가 O_NOFOLLOW|O_NONBLOCK open + fstat(fd) 검사(symlink→FIFO 추적·TOCTOU 봉인, FIFO/특수파일/symlink 즉시 무효 — 증거는 평범한 정규 파일만) ③ 스캔 캡 초과는 부분 선별 대신 무조건 fail-closed BLOCK(covering FAIL 밀어내기 우회 원천 차단). HIGH 잔존(negation laundering 변종·유니코드 invisible/호모글리프 human 스푸핑·risk-assess unknown fail-open)은 위협모델상 한계효용 판정으로 수정하지 않고 리뷰 문서(review-2026-07-22-162938.md)에 후속 과제로 기록"
 
 out_of_scope:
   - 타 세션 소유 파일 (claudedocs/harness-auto-capture-analysis.md, docs/upstream-issues.md, .serena/)

@@ -4,17 +4,20 @@
 // Run: node --test tests/commit-gates.test.mjs
 //
 // Verifies: (a) a non-commit short-circuits (the spawn-saving win); (b) on a commit it delegates to
-// the three gates in order, first block wins; (c) each gate's block surfaces through the dispatcher.
+// the gates in order and runs them ALL; (c) each gate's block surfaces through the dispatcher;
+// (d) a gate that does not run cleanly (crash / timeout / spawn failure) BLOCKS — fail-closed,
+// owner decision after the 3rd adversarial review (2026-07-22): skipping a broken gate was a full
+// review bypass (drive any gate over its 3s child budget with crafted inputs, commit unreviewed).
 // The gates themselves are unchanged (covered by backpressure-gate.test.mjs etc.) — here we test the
 // dispatcher wiring. Isolated temp git repos with explicit cwd (memory: feedback_shell_test_cwd_isolation).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, execSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const DISPATCHER = join(dirname(fileURLToPath(import.meta.url)), '..', '.omp', 'extensions', 'harness', 'gates', 'commit-gates.mjs');
 
@@ -137,5 +140,82 @@ test('runs ALL gates: a downstream skip flag is consumed even when an earlier ga
     const r = runDispatcher(dir);
     assert.equal(r.status, 2, 'acceptance still blocks the commit');
     assert.equal(existsSync(skip), false, 'backpressure ran and consumed its skip flag (run-all)');
+  });
+});
+
+// --- fail-closed on a broken gate (owner decision, 3rd adversarial review 2026-07-22) ------------
+// A gate that cannot render a verdict must BLOCK, not be skipped: with the prior fail-open, making
+// any gate crash or exceed its child budget was equivalent to disabling commit review entirely.
+
+test('a CRASHING gate blocks the commit (fail-closed) and the message names the gate + standalone debug', () => {
+  withRepo(LOW, (dir) => {
+    // Occupy .omp/harness-state with a regular FILE: with HARNESS_DEBUG=1 every gate's first log()
+    // append throws ENOTDIR uncaught -> non-zero exit. The staged LOW files would otherwise pass
+    // every gate (see the all-gates-passing test above), so any block comes from the fail-closed path.
+    mkdirSync(join(dir, '.omp'), { recursive: true });
+    writeFileSync(join(dir, '.omp', 'harness-state'), 'not a directory');
+    const r = runDispatcher(dir, 'git commit -m x', { HARNESS_DEBUG: '1' });
+    assert.equal(r.status, 2, 'a crashed gate must fail closed');
+    assert.match(r.stderr, /HARNESS BLOCK: commit gate '.*' did not run cleanly/);
+    assert.match(r.stderr, /failing closed/);
+    assert.match(r.stderr, /Debug it standalone/, 'the block must teach how to debug the gate in isolation');
+  });
+});
+
+test('a HANGING gate is killed at its child budget and blocks the commit (fail-closed timeout)', () => {
+  withRepo(MEDIUM, (dir) => {
+    // A FIFO where backpressure-gate expects its status file: its readFileSync blocks forever, the
+    // dispatcher kills the child at CHILD_TIMEOUT_MS (~3s), and the timeout must BLOCK, not skip —
+    // budget exhaustion was the attack vector behind both 3rd-review CRITICALs.
+    const sd = join(dir, '.omp', 'harness-state');
+    mkdirSync(sd, { recursive: true });
+    execSync(`mkfifo ${join(sd, 'backpressure-status')}`);
+    const r = runDispatcher(dir);
+    assert.equal(r.status, 2, 'a timed-out gate must fail closed');
+    assert.match(r.stderr, /commit gate 'backpressure-gate\.mjs' did not run cleanly \(ETIMEDOUT\)/);
+  });
+});
+
+test('timeout+attempted exit 0 still blocks: ETIMEDOUT error axis is fail-closed and SIGKILL is uncatchable', () => {
+  withRepo(LOW, (dir) => {
+    // Preload only the REAL review-gate child. It suppresses that gate's clean process.exit(0),
+    // keeps the event loop alive past CHILD_TIMEOUT_MS, and would catch the old default SIGTERM to
+    // exit 0. Before the fix spawnSync returned {status:0, signal:null, error:ETIMEDOUT} and the
+    // status-only dispatcher allowed the commit. SIGKILL now bypasses the handler, and ETIMEDOUT
+    // independently makes the actual dispatcher fail closed.
+    const preload = join(dir, 'timeout-exit0-preload.mjs');
+    writeFileSync(preload, [
+      `if ((process.argv[1] || '').endsWith('/review-gate.mjs')) {`,
+      `  const realExit = process.exit.bind(process);`,
+      `  process.exit = () => {};`,
+      `  const hold = setInterval(() => {}, 60_000);`,
+      `  process.on('SIGTERM', () => { clearInterval(hold); realExit(0); });`,
+      `}`,
+    ].join('\n'));
+    const r = runDispatcher(dir, 'git commit -m x', {
+      NODE_OPTIONS: `--import=${pathToFileURL(preload).href}`,
+    });
+    assert.equal(r.status, 2, 'timeout+attempted exit 0 must not pass the commit');
+    assert.match(r.stderr, /commit gate 'review-gate\.mjs' did not run cleanly \(ETIMEDOUT\)/);
+  });
+});
+
+test('signal-only gate death blocks and the diagnostic names the signal (not exit null)', () => {
+  withRepo(LOW, (dir) => {
+    // Kill only the REAL acceptance-gate child during its preload. spawnSync reports
+    // {status:null, signal:'SIGKILL', error:undefined}; this pins both the signal decision axis and
+    // the diagnostic priority r.error?.code -> r.signal -> exit status.
+    const preload = join(dir, 'signal-kill-preload.mjs');
+    writeFileSync(preload, [
+      `if ((process.argv[1] || '').endsWith('/acceptance-gate.mjs')) {`,
+      `  process.kill(process.pid, 'SIGKILL');`,
+      `}`,
+    ].join('\n'));
+    const r = runDispatcher(dir, 'git commit -m x', {
+      NODE_OPTIONS: `--import=${pathToFileURL(preload).href}`,
+    });
+    assert.equal(r.status, 2, 'signal termination must fail closed');
+    assert.match(r.stderr, /commit gate 'acceptance-gate\.mjs' did not run cleanly \(SIGKILL\)/);
+    assert.doesNotMatch(r.stderr, /exit null/);
   });
 });
