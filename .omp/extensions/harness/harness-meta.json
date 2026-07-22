@@ -1,5 +1,5 @@
 {
-  "version": "2026.68",
-  "updated": "2026-07-16",
+  "version": "2026.69",
+  "updated": "2026-07-22",
   "description": "Personal harness for OMP - context/acceptance/backpressure gates (ported from the Claude Code template at 2026.49)"
 }
