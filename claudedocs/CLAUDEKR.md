@@ -126,7 +126,7 @@ Harness 검증 계약 세부 사항: [`rules/harness_integration_contract.md`](.
 
 - 전체 라우팅 규칙은 [`rules/agent_routing.md`](../rules/agent_routing.md)를 참조합니다
   (2026-06 미사용 MCP 위임 매트릭스 폐기 기록 포함).
-- **reviewer**: `risk-assess` 기준 **high/critical** 위험 변경(보안/인증/마이그레이션 파일 접촉 또는 코드 100줄 초과)에 SHOULD 위임. low/medium 위험 변경은 셀프 리뷰(추가 스폰 없음)로 충분합니다. 3-패스 적대 리뷰(self + 이종 모델 adversary + OMC) — `review-gate`가 실제로 강제하는 수준과 일치합니다: high/critical 커밋에만 2차 관점 증거(이종 모델 리뷰, 또는 `human-reviewed-by:` + `Verdict:`를 갖춘 human 리뷰)를 요구하며, 유일한 우회는 감사된 override(`docs/harness/review-skip`에 `reason:`/`approved-by:`/`diff-hash:`, `docs/harness/audit.jsonl`에 기록)입니다.
+- **reviewer**: `risk-assess` 기준 **high/critical** 위험 변경(보안/인증/마이그레이션 파일 접촉 또는 코드 100줄 초과)에 SHOULD 위임. low/medium 위험 변경은 셀프 리뷰(추가 스폰 없음)로 충분합니다. 3-패스 적대 리뷰(self + 이종 모델 adversary + code-reviewer — 셋 다 `.omp/agents/` 프로젝트 정의, 외부 플러그인 불요; reviewer가 frontmatter `spawns:`로 Pass 2/3를 중첩 스폰) — `review-gate`가 실제로 강제하는 수준과 일치합니다: 기계 증거는 strict JSON tuple 사이드카(`docs/reviews/review-<ts>.json`의 `["omp-review-evidence/v1", <hash>, <verdict>, <models|null>, <human|null>, <reviewer>]` — 게이트는 마크다운을 파싱하지 않음)이며, 2차 관점 증거(실측 ≥2 계열 models 배열 또는 human 신원)는 high/critical 커밋에만 요구됩니다. 유일한 우회는 감사된 override(`docs/harness/review-skip`에 `["omp-review-override/v1", <reason>, <approved_by>, <hash>]`, `docs/harness/audit.jsonl`에 기록·소비)입니다. **디스패치 preflight (MUST)**: reviewer를 스폰하기 전에 자신의 depth와 `task` 툴 가용성을 확인합니다 — reviewer는 Pass 2/3에 `task` 툴이 필요하므로(재귀 캡: depth 1 이하) `task` 툴이 없는 세션은 그 세션에서 리뷰를 진행하지 않습니다(진입점 우선순위: `rules/agent_routing.md`).
 - **verifier**: AC가 존재할 때 작업 완료 주장 전에 MUST 위임.
 
 ## 연결된 모듈

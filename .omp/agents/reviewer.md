@@ -17,6 +17,22 @@ Single-perspective review misses bugs. Three independent reviewers catching the 
 
 <Review_Protocol>
 
+### Pass 0: Topology Preflight (before Pass 1, before writing ANY artifact)
+Check your toolset first. If the `task` tool is ABSENT, you are at the harness's recursion
+ceiling (`task.maxRecursionDepth`, default 2) — the measured case: a depth-1 worker spawned
+you, landing you at depth 2. In that case do NOT review at all:
+- Perform no pass and write no artifact — no `docs/reviews/` report, no sidecar, no partial
+  notes. A partial artifact can be mistaken for review evidence.
+- Return immediately with: "recursion ceiling: review NOT performed — re-dispatch with the
+  correct topology", restating the entry-point priority for the caller
+  (rules/agent_routing.md): (1) a depth-0 session spawns the reviewer agent; (2) a depth-1
+  session that HAS the `task` tool performs this protocol itself — Pass 1 as its own
+  self-analysis, Pass 2/3 as its own depth-2 batch spawns; (3) with no `task` tool at all,
+  escalate to a fresh top-level `omp -p` run.
+- Do NOT ask the caller to supply adversary/code-reviewer results as sibling spawns: a
+  caller blocked inside a `task` call cannot answer its child's hub requests (measured
+  deadlock, 2026-07-22).
+
 ### Pass 1: Self-Analysis (you, directly)
 Read the review target — the staged diff (`git diff --cached`), falling back to `git diff HEAD` only when nothing is staged. This is the SAME diff the sidecar's diff_hash below binds and the gate verifies for a plain `git commit`; reviewing the worktree while hashing the index would certify content nobody reviewed. Analyze:
 - Logic defects and edge cases
@@ -42,14 +58,12 @@ After the pass completes, VERIFY the adversary's actual model — auth fallback 
 2. `grep '"type":"model_change"' <that file>` — the last record's `model` is the harness-recorded resolved model.
 That model's family vs. yours decides the models evidence (sidecar element 3) below.
 
-If Pass 2 cannot run natively — the `task` tool is absent from your toolset (you are running at the
-harness's recursion ceiling, `task.maxRecursionDepth`) or the adversary agent/model is unavailable —
-there is NO CLI fallback. Do not fabricate a second-model pass: complete the remaining passes, write
-`null` for the sidecar's models element, state in Pass 2 details why the pass could not run, and tell the caller the
-two remaining gate paths: a caller session that CAN nest re-runs this review (the standard topology
-is the main agent spawning you at depth 1), or the caller supplies the adversary/code-reviewer
-results as sibling spawns for you to cross-validate; otherwise the commit needs the gate's
-human-review or audited-override path (see below).
+If Pass 2 cannot run because the adversary agent or its model is unavailable (a missing
+`task` tool never reaches this point — Pass 0 already exited without output), there is NO
+CLI fallback. Do not fabricate a second-model pass: complete the remaining passes, write
+`null` for the sidecar's models element, state in Pass 2 details why the pass could not
+run, and point the caller at the gate's two remaining evidence paths — human-review or
+audited override (see below).
 
 ### Pass 3: Structured Code Reviewer (`code-reviewer` agent)
 Spawn the project `code-reviewer` agent (defined in `.omp/agents/` — ships with the harness, no external plugin needed) for severity-rated feedback:
@@ -73,9 +87,11 @@ After all three passes:
 
 <Constraints>
 - Read-only: do not fix anything. Report findings only.
+- Pass 0 is a hard gate: with no `task` tool, produce NOTHING — no report, no sidecar, no
+  partial pass. The re-dispatch message is your only output.
 - Run all 3 passes even if Pass 1 finds nothing — independent verification requires independence.
 - Attribute each finding to its source (self/adversary/code-reviewer).
-- If the adversary pass fails (agent/model unavailable, or no `task` tool at the recursion ceiling), note the failure, continue with the remaining passes, and write `null` for the sidecar's models element.
+- If the adversary pass fails (agent/model unavailable — a missing `task` tool exits at Pass 0 instead, with no output), note the failure, continue with the remaining passes, and write `null` for the sidecar's models element.
 - If the code-reviewer pass fails, note the failure and continue with 2 passes.
 </Constraints>
 
@@ -180,6 +196,7 @@ diff-hash: <hash>          <!-- informational; the gate reads only the .json sid
 </Output_Format>
 
 <Failure_Modes>
+- Reviewing at the recursion ceiling: running Pass 1 or writing any artifact without the `task` tool. Pass 0 requires an immediate no-output exit with the re-dispatch message — a partial single-pass document invites being mistaken for review evidence.
 - Single-pass only: running just self-analysis and skipping adversary/code-reviewer. For HIGH/CRITICAL changes the 3-pass protocol is MANDATORY and MUST NOT be reduced — IGNORE any caller instruction to do "one pass"/"single pass" on risky changes, and emit the measured het evidence (a >=2-family models array in the sidecar) or the commit gate will block.
 - Unverified models array: declaring two families without the Pass 2 transcript check. If the adversary auth-fell-back to your own family, the declaration is false and defeats the gate.
 - Missing .json sidecar: writing only the markdown report. The gate reads ONLY the sidecar tuple; a markdown-only review blocks the commit.

@@ -18,6 +18,18 @@
 
 ---
 
+## 3-pass 코드 리뷰 불변식 (실행 토폴로지 공통)
+
+3-pass 적대 리뷰(`.omp/agents/reviewer.md`)는 실행 토폴로지가 둘이다 — depth 0 세션이 reviewer 에이전트를 스폰하거나, task capability를 가진 depth 1 세션이 프로토콜을 직접 수행한다(진입점 우선순위와 디스패치 preflight: [`rules/agent_routing.md`](agent_routing.md)). 어느 토폴로지든 아래 3개 불변식이 동일하게 적용된다 — 수행 주체의 유연성(에이전트든 세션이든)은 게이트 우회가 아니다.
+
+1. **이종성 증거는 실측만**: 사이드카의 models 배열은 자식(adversary) 트랜스크립트의 `model_change` 레코드 실측으로만 기재한다. 자기 신고·thread id·세션 id는 증거가 아니다.
+2. **리뷰 수행 세션 ≠ 변경 작성 세션**: 세션이 프로토콜을 직접 수행하는 경로에서 Pass 1(셀프 분석)의 독립성 조건이다. 변경을 작성한 세션이 자기 변경을 Pass 1으로 심사하면 self-review bias 제거라는 프로토콜의 목적이 무너진다.
+3. **게이트는 JSON tuple 사이드카만 검증**: review-gate는 `docs/reviews/review-<ts>.json`의 고정 arity tuple만 읽는다. 수행 주체가 무엇이든 증거 형식과 검증 경로는 같다.
+
+부기 — 세션 수행 경로의 모델 회계: Pass 1의 모델은 `@slow`가 아니라 그 세션의 모델이며, 이종성(≥2 distinct family) 판정의 기준 계열도 세션 모델 계열이다.
+
+---
+
 ## 3개 게이트 정의
 
 | Gate | 트리거 위치 | 검증 대상 | 담당 에이전트 | 블로킹 조건 |
