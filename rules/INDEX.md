@@ -44,6 +44,7 @@ If both global and local guidance exist for the same tool choice, apply global-h
 
 - Assetization (spec/decision/retro): [`assetization.md`](assetization.md)
 - Commit & PR discipline: [`commit_and_pr.md`](commit_and_pr.md)
+- Cycle definition (1사이클 정의 — 인테이크 판정·분할 역제안): [`cycle_definition.md`](cycle_definition.md)
 - Harness integration contract: [`harness_integration_contract.md`](harness_integration_contract.md)
 
 ## Operational rails

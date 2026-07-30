@@ -91,6 +91,7 @@ Harness verification contract details: [`rules/harness_integration_contract.md`]
 - **Evidence**: cite concrete evidence for key decisions (file paths + excerpts or command output).
 - **Reference doc sync**: in the same PR, update `claudedocs/CLAUDEKR.md` (Korean mirror of this file) or explicitly mark it as stale.
 - **Scope self-detection (L1)**: during a session, when a scope-add / fix / new requirement appears, propose AC and either silent-append (testable + unambiguous) or ask on a material fidelity gap (push→pull) — never let a code change proceed with no tracking AC ([`docs/rules/scope_self_detect_policy.md`](docs/rules/scope_self_detect_policy.md); mechanical backstop = `acceptance-gate`).
+- **Cycle intake (L1)**: on receiving a new instruction, judge it against the 1-cycle definition (one-line verifiable completion check, singular deliverable, one-session scale). If it fails, propose a numbered decomposition with per-cycle check sentences before implementing — one proposal only; the user's "just proceed" is final ([`rules/cycle_definition.md`](rules/cycle_definition.md)).
 
 ## Completion Contract (MUST)
 
@@ -154,6 +155,7 @@ If you cannot comply with any MUST:
 - Agent routing: [`rules/agent_routing.md`](rules/agent_routing.md)
 - Artifact roles (seed/scope/audit 3-tier): [`docs/rules/artifact_roles_contract.md`](docs/rules/artifact_roles_contract.md)
 - Scope self-detect policy (L1): [`docs/rules/scope_self_detect_policy.md`](docs/rules/scope_self_detect_policy.md)
+- Cycle definition (1사이클 인테이크 판정): [`rules/cycle_definition.md`](rules/cycle_definition.md)
 
 ## Checklists (Use as needed)
 

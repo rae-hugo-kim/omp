@@ -1,57 +1,46 @@
-name: review-topology-preflight-rules
-status: done
-completed: 2026-07-22
-version: 2
-task_id: "20260722-205056-a419"
+name: cycle-intake-discipline
+status: approved
+version: 1
+task_id: "20260730-121500-c1in"
 goal: >
-  3-pass 리뷰의 실행 토폴로지 규칙을 개정합니다 — 리뷰 진입점 우선순위(depth 0
-  reviewer 스폰 / depth 1 세션의 프로토콜 직접 수행 / top-level 탈출)를 문서화하고,
-  디스패치 preflight를 MUST로 강제하며, reviewer에 무산출 즉시 종료 preflight(Pass 0)를
-  신설하고, 모든 토폴로지 공통 불변식 3개를 명문화합니다. 문서 전용 변경이며 코드는
-  건드리지 않습니다.
+  1사이클 인테이크 규율을 도입합니다 — 지시를 받는 시점에 1사이클 여부(한 줄 완료 확인
+  문장·단수 산출물·1세션 규모)를 판정하고, 미충족이면 구현 전에 분할을 역제안하는 L1
+  행동 규칙과 그 기계 백스톱(kickoff-detector 메시지·커밋 경계 넛지)·운영 템플릿(사이클
+  큐 scratchboard)을 하네스 배포 세트에 신설합니다.
 
 references:
-  - path: rules/agent_routing.md
-    reason: "리뷰 진입점 우선순위 + 디스패치 preflight MUST의 SSOT (:29 단락 재서술)"
-  - path: .omp/agents/reviewer.md
-    reason: "reviewer 측 Pass 0 preflight(무산출 즉시 종료 계약) + 폴백 문구 교체 대상"
-  - path: rules/adversarial_review.md
-    reason: "토폴로지 공통 불변식 3개의 정합 위치"
-  - path: AGENTS.md
-    reason: "reviewer 불릿에 preflight 한 줄 (CLAUDEKR.md 미러 동일 커밋 의무)"
+  - path: rules/cycle_definition.md
+    reason: "규칙 본문 — 정의 3항, 구성적 판정, 인테이크 프로토콜, 지시 채널, 예시 뱅크"
+  - path: .omp/extensions/harness/index.ts
+    reason: "커밋 경계 넛지 배선 (CYCLE_BOUNDARY_NOTE, non-WIP 가드)"
+  - path: templates/scratchboard.md
+    reason: "사이클 큐 운영 템플릿 — 에이전트 고정 지시 4항 내장"
   - note: >
-      설계 확정 근거 — 2026-07-22 vibe 모드 실측: depth 1 워커가 reviewer를 generic
-      스폰하면 재귀 캡(task.maxRecursionDepth=2)에서 reviewer가 depth 2에 떨어져 task
-      툴 없이 기동하고, 블로킹 task 호출 중인 caller는 자식의 sibling 스폰 요청(hub)에
-      응답 불능 — 제3 세션 릴레이로만 회복(라운드당 수십 분 손실). fast급 워커 세션은
-      task 툴이 전면 비활성('Allowed: none')일 수 있음도 실측.
+      설계 근거 — 2026-07-30 하네스 부하 실측: 272k 모델(gpt-5.6-sol)의 228,987 tok
+      자동 컴팩션 발동과 마라톤 세션의 재독 복리(단일 파일 166회 재독)를 사이클 단위
+      세션 분리로 구조 제거. 사이클 분해의 내부 전례는 sum-vault의 Copybara 보안
+      시리즈(권고 1건=PR 1건)와 siksa 정산 단계별 배포.
 
 constraints:
-  - 문서 전용 변경 — 코드(.mjs, 게이트, 테스트) 무접촉
-  - 확정 설계 그대로 반영 — 재설계 금지 (2단계 DAG 경로 표준 편입 금지, maxRecursionDepth 상향을 규칙 본문에 넣지 않음)
-  - preflight 조건은 세션 종류가 아니라 capability 기반("task 툴 없으면 그 세션에서 리뷰 진행 금지")
-  - AGENTS.md와 claudedocs/CLAUDEKR.md 미러는 동일 커밋으로 갱신
-  - 글투는 PR #16 rules/writing_style.md 초안 R1-R7 준수 (두괄식, 번역투·근거 없는 수식어 금지, 정의된 식별자 코드체 보존 + 첫 등장 역할 설명)
-  - push 금지 — 커밋까지만
-  - 타 세션 워킹트리 변경분 무접촉 (claudedocs/harness-auto-capture-analysis.md, .serena/, docs/upstream-issues.md)
+  - 게이트 차단 시맨틱 무변경 — 신설 넛지·리마인더는 전부 advisory
+  - "wip: 커밋에는 경계 넛지 미발화 (mid-implementation 보호, context_management.md 정합)"
+  - 배포 세트(rules/, templates/, .omp/extensions/harness, AGENTS.md) 안에만 배치
 
 acceptance_criteria:
-  - "AC1 진입점 우선순위 문서화 — rules/agent_routing.md에 depth 0(reviewer 스폰) / depth 1(task capability 세션이 reviewer.md 프로토콜 직접 수행, Pass 2/3만 depth 2 batch 스폰) / task 부재(top-level omp -p 탈출) 3단계와 디스패치 preflight MUST, 블로킹 caller 응답 불능 실측 기록이 실린다"
-  - "AC2 reviewer preflight 무산출 즉시 종료 — .omp/agents/reviewer.md에 Pass 1·어떤 산출물 작성 이전의 Pass 0가 신설되어 task 툴 부재 시 리뷰 미수행·사이드카/리뷰 문서 미작성·caller 재실행 지시 반환을 계약하고, 기존 'caller가 sibling 결과를 공급' 폴백 문구가 제거된다"
-  - "AC3 불변식 3개 명문화 — rules/adversarial_review.md에 ①이종성 증거는 자식 트랜스크립트 model_change 실측만 ②리뷰 수행 세션 ≠ 변경 작성 세션 ③게이트는 JSON tuple 사이드카만 검증 + 세션 수행 경로의 모델 회계 부기가 실린다"
-  - "AC4 scripts/docs-drift 그린 — 0 errors"
-  - "AC5 CLAUDEKR 미러 동기화 — AGENTS.md reviewer 불릿의 preflight 한 줄이 claudedocs/CLAUDEKR.md에 동일 커밋으로 반영된다"
+  - "AC1 rules/cycle_definition.md 신설 — 정의 3항 + 구성적 판정 형식 + 인테이크 프로토콜 + 지시 채널 절 + 예시 뱅크 17건(vault 실사례 출처 병기), rules/INDEX.md 등재"
+  - "AC2 AGENTS.md Cycle intake(L1) 조항 + Linked Modules 링크가 실리고 claudedocs/CLAUDEKR.md에 동일 커밋으로 미러된다"
+  - "AC3 kickoff-detector 메시지가 인테이크 판정 안내로 교체된다 — 발화/억제(kickoff-done)/비트리거 스모크 3케이스 통과, 트리거 패턴·억제 시맨틱 무변경"
+  - "AC4 templates/scratchboard.md 사이클 큐 템플릿 신설(에이전트 고정 지시 4항 내장) + templates/INDEX.md 등재"
+  - "AC5 index.ts 커밋 경계 넛지 — 성공한 non-WIP 커밋 tool result에 append, isWipCommit은 게이트 렉서 재사용, 배선 테스트 4건 포함 전체 스위트 그린"
 
 out_of_scope:
-  - 코드 변경 일체 (review-gate, task 디스패처, maxRecursionDepth 설정)
-  - 2단계 DAG(형제 batch → aggregator) 경로의 표준 편입 — 병렬 필요 실측 시 재도입
-  - push / PR 생성
-  - 타 세션 소유 파일 (claudedocs/harness-auto-capture-analysis.md, docs/upstream-issues.md, .serena/)
+  - 게이트 차단 로직 변경 (acceptance/review/backpressure 시맨틱)
+  - kickoff-detector 트리거 패턴 변경
+  - 컨텍스트 임계 기반 넛지 (Layer 3 — getBranch usage 노출 프로브 후 재검토)
 
 assumptions:
-  - OMP task.maxRecursionDepth 기본값 2가 유지된다
-  - PR #16(writing_style.md)은 미병합이지만 그 R1-R7을 문체 기준으로 준수한다
+  - harness-sync 배포 화이트리스트가 rules/·templates/·.omp/extensions/harness·AGENTS.md를 포함한다 (scripts/harness-sync.sh:92-122 실측)
 
 risks:
-  - reviewer.md는 영문, rules/는 한다체, CLAUDEKR.md는 합니다체 — 파일별 문체 불일치 주의
-  - CLAUDEKR.md reviewer 불릿이 이미 AGENTS.md 대비 구식(마크다운 증거 서술 잔존) — 미러 동기화 시 함께 현행화 필요
+  - 넛지가 사이클 무관 커밋에도 붙음 — 조건부 문구("If this completes...")로 완화 (리뷰 finding low)
+  - -F/heredoc 형태 wip 커밋은 렉서 한계로 넛지 발화 — fail-toward-nudge, 리뷰 리포트에 문서화
