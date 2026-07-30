@@ -76,3 +76,4 @@
 {"ts":"2026-07-22T11:51:53.373513143Z","event":"rubric_evaluated","actor":"assistant","meta":{"goal":"H","constraints":"H","success":"H","context":"H","coverage":"H","note":"확정 설계의 수정 파일 5종이 전부 AC1-AC5로 매핑 — 잔차 0"}}
 {"ts": "2026-07-22T12:01:00.484293Z", "event": "seed_revised", "actor": "assistant", "meta": {"task_id": "20260722-205056-a419", "from_version": 1, "to_version": 2, "changed_fields": ["status"], "reason": "draft→approved 소급 전이 — directive-design kickoff(인터뷰 생략, 사용자 확정 설계 지시가 승인에 해당)에서 전이 기록 누락, 작성 세션(topology) 확인 후 closeout 직전 소급 기록"}}
 {"ts": "2026-07-22T12:01:00.484312Z", "event": "task_closed", "actor": "assistant", "meta": {"task_id": "20260722-205056-a419", "name": "review-topology-preflight-rules"}}
+{"ts": "2026-07-30T13:08:17.752995686Z", "event": "task_closed", "actor": "assistant", "meta": {"task_id": "20260730-121500-c1in", "name": "cycle-intake-discipline", "verdict": "AC1-AC5 전항 [x], 스위트 417/417"}}
