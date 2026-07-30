@@ -119,6 +119,17 @@ PATHS=(
   ".omp/skills/gh-loop"
   ".omp/skills/gh-fanout"
   ".omp/agents"
+  # docs/rules harness contracts — INDIVIDUAL FILES on purpose: docs/ is consumer
+  # project space, and a directory entry would rm -rf consumer-custom files there.
+  # A new docs/rules contract in the source repo MUST be added here explicitly.
+  "docs/rules/artifact_roles_contract.md"
+  "docs/rules/closeout_contract.md"
+  "docs/rules/glossary_policy.md"
+  "docs/rules/kickoff_output_contract.md"
+  "docs/rules/scope_self_detect_policy.md"
+  "docs/rules/seed_contract.md"
+  "docs/rules/seed_evolution_policy.md"
+  "docs/rules/startdev_seed_contract.md"
 )
 
 if [[ $DRY_RUN -eq 1 ]]; then
