@@ -8,6 +8,7 @@
 - Eval definition: [`eval_definition.md`](eval_definition.md)
 - Eval report: [`eval_report.md`](eval_report.md)
 - Session retro: [`session_retro.md`](session_retro.md)
+- Scratchboard (지시 문서를 사이클 큐로 운영): [`scratchboard.md`](scratchboard.md)
 - gh-loop runtime workflow (autonomy option A): [`github-workflows/gh-loop.yml`](github-workflows/gh-loop.yml) + [setup](github-workflows/README.md)
 
 

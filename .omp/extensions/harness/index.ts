@@ -38,7 +38,7 @@
 import { spawn } from "node:child_process";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isGitCommit } from "./gates/git-commit-detect.mjs";
+import { isGitCommit, isWipCommit } from "./gates/git-commit-detect.mjs";
 import { mutationCallTargets, mutationRoute, readTarget, searchTrackTargets } from "./gates/read-path.mjs";
 import { checkMermaidFile, MERMAID_SUPPORTED } from "./mermaid-check";
 
@@ -136,6 +136,16 @@ interface HarnessExtensionApi {
 
 /** Freshness window for mid-session drift rechecks (turn start, post-commit). */
 const DRIFT_RECHECK_MAX_AGE_MS = 60 * 60 * 1000;
+
+/** Agent-facing cycle-boundary nudge appended to every successful non-WIP `git commit` result.
+ *  A successful commit is the cycle-end marker (rules/cycle_definition.md); the nudge re-arms
+ *  the intake discipline mid-session even after compaction has evicted the always-on rule.
+ *  `wip:` checkpoints stay quiet — they are mid-implementation, the exact moment
+ *  context_management.md says NOT to break. */
+const CYCLE_BOUNDARY_NOTE =
+	"HARNESS NOTE: commit succeeded — cycle boundary (rules/cycle_definition.md). " +
+	"If this completes the current cycle: update the instruction doc / cycle queue " +
+	"(check the box, record deferrals), then suggest the user run /clear and resume with the next cycle.";
 
 /** stdin payload in the shape the Claude Code hook protocol fed the gates. */
 interface GatePayload {
@@ -299,9 +309,13 @@ export default function harness(pi: HarnessExtensionApi): void {
 				// invalidates the commit itself (blocking here would force a remote-wins sync
 				// onto a dirty tree — the exact hazard we avoid).
 				if (isGitCommit(command) && !bashRunFailed(event)) {
+					const notes: string[] = [];
 					const drift = await runGate("harness-version-check.mjs", { session_state, max_age_ms: DRIFT_RECHECK_MAX_AGE_MS }, VERSION_CHECK_TIMEOUT_MS);
-					const note = drift.stdout.trim();
-					if (note) return { content: [...(event.content ?? []), { type: "text", text: note }] };
+					const driftNote = drift.stdout.trim();
+					if (driftNote) notes.push(driftNote);
+					// Cycle-boundary nudge: only non-WIP commits mark a cycle end (see CYCLE_BOUNDARY_NOTE).
+					if (!isWipCommit(command)) notes.push(CYCLE_BOUNDARY_NOTE);
+					if (notes.length) return { content: [...(event.content ?? []), { type: "text", text: notes.join("\n\n") }] };
 				}
 				return;
 			}
