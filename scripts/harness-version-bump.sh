@@ -46,6 +46,9 @@ HARNESS_PATHS=(
   "scripts/test-harness-audit.sh"
   ".omp/skills/"
   ".omp/agents/"
+  # aligned with harness-sync.sh: docs/rules contracts sync as individual files;
+  # the dir prefix here just makes ANY contract change trigger a version bump.
+  "docs/rules/"
 )
 
 # Literal path match (no regex): exact for file entries, prefix for "dir/" entries.
