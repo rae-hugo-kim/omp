@@ -23,17 +23,29 @@ This repo ships its own enforcement layer as an **OMP extension**. The following
 | What | How | Location |
 |------|-----|----------|
 | Pre-edit file read | `context-gate` + `read-tracker` + `write-tracker` gates | `.omp/extensions/harness/gates/` |
-| Commit acceptance criteria | `acceptance-gate` (via `commit-gates` dispatcher) | `.omp/extensions/harness/gates/` |
+| Commit acceptance criteria | `acceptance-gate` (via `commit-gates` dispatcher, run by `.githooks/pre-commit`) | `.omp/extensions/harness/gates/`, `.githooks/` |
 | Backpressure on failures | `backpressure-gate` + trackers | `.omp/extensions/harness/gates/` |
-| Risky review threshold | `review-gate` (via `commit-gates` dispatcher) | `.omp/extensions/harness/gates/` |
+| Risky review threshold | `review-gate` (via `commit-gates` dispatcher, run by `.githooks/pre-commit`) | `.omp/extensions/harness/gates/`, `.githooks/` |
 | Destructive command warnings | `destructive-guard` | `.omp/extensions/harness/gates/` |
 | New work detection | `kickoff-detector` | `.omp/extensions/harness/gates/` |
 | Code changes review/verification | `reviewer` / `verifier` agents via the `task` tool | `.omp/agents/` |
 | Session breadcrumb capture (non-blocking) | `breadcrumb-tracker` + `breadcrumb-surface` | `.omp/extensions/harness/gates/` |
 | Mermaid syntax in saved `.md` (non-blocking) | in-process `mermaid-check` via OMP bundled parser | `.omp/extensions/harness/mermaid-check.ts` |
 | Local archive leak prevention (commit BLOCK / push BLOCK) | `archive-guard` (via `commit-gates`) + `.githooks/pre-push` + `compush`/`compr` pre-push checks | `.omp/extensions/harness/gates/`, `.githooks/` |
+| Commit-gate bypass declaration | `commitBypassTripwire` in `index.ts` (`--no-verify`/`-n`, `core.hooksPath`, `--git-dir`/`--work-tree`, retargeting `GIT_*`) | `.omp/extensions/harness/gates/git-commit-detect.mjs` |
+| Ungated-commit observation (non-blocking) | `.githooks/post-commit` + `.githooks/post-merge` advisories | `.githooks/` |
 
-All gates are wired by the extension `.omp/extensions/harness/index.ts` (OMP events: `tool_call`, `tool_result`, `before_agent_start`, `session_start`). Gates require `node` on PATH (the in-process mermaid check does not).
+Commit enforcement runs at git's own boundary: **`.githooks/pre-commit`** invokes the `commit-gates`
+dispatcher in hook mode, so the four commit gates judge the staged index of the repo actually being
+committed to — for every spelling, and for human commits as well as agent ones. `core.hooksPath` must
+point at `.githooks` (bootstrap/migrate set it). The command layer keeps only the bypass tripwire above.
+Integration paths (merge auto-commits, cherry-pick, revert, rebase) are deliberately not blocked — they
+move commits that were already gated at their origin — and the post-commit/post-merge advisories observe
+them. Every other gate is wired by `.omp/extensions/harness/index.ts` (OMP events: `tool_call`,
+`tool_result`, `before_agent_start`, `session_start`). Gates require `node` on PATH; the pre-commit hook
+**fails closed** without it (`OMP_NODE_BIN` is the escape hatch for nvm/GUI/cron environments), while the
+in-process mermaid check needs no node. Known residuals (sparse-checkout, `stash`, `--no-verify`,
+out-of-jurisdiction repos) are enumerated in [`rules/harness_integration_contract.md`](rules/harness_integration_contract.md).
 
 OMC relationship: OMC agents and skills installed under `~/.claude` are discovered by OMP and usable via the `task` tool; OMC's hook automation (magic keywords, system-reminder injection) does **not** run under OMP — this extension replaces it for repo-level gating.
 

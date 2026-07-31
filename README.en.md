@@ -116,13 +116,13 @@ cd <existing-project>
 
 ## Harness
 
-Mechanisms that operate automatically in the kickoff → startdev flow. The `.omp/extensions/harness/gates/` (21) directory holds stdin-JSON gate CLIs (plus a few import helpers), wired to events by the OMP extension `index.ts`:
+Mechanisms that operate automatically in the kickoff → startdev flow. There are two enforcement points: **the commit gates run from a git hook (`.githooks/pre-commit`)**, everything else is wired to OMP events by the extension `index.ts`. The gate CLIs are stdin-JSON programs in `.omp/extensions/harness/gates/` (21):
 
 | OMP event | Gate | Role |
 |-----------|------|------|
 | `tool_call` (edit/write/ast_edit) | context-gate | Block edits to unread files |
 | `tool_call` (bash) | destructive-guard | Warn on dangerous commands (rm -rf, force push, ...) |
-| `tool_call` (bash, on commit) | commit-gates → acceptance/backpressure/review | Block commits with unmet AC, failed verification, or unreviewed high risk |
+| `tool_call` (bash) | commit-tripwire (`index.ts`) | Block a **declared bypass** of the commit gates — `--no-verify`/`-n`, `core.hooksPath` retargeting, `--git-dir`/`--work-tree`, retargeting `GIT_*` |
 | `tool_call` (mcp__*) | mcp-gate | Warn on destructive MCP calls |
 | `tool_result` (read) | read-tracker | Record files read |
 | `tool_result` (grep/ast_grep) | read-tracker | Record files the search minted `[path#TAG]` anchors for (one batched spawn) |
@@ -132,6 +132,17 @@ Mechanisms that operate automatically in the kickoff → startdev flow. The `.om
 | `before_agent_start` | kickoff-detector | Inject kickoff reminder when new work is detected |
 | `session_start` | harness-version-check | Remote harness drift notice (24h cache) |
 | `session_start` | breadcrumb-surface | Surface recent docs/sum (un-orphan prior summaries; no-LLM) |
+
+Commit enforcement happens at git's own boundary, so it holds for every spelling and for human commits too:
+
+| git hook | Gate | Role |
+|----------|------|------|
+| `pre-commit` (blocking) | commit-gates → acceptance/backpressure/review/archive | Judge the staged index; on failure no commit object is created. Fails closed without node (`OMP_NODE_BIN` is the escape hatch) |
+| `post-commit` (non-blocking) | backstop + deferred consumption | Advisory for ungated commits (`--no-verify`, cherry-pick, revert, rebase) and one-shot flag consumption |
+| `post-merge` (non-blocking) | backstop | Observes merge auto-commits — the one path where git fires neither pre-commit nor post-commit |
+| `pre-push` (blocking) | archive leak + docs drift | Block tracked `docs/sum`·`docs/reviews` and FAIL-severity drift |
+
+Integration paths (merge auto-commits, cherry-pick, revert, rebase) are **deliberately not blocked**: they move content that was already gated at its origin commit, and the backstop observes them. Residual surfaces (sparse-checkout, `stash`, `--no-verify`, out-of-jurisdiction repos) are enumerated in [`rules/harness_integration_contract.md`](rules/harness_integration_contract.md).
 
 - **seed.yaml** — structured kickoff output (goals, constraints, AC, risks)
 - **rubric** — 4-dimension clarity gate (HIGH/MED/LOW)

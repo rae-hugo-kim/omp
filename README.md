@@ -126,13 +126,13 @@ cd <기존-프로젝트>
 
 ## 하네스
 
-kickoff → startdev 흐름에서 자동으로 작동하는 장치들. `.omp/extensions/harness/gates/` (21)에 있는 stdin-JSON 게이트 CLI(와 일부 import helper)를 OMP 확장 `index.ts`가 이벤트에 배선합니다:
+kickoff → startdev 흐름에서 자동으로 작동하는 장치들. 집행 지점은 두 곳입니다 — **커밋 게이트는 git 훅(`.githooks/pre-commit`)** 에서, 나머지는 OMP 확장 `index.ts`가 이벤트에 배선합니다. 게이트 CLI는 `.omp/extensions/harness/gates/` (21)에 있는 stdin-JSON 프로그램입니다:
 
 | OMP 이벤트 | 게이트 | 역할 |
 |-----------|--------|------|
 | `tool_call` (edit/write/ast_edit) | context-gate | 읽지 않은 파일 수정 차단 |
 | `tool_call` (bash) | destructive-guard | 위험 명령(rm -rf, 강제 푸시 등) 경고 |
-| `tool_call` (bash, 커밋 시) | commit-gates → acceptance/backpressure/review | 수락 기준 미충족·검증 실패·고위험 무리뷰 커밋 차단 |
+| `tool_call` (bash) | commit-tripwire (`index.ts`) | 커밋 게이트 **우회 선언** 차단 — `--no-verify`/`-n`, `core.hooksPath` 재지정, `--git-dir`/`--work-tree`, 리타게팅 `GIT_*` |
 | `tool_call` (mcp__*) | mcp-gate | 파괴적 MCP 호출 경고 |
 | `tool_result` (read) | read-tracker | 읽은 파일 기록 |
 | `tool_result` (grep/ast_grep) | read-tracker | 검색이 `[path#TAG]` 앵커를 발급한 파일 기록 (배치 1회 스폰) |
@@ -142,6 +142,17 @@ kickoff → startdev 흐름에서 자동으로 작동하는 장치들. `.omp/ext
 | `before_agent_start` | kickoff-detector | 새 작업 감지 시 킥오프 리마인더 주입 |
 | `session_start` | harness-version-check | 원격 하네스 드리프트 알림 (24h 캐시) |
 | `session_start` | breadcrumb-surface | 최근 docs/sum 표면화 (고아 요약 해소, no-LLM) |
+
+커밋 계열은 git 경계에서 집행됩니다(어떤 철자·경로로 커밋해도, 사람 커밋도 동일):
+
+| git 훅 | 게이트 | 역할 |
+|--------|--------|------|
+| `pre-commit` (차단) | commit-gates → acceptance/backpressure/review/archive | 스테이징된 인덱스 기준 판정. 실패 시 커밋 객체 미생성. node 부재 시 fail-closed(`OMP_NODE_BIN` 탈출구) |
+| `post-commit` (비차단) | 백스톱 + 유예 소비 | 게이트 미경유 커밋(`--no-verify`·cherry-pick·revert·rebase) advisory + one-shot 플래그 소비 |
+| `post-merge` (비차단) | 백스톱 | merge 자동커밋 관측 — git이 pre-commit/post-commit을 발화하지 않는 유일 경로 |
+| `pre-push` (차단) | 아카이브 유출·docs drift | `docs/sum`·`docs/reviews` 추적 상태 및 FAIL 드리프트 차단 |
+
+통합 경로(merge 자동커밋·cherry-pick·revert·rebase)는 **의도적으로 차단하지 않습니다** — 원 커밋 시점에 이미 게이트를 통과한 콘텐츠의 이동이고, 백스톱이 관측합니다. 잔여면(sparse-checkout·stash·`--no-verify`·관할 밖 레포)은 [`rules/harness_integration_contract.md`](rules/harness_integration_contract.md)에 열거돼 있습니다.
 
 - **seed.yaml** — 킥오프 결과를 구조화 (목표, 제약, 수락 기준, 리스크)
 - **rubric** — 4차원 명확도 게이트 (HIGH/MED/LOW)
