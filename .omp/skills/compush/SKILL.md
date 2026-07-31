@@ -84,13 +84,24 @@ Format: `<type>: <short description>`
 
 ### 6. Commit and push
 
+커밋 게이트는 `.githooks/pre-commit`에서 **스테이징된 인덱스**를 판정한다(2026-07-30 재설계).
+따라서 `git add … && git commit`처럼 동반 명령이 있어도 안전하다 — 게이트는 add가 끝난 뒤의
+인덱스를 본다. 다만 아래처럼 **커밋과 푸시는 분리**하는 편이 낫다: 푸시 전 아카이브 검사를
+독립적으로 수행하고, 게이트 차단 시 푸시가 딸려 실패하지 않는다.
+`--no-verify`는 사람용 비상구이며 에이전트 호출에서는 tripwire가 차단한다.
+
+```bash
+git commit -m "<message>"
+```
+
+푸시는 아카이브 유출 검사와 함께 **별도 호출**로:
+
 ```bash
 # 로컬 아카이브 유출 검사 — 서사는 레포가 아니라 sum-vault에 백업된다 (rules/doc_standards.md)
 if [ -n "$(git ls-files docs/sum docs/reviews docs/brainstorming)" ]; then
   echo "push 중단: 로컬 아카이브가 git에 추적 중 — git rm -r --cached docs/sum docs/reviews docs/brainstorming 후 .gitignore 등재"
   exit 1
 fi
-git commit -m "<message>"
 git push --follow-tags
 ```
 

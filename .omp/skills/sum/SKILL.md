@@ -130,21 +130,35 @@ Write to `docs/sum/<filename>.md`
 
 저장 직후 중앙 아카이브(sum-vault)로 백업한다 — 프로젝트 레포는 `docs/sum/`을 추적하지 않으므로(untracked 정책, omp `rules/doc_standards.md`) vault가 유일한 백업이다.
 
+커밋 게이트는 이제 **대상 레포의 `.githooks/pre-commit`** 에서 집행된다(2026-07-30 재설계).
+sum-vault는 하네스를 보유하지 않으므로 **관할 밖**이고, `git -C <vault> commit`은 게이트를
+거치지 않는다 — 예전의 "리터럴 경로·단독 호출" 요구는 사라졌다. 아래 단계 분리는 규칙이
+아니라 위생(실패 지점 분리)으로 유지한다. vault 미보유 머신은 ①에서 안내만 남기고 끝(fail-open).
+
 ```bash
-# 서브셸 + || : set -e 환경에서도 백업 실패가 셸/후속 스텝을 중단시키지 않음 (완전 fail-open)
-(
-  VAULT="${SUM_VAULT_DIR:-$HOME/projects/workspace/sum-vault}"
-  if [ -d "$VAULT/.git" ]; then
-    PROJ="$(basename "$(git rev-parse --show-toplevel)")"
-    mkdir -p "$VAULT/$PROJ/sum"
-    cp "docs/sum/<filename>.md" "$VAULT/$PROJ/sum/"
-    git -C "$VAULT" add -A
-    git -C "$VAULT" commit -m "sum: $PROJ/<filename>" || echo "vault: 변경 없음(재백업) — 커밋 생략"
-    git -C "$VAULT" push || echo "vault push 실패 — 로컬 vault에는 저장됨; 네트워크 복구 후 git -C $VAULT push"
-  else
-    echo "sum-vault 클론 없음 — 백업 생략 (위치 규약: ~/projects/workspace/sum-vault, env SUM_VAULT_DIR로 재정의)"
-  fi
-) || echo "vault 백업 실패 — sum 저장 자체는 완료됨"
+# 1) 사전 체크 + 실경로 출력 (커밋 없음 — 게이트 비대상; SUM_VAULT_DIR 커스텀 반영)
+V="${SUM_VAULT_DIR:-$HOME/projects/workspace/sum-vault}"
+[ -d "$V/.git" ] && realpath "$V" \
+  || echo "sum-vault 클론 없음 — 백업 생략 (위치 규약: ~/projects/workspace/sum-vault, env SUM_VAULT_DIR로 재정의)"
+```
+
+실경로가 출력됐을 때만 진행 — 아래 `<vault>`를 ①의 출력으로, `<proj>`를
+`basename "$(git rev-parse --show-toplevel)"` 값으로 **리터럴 치환**:
+
+```bash
+# 2) 스테이징 (커밋 없음)
+mkdir -p "<vault>/<proj>/sum" && cp "docs/sum/<filename>.md" "<vault>/<proj>/sum/" && git -C "<vault>" add -A
+```
+
+```bash
+# 3) 커밋 (vault는 관할 밖 — 게이트 비대상)
+git -C "<vault>" commit -m "sum: <proj>/<filename>"
+```
+   ("nothing to commit" 실패는 무해 — 재백업과 동일, 그대로 진행)
+
+```bash
+# 4) 푸시 (fail-open)
+git -C "<vault>" push || echo "vault push 실패 — 로컬 vault에는 저장됨; 네트워크 복구 후 재시도"
 ```
 
 - **fail-open**: vault 부재·push 실패는 sum 저장 성공에 영향 없음 — 안내만 남긴다.
