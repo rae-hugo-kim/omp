@@ -25,6 +25,7 @@ d. a–c의 변경은 **이 커밋에 함께 포함**되어(스테이징 직전 
 
 ### 4. 스킬 sync 점검 (freshness)
 이번 작업이 `.omp/skills/<name>/`를 수정했다면 전역 미러 `~/.claude/skills/<name>/`도 동기화한다 (OMC 스킬은 OMP에서도 `~/.claude`에서 디스커버리됨). **전역이 stale하면 그게 실행될 수 있다**(cf. `seed_evolution_policy.md`는 아니고 skill-sync 메모리). 양쪽이 동일해야 한다.
+**방향 규칙**: SoT는 omp 템플릿(`.omp/skills/`)이다 — 편집은 항상 템플릿에서 하고, 전역(`~/.claude/skills/`)은 복사로만 갱신하는 미러다. 전역을 직접 편집하지 않는다.
 
 ## 비고
 - closeout은 **종료상태 전이**다. 같은 기능의 반복은 `thread-scope open`이 그 seed를 제자리 reopen(done→approved, version+1, audit `seed_reopened`); 진짜 새 기능만 새 `kickoff`. 종료 이력은 `task_closed`/`seed_reopened` + git이 보존.

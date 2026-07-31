@@ -69,6 +69,10 @@ git checkout -b <branch-name>
 추적 중인 작업이 완료됐으면 마감한다 — `docs/rules/closeout_contract.md` 절차를 따른다:
 seed `status: approved` + `docs/harness/current-scope.md`의 AC가 전부 `[x]`이면 → seed를 `status: done` + `completed: <date>`로 갱신, `current-scope.md` 삭제, `docs/harness/audit.jsonl`에 `task_closed` append(이 변경들은 아래 커밋에 포함된다). AC 미충족/비추적(seed 부재 또는 `approved` 아님)이면 advisory 후 skip(no-op). `.omp/skills/`를 수정했다면 전역 미러도 동기화.
 
+### 3.6 Doc freshness check (스테이징 전)
+
+diff가 **이름 있는 것**(기능, 명령, env 키, 스케줄, 절차, 파일)을 제거하거나 개명했으면, 그 이름으로 문서(`README*`, `AGENTS.md`, `CLAUDE.md`, `docs/**`)를 grep한다. 잔재가 있으면 같은 커밋에서 갱신을 제안한다 — 제거된 것에 대한 낡은 서술은 실제 사고 클래스다. 히트 없으면 무언급 통과(마찰 0).
+
 ### 4. Stage and commit
 
 ```bash
@@ -109,6 +113,11 @@ gh pr create --base <target> --head <branch> --title "<title>" --body "<body>"
 ## Test
 - [ ] <suggested test>
 ```
+
+**Issue linking** (해당할 때만, 마찰 0 원칙):
+- `gh issue list --state open --limit 20`으로 열린 이슈를 확인
+- 이 PR이 이슈를 완결하면 본문 끝에 `Closes #N`(병합 시 자동 닫힘), 일부만 진전시키면 `Refs #N` — 후자는 병합 후 이슈에 남은 범위를 코멘트로 좁혀 기록한다
+- 매치 없으면 무언급 통과. **이슈를 새로 만들지 않는다** — 생성은 sum(세션 마감)의 소관
 
 ### 6. Output
 

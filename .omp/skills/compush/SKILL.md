@@ -54,6 +54,10 @@ If remote differs from provided URL → ask user for action.
 
 추적 중인 작업이 완료됐으면 마감한다 — `docs/rules/closeout_contract.md` 절차를 따른다(compr와 동일): seed `status: approved` + `docs/harness/current-scope.md`의 AC 전부 `[x]`이면 → seed `status: done` + `completed: <date>`, `current-scope.md` 삭제, `docs/harness/audit.jsonl`에 `task_closed` append(아래 커밋에 포함). AC 미충족/비추적이면 advisory 후 skip(no-op). `.omp/skills/` 수정 시 전역 미러 동기화. *(compush는 중간 푸시일 수 있으니 git 액션이 아니라 완료 상태에만 키잉됨에 유의.)*
 
+### 2.6 Doc freshness check (스테이징 전)
+
+diff가 **이름 있는 것**(기능, 명령, env 키, 스케줄, 절차, 파일)을 제거하거나 개명했으면, 그 이름으로 문서(`README*`, `AGENTS.md`, `CLAUDE.md`, `docs/**`)를 grep한다. 잔재가 있으면 같은 커밋에서 갱신을 제안한다 — 제거된 것에 대한 낡은 서술은 실제 사고 클래스다. 히트 없으면 무언급 통과(마찰 0).
+
 ### 3. Stage changes
 
 ```bash
@@ -74,6 +78,11 @@ Format: `<type>: <short description>`
 - Under 50 characters
 - No period at end
 
+**Issue linking** (해당할 때만, 마찰 0 원칙):
+- 원격이 GitHub이고 `gh` 사용 가능하면 `gh issue list --state open --limit 20`으로 열린 이슈를 확인
+- 이 커밋이 열린 이슈를 진전시키면 두 번째 `-m`으로 본문에 `Refs #N`, 완결시키면 사용자 확인 후 `Closes #N`
+- 매치 없으면 무언급 통과. **이슈를 새로 만들지 않는다** — 생성은 sum(세션 마감)의 소관, compush는 소비만 담당
+
 ### 5. Risk assessment
 
 | Risk | Detection | Action |
@@ -93,6 +102,8 @@ Format: `<type>: <short description>`
 ```bash
 git commit -m "<message>"
 ```
+
+이슈 링크가 있으면 두 번째 `-m "Refs #N"`(또는 확인된 `Closes #N`)을 **같은 커밋 호출**에 추가한다.
 
 푸시는 아카이브 유출 검사와 함께 **별도 호출**로:
 
