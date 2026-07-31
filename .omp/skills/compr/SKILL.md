@@ -69,6 +69,8 @@ git checkout -b <branch-name>
 추적 중인 작업이 완료됐으면 마감한다 — `docs/rules/closeout_contract.md` 절차를 따른다:
 seed `status: approved` + `docs/harness/current-scope.md`의 AC가 전부 `[x]`이면 → seed를 `status: done` + `completed: <date>`로 갱신, `current-scope.md` 삭제, `docs/harness/audit.jsonl`에 `task_closed` append(이 변경들은 아래 커밋에 포함된다). AC 미충족/비추적(seed 부재 또는 `approved` 아님)이면 advisory 후 skip(no-op). `.omp/skills/`를 수정했다면 전역 미러도 동기화.
 
+**Sum nudge (마감 시에만)**: 위에서 작업을 실제로 마감(`status: done`)했고, 세션에 결정·교훈·미결이 쌓였는데 `docs/sum/`에 이 세션의 기록이 없으면 — PR 생성 후 `sum` 실행을 제안한다. 제안만, 자동 실행 금지 (승격은 사용자 확인이 필요한 흐름).
+
 ### 3.6 Doc freshness check (스테이징 전)
 
 diff가 **이름 있는 것**(기능, 명령, env 키, 스케줄, 절차, 파일)을 제거하거나 개명했으면, 그 이름으로 문서(`README*`, `AGENTS.md`, `CLAUDE.md`, `docs/**`)를 grep한다. 잔재가 있으면 같은 커밋에서 갱신을 제안한다 — 제거된 것에 대한 낡은 서술은 실제 사고 클래스다. 히트 없으면 무언급 통과(마찰 0).
