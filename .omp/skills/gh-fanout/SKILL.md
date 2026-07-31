@@ -56,12 +56,13 @@ gh issue edit "$ISSUE" --add-label "gh-loop:in-progress"      # 클레임 먼저
 WT="$(git rev-parse --show-toplevel)/../wt-gh-loop-$ISSUE"
 git worktree remove "$WT" 2>/dev/null                         # stale 정리는 깨끗할 때만(미커밋 있으면 실패→사람 확인, state 보존)
 if git worktree add "$WT" -B "gh-loop/issue-$ISSUE"; then     # FS·브랜치 격리
-  omp --mode rpc --cwd "$WT" &                                # 자식; new_session → prompt "gh-loop for issue #$ISSUE"
+  PI_AUTO_QA=0 omp --mode rpc --cwd "$WT" &                   # 자식; new_session → prompt "gh-loop for issue #$ISSUE"
 else
   gh issue edit "$ISSUE" --remove-label "gh-loop:in-progress" # 롤백: 거짓-클레임 방지
 fi
 ```
 - **롤백 불변식**: worktree 생성/spawn 실패 시 `in-progress` 라벨을 **제거**해 이슈가 거짓-클레임으로 남지 않게 한다.
+- **Auto QA off (headless)**: 워커는 `PI_AUTO_QA=0`으로 spawn — v17.0.9부터 `dev.autoqa` 기본 true라 첫 `xd://report_issue` 기록이 **동의 다이얼로그**를 띄우는데, headless RPC 워커에는 응답할 사람이 없다. 명시적 off로 미결-동의 불확실성을 제거한다.
 - 워커는 그 worktree에서 **gh-loop** 절차를 자기 이슈에 실행 — 머지 자동 안 함.
 
 ### 4. 모니터 + GitHub 로깅 (관측 평면)
