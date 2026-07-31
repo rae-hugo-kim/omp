@@ -302,3 +302,37 @@ sidecars are left as the reviewers wrote them — this table is the correction o
 populated from `model_change` entries rather than the requested selector, so an unrecorded substitution
 cannot happen silently. Filed here rather than fixed, because it changes the review-gate evidence
 contract and belongs in its own scope.
+
+---
+
+## Dogfooding findings — landing this work through its own gates (2026-07-31)
+
+Committing and pushing this series exercised the mechanism against itself. Three things surfaced that no
+review round had reported, because only a real landing produces them.
+
+**1. `docs/harness/acceptance-done` is never consumed (open defect, NOT fixed here).**
+`acceptance-gate.mjs` treats the flag as a one-shot override in its own help text, and
+`.githooks/post-commit` lists it in the consumption whitelist — but the gate never writes the deferred
+unlink intent that `review-gate.mjs:510` and `backpressure-gate.mjs:68` write for their flags
+(`grep -c pending-consume .omp/extensions/harness/gates/acceptance-gate.mjs` → 0). So once created it
+stays **armed indefinitely**, silencing the acceptance gate on every later commit. Measured: the
+integration merge below used the flag, and it was still on disk afterwards while `review-skip` was gone.
+This is the same class as round-4 R4-9 and round-5 M2 (a one-shot that is not one-shot), and it is the
+first such defect found by *using* the harness rather than by reviewing it.
+
+Deliberately **not fixed in this cycle**: the seed is closed, and a code change now would trip the
+closed-seed backstop, need its own review evidence, and reopen a settled task. Routing around the
+harness to fix the harness is the wrong instinct. The flag was removed by hand
+(`rm -f docs/harness/acceptance-done`) and the fix is filed for its own cycle: write the deferred intent
+in `acceptance-gate.mjs` exactly as the sibling gates do, and pin it with a test in the R2/R7 family.
+
+**2. The backpressure tracker refuses piped verification — correctly.**
+`node --test … | tail` and `node --test …; echo` both left `backpressure-status` at `UNKNOWN`, because the
+shell's exit code then belongs to `tail`/`echo`, not the tests. The gate blocked the commit for "no
+verification in this session" until the suite was run bare. That is the designed behavior
+(`backpressure-tracker.mjs:44-48`) and it caught a genuinely unreliable signal, not a false alarm.
+
+**3. Merge-resolution scope is real friction, as documented.**
+The integration merge was judged as a 324-line high-risk change against its first parent, even though
+almost all of that content had already been gated at its origin — the residual the contract enumerates.
+The audited override is the intended satisfier, and it is on the record with the resolution details.
