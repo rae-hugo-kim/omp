@@ -26,7 +26,7 @@ const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..');
 const driftPath = resolve(repoRoot, 'scripts/docs-drift');
-const { computeReachableHooks, refDocStaleSeverity, getRegisteredHookPaths, closeoutConsistency } =
+const { computeReachableHooks, getHookScriptRootPaths, refDocStaleSeverity, getRegisteredHookPaths, closeoutConsistency } =
   require(driftPath);
 
 const HOOK_PREFIX = '.omp/extensions/harness/gates';
@@ -156,7 +156,10 @@ test('refDocStaleSeverity: a status that merely contains "stale" still FAILs (no
 
 test('real repo: commit-gates delegated gates + imported helpers are reachable', () => {
   const indexSource = readFileSync(join(repoRoot, '.omp/extensions/harness/index.ts'), 'utf8');
-  const seeds = getRegisteredHookPaths(indexSource);
+  // Two enforcement entry points since the gates moved into .githooks/pre-commit: the
+  // extension AND the git hooks. Seeding from index.ts alone would report the whole
+  // commit-gate subtree as orphaned (test-attack C-3).
+  const seeds = [...getRegisteredHookPaths(indexSource), ...getHookScriptRootPaths(repoRoot)];
   const reachable = computeReachableHooks(seeds, join(repoRoot, '.omp/extensions/harness/gates'));
 
   const previouslyFalseOrphans = [

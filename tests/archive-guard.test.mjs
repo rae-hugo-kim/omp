@@ -30,8 +30,13 @@ const DISPATCHER = join(ROOT, '.omp', 'extensions', 'harness', 'gates', 'commit-
 const PRE_PUSH = join(ROOT, '.githooks', 'pre-push');
 
 // Neutralize user/system git config so fixture commits are deterministic (no gpgsign,
-// no global core.hooksPath). Local repo config still applies.
-const GIT_ENV = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' };
+// no global core.hooksPath). Local repo config still applies. HERMETIC: inherited GIT_*
+// is dropped — a launcher that exports GIT_DIR/GIT_CONFIG_* into the session would
+// otherwise point fixture git at the wrong repo (test-attack C-5).
+const INHERITED_ENV = Object.fromEntries(
+  Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')),
+);
+const GIT_ENV = { ...INHERITED_ENV, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' };
 
 function git(dir, args) {
   const r = spawnSync('git', args, { cwd: dir, encoding: 'utf-8', env: GIT_ENV });
@@ -195,7 +200,9 @@ test('dispatcher: staged archive blocks through commit-gates.mjs (exit 2)', () =
   withRepo({ 'docs/notes.md': '# notes\nprose\n', 'docs/sum/session.md': '# session\n' }, (dir) => {
     git(dir, ['add', '-A']);
     setStatus(dir, 'PASS');
-    const r = runGate(DISPATCHER, dir, 'git commit -m "docs"');
+    // Hook mode: the dispatcher's command path was retired with AC3 (enforcement is
+    // .githooks/pre-commit), so the dispatcher is exercised the way the hook calls it.
+    const r = runGate(DISPATCHER, dir, null, { input: JSON.stringify({ mode: 'hook', hook: 'pre-commit', session_state: { cwd: dir } }) });
     assert.equal(r.status, 2, 'archive-guard block must propagate through the dispatcher');
     assert.match(r.stderr, /HARNESS BLOCK: local archive/, 'archive-guard is the blocker');
     assert.match(r.stderr, /docs\/sum\/session\.md/);
@@ -207,7 +214,7 @@ test('dispatcher control: same fixture without the archive file passes (exit 0)'
   withRepo({ 'docs/notes.md': '# notes\nprose\n' }, (dir) => {
     git(dir, ['add', '-A']);
     setStatus(dir, 'PASS');
-    const r = runGate(DISPATCHER, dir, 'git commit -m "docs"');
+    const r = runGate(DISPATCHER, dir, null, { input: JSON.stringify({ mode: 'hook', hook: 'pre-commit', session_state: { cwd: dir } }) });
     assert.equal(r.status, 0, 'without an archive file the same commit passes all gates');
   });
 });

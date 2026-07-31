@@ -49,7 +49,7 @@
 // wins); when the diff hash cannot be computed the gate fails closed on high/critical.
 // Exit 0 = allow, Exit 2 = block
 
-import { readFileSync, readSync, existsSync, appendFileSync, mkdirSync, opendirSync, unlinkSync, openSync, fstatSync, closeSync, constants as fsConstants } from 'fs';
+import { readFileSync, readSync, existsSync, appendFileSync, mkdirSync, opendirSync, unlinkSync, openSync, fstatSync, closeSync, writeFileSync, constants as fsConstants } from 'fs';
 import { join } from 'path';
 import { execSync } from 'child_process';
 import { assessRisk } from './risk-assess.mjs';
@@ -76,7 +76,10 @@ function getStateDir(cwd) {
 // bare providers all stay non-models).
 // Codex folds into the gpt (OpenAI) family, so ["codex", "gpt-5"] is ONE family, while
 // ["claude", "codex"] is two.
-const MODEL_ALIAS = /^(?:claude|sonnet|opus|haiku|codex|gpt|o[1-9]|gemini|bard|grok|llama|mistral|mixtral|deepseek|qwen)$/;
+// fable/mythos: current-generation Anthropic codenames (cf. usage tiers in oh-my-pi
+// claude.ts) — they sit BEFORE the version digit ("claude-fable-5"), which the
+// pre-version fail-closed rule would otherwise reject (scope-add 2026-07-30).
+const MODEL_ALIAS = /^(?:claude|sonnet|opus|haiku|fable|mythos|codex|gpt|o[1-9]|gemini|bard|grok|llama|mistral|mixtral|deepseek|qwen)$/;
 const NEGATION_STEMS = 'not?|none|never|nil|null|na|void|skip|skipped|skipping|unavailable|unverified|unused|unrun|missing|absent|omitted|pending|disabled|failed|fail|failing|error|errored|without|run';
 const NEGATION_WORD = new RegExp(`^(?:${NEGATION_STEMS})$`);
 // Prefix form: a fused negation ("skippedrun", "notactuallyrun") or a negation-shaped provider
@@ -87,7 +90,7 @@ const NEGATION_WORD = new RegExp(`^(?:${NEGATION_STEMS})$`);
 const NEGATION_PREFIX = new RegExp(`^(?:${NEGATION_STEMS})`);
 const VARIANT_WORD = /^(?:mini|nano|micro|lite|tiny|small|medium|large|max|plus|ultra|pro|air|flash|turbo|preview|exp|experimental|latest|stable|beta|alpha|instruct|chat|coder|vision|thinking|reasoner|sonic|high|low)$/;
 function familyOf(alias) {
-  if (/^(?:claude|sonnet|opus|haiku)$/.test(alias)) return 'claude';
+  if (/^(?:claude|sonnet|opus|haiku|fable|mythos)$/.test(alias)) return 'claude';
   if (/^(?:codex|gpt|o[1-9])$/.test(alias)) return 'gpt';
   if (/^(?:gemini|bard)$/.test(alias)) return 'gemini';
   return alias; // grok | llama | mistral | mixtral | deepseek | qwen
@@ -97,7 +100,7 @@ function modelFamily(tok) {
   const prov = raw.match(/^([a-z][a-z0-9.-]*)\//);                // at most one provider/ prefix
   if (prov && NEGATION_PREFIX.test(prov[1])) return null;         // "skipped/gpt-5" is a negation, not a provider
   const e = prov ? raw.slice(prov[0].length) : raw;
-  const m = e.match(/^(claude|sonnet|opus|haiku|codex|gpt|o[1-9]|gemini|bard|grok|llama|mistral|mixtral|deepseek|qwen)([-.][a-z0-9.-]*|\d[a-z0-9.-]*)?$/);
+  const m = e.match(/^(claude|sonnet|opus|haiku|fable|mythos|codex|gpt|o[1-9]|gemini|bard|grok|llama|mistral|mixtral|deepseek|qwen)([-.][a-z0-9.-]*|\d[a-z0-9.-]*)?$/);
   if (!m) return null;
   const family = familyOf(m[1]);
   if (!m[2]) return family;
@@ -340,14 +343,24 @@ log('Hook started');
 
 const command = data?.tool_input?.command || '';
 
-if (!isGitCommit(command)) {
+// Hook mode (AC6): spawned by the pre-commit dispatcher — no command string; the hook
+// firing is the commit. The synthetic form pins the risk assessment and the effective-diff
+// hash to the STAGED INDEX (`git diff --cached`): at pre-commit time git has already
+// materialized `-a`/pathspec commits into a temporary GIT_INDEX_FILE (inherited from the
+// hook environment), so --cached IS the exact content the commit will capture — and
+// unrelated unstaged worktree noise must not drive the risk level (test-attack C-2).
+const isHookMode = data?.mode === 'hook';
+
+if (!isHookMode && !isGitCommit(command)) {
   log('Not a git commit, allowing');
   process.exit(0);
 }
 
 // Parse the commit form ONCE: it scopes both the risk assessment (assess only what the
 // commit captures, not unrelated unstaged changes) and the effective-diff hash below.
-const form = parseCommitForm(command);
+const form = isHookMode
+  ? { all: false, verifiable: true }
+  : parseCommitForm(command);
 const risk = assessRisk(cwd, form);
 log(`Risk: ${risk.level} (${risk.reason}), ${risk.files.length} files, ~${risk.diffSize} lines`);
 
@@ -440,8 +453,11 @@ function readBounded(path) {
 // An INVALID flag fails closed on high/critical (it is kept in place so it can be fixed, not
 // retyped); on medium it is ignored with a warning since medium never required review anyway.
 //
-// `-a/--all` TOCTOU: consuming an override APPENDS to docs/harness/audit.jsonl and UNLINKS the
-// flag BEFORE the commit runs (this is a pre-commit hook; there is no post-commit write point).
+// `-a/--all` TOCTOU (NON-HOOK path only): outside hook mode, consuming an override APPENDS
+// to docs/harness/audit.jsonl and UNLINKS the flag BEFORE the commit runs. In hook mode both
+// writes are DEFERRED to .githooks/post-commit (see the isHookMode branch below), so the
+// sweep hazard described here cannot arise there — and hook mode never reports `all`, which
+// makes the guard below unreachable from the hook path by construction.
 // If either file is git-TRACKED, `git commit -a` sweeps those writes into the commit itself, so
 // the committed diff would no longer be the diff the approver hashed. When that sweep is possible
 // the override CANNOT be consumed for the -a form: high/critical fails closed with "stage + plain
@@ -486,10 +502,23 @@ if (existsSync(skipFile)) {
       actor: fields.approvedBy,
       meta: { reason: fields.reason, diff_hash: currentHash || 'UNVERIFIABLE', risk: risk.level, risk_reason: risk.reason },
     };
-    appendFileSync(join(harnessDir, 'audit.jsonl'), JSON.stringify(event) + '\n');
-    unlinkSync(skipFile);
-    log(`review override accepted (approved_by: ${fields.approvedBy}), audited + consumed`);
-    console.error(`HARNESS NOTE: review override by ${fields.approvedBy} accepted — recorded as review_override in docs/harness/audit.jsonl; flag consumed.`);
+    if (isHookMode) {
+      // Deferred consumption (test-attack B-4): the pre-commit verdict may precede a commit
+      // that never lands (empty-message abort). Leave the flag in place and write the
+      // consumption INTENT; the post-commit backstop executes it once the commit exists —
+      // and the verdict itself never mutates tracked files (U4 contract).
+      const pendDir = join(cwd, '.omp', 'harness-state', 'pending-consume');
+      mkdirSync(pendDir, { recursive: true });
+      writeFileSync(join(pendDir, 'append-audit-review-override.json'), JSON.stringify(event) + '\n');
+      writeFileSync(join(pendDir, 'unlink-review-skip'), 'docs/harness/review-skip\n');
+      log(`review override accepted (approved_by: ${fields.approvedBy}), consumption deferred to post-commit`);
+      console.error(`HARNESS NOTE: review override by ${fields.approvedBy} accepted — it will be recorded in docs/harness/audit.jsonl and consumed when the commit lands.`);
+    } else {
+      appendFileSync(join(harnessDir, 'audit.jsonl'), JSON.stringify(event) + '\n');
+      unlinkSync(skipFile);
+      log(`review override accepted (approved_by: ${fields.approvedBy}), audited + consumed`);
+      console.error(`HARNESS NOTE: review override by ${fields.approvedBy} accepted — recorded as review_override in docs/harness/audit.jsonl; flag consumed.`);
+    }
     process.exit(0);
   } else if (risk.level === 'critical' || risk.level === 'high') {
     log(`BLOCKED: invalid review-skip override (${problems.join('; ')})`);

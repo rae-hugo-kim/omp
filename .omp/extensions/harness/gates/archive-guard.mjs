@@ -25,7 +25,12 @@ let data = {};
 try { data = JSON.parse(stdin); } catch { process.exit(0); }
 
 const command = data?.tool_input?.command || '';
-if (!isGitCommit(command)) process.exit(0);
+// Hook mode (AC6): spawned by the pre-commit dispatcher — no command string; the hook
+// firing is the commit. The synthetic form is staged-only: at pre-commit time git has
+// already materialized -a/pathspec into the (inherited) temporary index, so staged IS
+// the commit content and the tracked-but-unstaged sweep set is empty by construction.
+const isHookMode = data?.mode === 'hook';
+if (!isHookMode && !isGitCommit(command)) process.exit(0);
 
 const cwd = data?.session_state?.cwd || process.cwd();
 // -z (NUL-delimited) output: git does NOT c-quote non-ASCII paths in -z mode, so a
@@ -61,7 +66,9 @@ try {
 // blocks those forms as well. Unmodified legacy-tracked files stay a WARN (below); the
 // push boundary is their backstop, and blocking every --amend in a legacy repo would be
 // hostile without adding safety.
-const form = parseCommitForm(command);
+const form = isHookMode
+  ? { all: false, verifiable: true }
+  : parseCommitForm(command);
 const modifiedTracked = unstagedModified.filter((p) => tracked.includes(p));
 const swept = (form?.all || form?.verifiable === false) ? modifiedTracked : [];
 

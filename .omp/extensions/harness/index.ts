@@ -31,20 +31,24 @@
 // resolves inside the compiled omp binary. It appends a warning chunk to the
 // tool result (fail-open, never blocks).
 //
-// Infra failures (node missing, gate crash, timeout) fail OPEN with a loud
-// warning, matching the original per-hook fail-open behavior. Only an explicit
-// gate exit code 2 blocks a tool call.
+// Infra failures (node missing, gate crash, timeout) fail OPEN with a loud warning: every
+// gate wired HERE is advisory or edit-scoped (destructive-guard, mcp-gate, context-gate,
+// trackers). Only gate exit code 2 is a verdict-block. Commit enforcement is NOT on this
+// path any more — .githooks/pre-commit owns it and implements its own fail-closed policy —
+// so this layer no longer needs a safety-boundary exception. The bash handler still fails
+// closed on its own adapter errors, because a commit may be in flight when it runs.
 
 import { spawn } from "node:child_process";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isGitCommit } from "./gates/git-commit-detect.mjs";
+import { commitBypassTripwire, isGitCommit } from "./gates/git-commit-detect.mjs";
 import { mutationCallTargets, mutationRoute, readTarget, searchTrackTargets } from "./gates/read-path.mjs";
 import { checkMermaidFile, MERMAID_SUPPORTED } from "./mermaid-check";
 
 const GATES_DIR = join(dirname(fileURLToPath(import.meta.url)), "gates");
 const GATE_TIMEOUT_MS = 3_000;
-const COMMIT_GATES_TIMEOUT_MS = 15_000;
+// (The commit gates are no longer spawned from this layer: .githooks/pre-commit runs them
+// at index-commit time, in the repo actually being committed to — see AC1/AC6.)
 const VERSION_CHECK_TIMEOUT_MS = 15_000;
 
 /** Tools that create or mutate files (Claude Code's Edit|Write matcher). v17 moved
@@ -150,7 +154,7 @@ interface GateRun {
 	status: number | null;
 	stdout: string;
 	stderr: string;
-	/** Spawn-level failure (node missing, timeout kill, ...), not a gate verdict. */
+	/** Spawn-level failure (node missing, ...), not a gate verdict. */
 	failure?: string;
 }
 
@@ -162,6 +166,10 @@ function runGate(script: string, payload: GatePayload, timeoutMs = GATE_TIMEOUT_
 		const child = spawn("node", [join(GATES_DIR, script)], {
 			stdio: ["pipe", "pipe", "pipe"],
 			timeout: timeoutMs,
+			// SIGKILL: a SIGTERM-catching child could swallow the timeout and exit 0. Every gate on
+			// THIS path is advisory or edit-scoped, but an uncatchable kill keeps the budget a hard
+			// ceiling (the commit gates enforce their own fail-closed policy inside the hook).
+			killSignal: "SIGKILL",
 		});
 		child.stdout?.on("data", (chunk: Buffer) => {
 			stdout += chunk.toString();
@@ -234,22 +242,55 @@ export default function harness(pi: HarnessExtensionApi): void {
 	};
 
 	pi.on("tool_call", async (event, ctx) => {
-		try {
-			const session_state = { cwd: ctx.cwd };
-			if (event.toolName === "bash") {
+		// The bash-commit path fails CLOSED on adapter errors (its own catch below); the outer
+		// catch keeps advisory hooks fail-open.
+		if (event.toolName === "bash") {
+			try {
+				const session_state = { cwd: ctx.cwd };
 				const command = String(event.input?.command ?? "");
 				if (!command) return;
-				const payload: GatePayload = { tool_name: "Bash", tool_input: { command }, session_state };
+				const toolEnv =
+					event.input?.env && typeof event.input.env === "object"
+						? (event.input.env as Record<string, string>)
+						: undefined;
+				// Pass the bash tool's STRUCTURED inputs through: `cwd` changes where the command
+				// runs, execution-sensitive `env` can change Git/config meaning, and `async`
+				// defers execution past the verdict — the dispatcher must judge all three.
+				const payload: GatePayload = {
+					tool_name: "Bash",
+					tool_input: {
+						command,
+						cwd: typeof event.input?.cwd === "string" ? event.input.cwd : undefined,
+						env: toolEnv,
+						async: event.input?.async === true,
+					},
+					session_state,
+				};
 				const guard = await runGate("destructive-guard.mjs", payload);
 				surface(ctx, guard, "destructive-guard");
-				// Cheap in-process pre-check; commit-gates spawns 4 child gates on a real commit.
-				if (isGitCommit(command)) {
-					const gates = await runGate("commit-gates.mjs", payload, COMMIT_GATES_TIMEOUT_MS);
-					if (gates.status === 2) return { block: true, reason: gates.stderr.trim() || "HARNESS BLOCK: commit gate failed." };
-					surface(ctx, gates, "commit-gates");
+				// Enforcement moved to .githooks/pre-commit: it sees the real index, in the real
+				// target repo, for every spelling and every author (agent or human). This layer
+				// therefore keeps only the tripwire — a call that DECLARES a hook bypass or
+				// relocation, which is the one thing the hook itself cannot observe.
+				const bypass = commitBypassTripwire(command, toolEnv);
+				if (bypass) {
+					return {
+						block: true,
+						reason: [
+							`HARNESS BLOCK: ${bypass}.`,
+							"The commit gates run as .githooks/pre-commit; bypassing or relocating them is not an agent-available action.",
+							"Run the commit plainly (git commit -m …) and fix whatever the gates report. A human may use --no-verify deliberately; the post-commit backstop records it.",
+						].join("\n"),
+					};
 				}
-				return;
+			} catch (err) {
+				// A commit may be in flight: an adapter bug here must NOT fail open.
+				return { block: true, reason: `HARNESS BLOCK: bash commit-gate adapter error (failing closed): ${err instanceof Error ? err.message : String(err)}` };
 			}
+			return;
+		}
+		try {
+			const session_state = { cwd: ctx.cwd };
 			if (isEditToolName(event.toolName)) {
 				for (const filePath of mutationCallTargets(event.toolName, event.input, ctx.cwd)) {
 					const run = await runGate("context-gate.mjs", { tool_name: "Edit", tool_input: { file_path: filePath }, session_state });

@@ -370,3 +370,4 @@ test('isWipCommit: scoped to the commit segment — no whole-line false-positive
   // multi-commit where EVERY commit is wip -> bypass:
   assert.equal(isWipCommit('git commit -m "wip: a" && git commit -m "wip: b"'), true);
 });
+

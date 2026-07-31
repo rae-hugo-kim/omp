@@ -36,7 +36,9 @@ function runGate(dir, command = 'git commit -m x', env = {}) {
     input: JSON.stringify({ tool_input: { command }, session_state: { cwd: dir } }),
     cwd: dir,
     encoding: 'utf-8',
-    env: { ...process.env, ...env },
+    // HERMETIC: drop inherited GIT_* so a session-injected GIT_DIR/GIT_CONFIG_* cannot
+    // change what the gate sees (test-attack C-5).
+    env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_'))), ...env },
   });
 }
 

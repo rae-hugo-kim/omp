@@ -262,9 +262,10 @@ function checkHookRegistration() {
     });
     return;
   }
-
   const indexSource = fs.readFileSync(indexPath, 'utf8');
-  const registeredHooks = getRegisteredHookPaths(indexSource);
+  const registeredHooks = [
+    ...new Set([...getRegisteredHookPaths(indexSource), ...getHookScriptRootPaths(repoRoot)]),
+  ];
   const actualHooks = fs
     .readdirSync(gatesDir)
     .filter((name) => name.endsWith('.mjs'))
@@ -308,6 +309,33 @@ function checkHookRegistration() {
 // directory. Prose mentions are excluded because they lack the quoted ".mjs"
 // form. Seeds are limited to registered hooks, so a dead file imported only by
 // another dead file is never reached, preserving orphan detection.
+// Enforcement has TWO entry points, so orphan analysis has two root sets: the OMP
+// extension (index.ts) and the git hooks in .githooks/. Since the commit gates moved to
+// .githooks/pre-commit the dispatcher is named there, not in index.ts — without these
+// roots the whole commit-gate subtree would read as orphaned (test-attack C-3, 2026-07-30).
+function getHookScriptRootPaths(root) {
+  const roots = [];
+  const githooksDir = path.join(root, '.githooks');
+  if (!fs.existsSync(githooksDir)) return roots;
+  for (const name of fs.readdirSync(githooksDir)) {
+    const p = path.join(githooksDir, name);
+    if (!fs.statSync(p).isFile()) continue;
+    // Strip shell comments: a gate named only in a hook's explanatory comment is not an
+    // enforcement root. Output statements are NOT excluded — the dispatcher is invoked through a
+    // `printf … | node "$dispatcher"` pipeline, and skipping those lines produced FALSE orphans
+    // (review round 4, measured). Accepted limit: this check answers "does anything in the hooks
+    // still mention this gate", not "was the invocation line deleted".
+    const src = fs.readFileSync(p, 'utf8')
+      .split('\n')
+      .map((line) => line.replace(/(^|\s)#.*$/, '$1'))
+      .join('\n');
+    const mjsRef = /([A-Za-z0-9._-]+\.mjs)/g;
+    let m;
+    while ((m = mjsRef.exec(src)) !== null) roots.push(`.omp/extensions/harness/gates/${m[1]}`);
+  }
+  return roots;
+}
+
 function computeReachableHooks(registeredHooks, hooksDir) {
   const harnessFiles = new Set(
     fs.readdirSync(hooksDir).filter((name) => name.endsWith('.mjs')),
@@ -489,6 +517,14 @@ function getPolicySourceCommitHash() {
 function checkReadmeAndIndexRefs() {
   const skillNames = getDirectoryNames(path.join(repoRoot, '.omp/skills'));
   const hookNames = getHookNames(path.join(repoRoot, '.omp/extensions/harness/gates'));
+  // Docs also reference git hooks by bare name (`pre-commit`, `post-merge`, ...) now that
+  // commit enforcement lives in .githooks/. Those are real files, just not gate CLIs.
+  const githooksDir = path.join(repoRoot, '.githooks');
+  const githookNames = new Set(
+    fs.existsSync(githooksDir)
+      ? fs.readdirSync(githooksDir).filter((n) => fs.statSync(path.join(githooksDir, n)).isFile())
+      : [],
+  );
   const structureCountClaims = [
     {
       label: 'rules/',
@@ -532,11 +568,11 @@ function checkReadmeAndIndexRefs() {
 
     const hookRefs = extractHookRefs(content);
     for (const hookName of hookRefs) {
-      if (!hookNames.has(hookName)) {
+      if (!hookNames.has(hookName) && !githookNames.has(hookName)) {
         addIssue(FAIL, 'Missing referenced hook', {
           source: relativePath,
           hook: hookName,
-          reason: 'hook is referenced in docs but matching file does not exist',
+          reason: 'hook is referenced in docs but no matching gate CLI or .githooks file exists',
         });
       }
     }
@@ -831,4 +867,4 @@ if (require.main === module) {
 
 // Exported for unit tests (tests/docs-drift.test.mjs). When required as a
 // module, main() does not run (guarded above) so the checks have no side effects.
-module.exports = { computeReachableHooks, refDocStaleSeverity, getRegisteredHookPaths, closeoutConsistency };
+module.exports = { computeReachableHooks, getHookScriptRootPaths, refDocStaleSeverity, getRegisteredHookPaths, closeoutConsistency };

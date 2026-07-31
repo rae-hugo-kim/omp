@@ -39,10 +39,26 @@ function log(msg) {
 log('Hook started');
 
 const command = data?.tool_input?.command || '';
+// (The dispatcher's static `-C` attribution was retired with AC3 — hook mode judges the
+// repo it fires in, so no redirect bookkeeping reaches the gates any more.)
 log(`Command: ${command}`);
 
-// Only check for git commit commands
-if (!isGitCommit(command)) {
+// Hook mode (AC6): spawned by the pre-commit dispatcher — there is no command string;
+// the hook firing is the commit. Only check for git commit commands otherwise.
+const isHookMode = data?.mode === 'hook';
+// Hook-mode wip (A-4): pre-commit cannot see the commit message (COMMIT_EDITMSG holds the
+// PREVIOUS commit's message — scraping it is forbidden). The one-shot flag is the canonical
+// wip declaration, OMP_COMMIT_WIP=1 the env convenience; consumption happens post-commit.
+const hookWip = isHookMode
+  && (existsSync(join(stateDir, 'commit-wip')) || process.env.OMP_COMMIT_WIP === '1');
+const isWip = () => hookWip || isWipCommit(command);
+// Same synthetic form the other gates use in hook mode: the staged index is the commit's
+// content (git already materialized -a/pathspec into the inherited temporary index), and
+// Content already in HEAD is out of scope (including under --amend) — a documented residual.
+const hookForm = isHookMode
+  ? { all: false, verifiable: true }
+  : null;
+if (!isHookMode && !isGitCommit(command)) {
   log('Not a git commit, allowing');
   process.exit(0);
 }
@@ -73,16 +89,18 @@ function backstop(reason, opts = {}) {
   if (process.env.TEST_RISK_LEVEL) {
     level = process.env.TEST_RISK_LEVEL;        // test seam: deterministic risk without a git repo
   } else {
-    // Scope risk to the diff the commit actually captures (--cached for plain, HEAD for -a),
-    // not the staged∪unstaged union — unrelated unstaged code must not over-count a docs commit.
-    try { level = assessRisk(cwd, parseCommitForm(command)).level; } catch { level = 'unknown'; }
+    // Scope risk to the diff the commit actually captures — NOT the staged∪unstaged union,
+    // or unrelated unstaged code over-counts a docs commit. In hook mode there is no command
+    // string to parse, so the same synthetic form the other gates use applies (3-pass review,
+    // medium: the union re-appeared here and falsely blocked docs commits).
+    try { level = assessRisk(cwd, hookForm ?? parseCommitForm(command)).level; } catch { level = 'unknown'; }
   }
   const codeTouching = level === 'medium' || level === 'high' || level === 'critical';
   if (!codeTouching) {
     log(`backstop(${reason}): risk=${level} not code-touching -> allow`);
     process.exit(0);
   }
-  if (isWipCommit(command)) {
+  if (isWip()) {
     log(`backstop(${reason}): wip marker -> allow`);
     process.exit(0);
   }
@@ -96,7 +114,9 @@ function backstop(reason, opts = {}) {
   } else {
     console.error('  1. thread-scope 열기: node .omp/extensions/harness/thread-scope.mjs open');
   }
-  console.error('  2. trivial이면 `wip:` 커밋, 또는 docs/harness/acceptance-done 생성(override)');
+  console.error(isHookMode
+    ? '  2. trivial이면 WIP 선언: `.omp/harness-state/commit-wip` 생성 또는 `OMP_COMMIT_WIP=1 git commit …` (pre-commit 시점에는 커밋 메시지를 볼 수 없어 `wip:` 접두사는 효력이 없습니다), 또는 docs/harness/acceptance-done 생성(override)'
+    : '  2. trivial이면 `wip:` 커밋, 또는 docs/harness/acceptance-done 생성(override)');
   process.exit(2);
 }
 
@@ -174,12 +194,14 @@ if (unchecked.length === 0) {
   process.exit(0);
 }
 
-// WIP commits are intentional in-progress checkpoints. Without this, every commit
-// during a tracked task is blocked until ALL AC are checked, pushing people to the
-// blunt `acceptance-done` flag (which disables the gate). A `wip:`/`[wip]` marker in
-// the message lets intermediate commits through while keeping the gate armed for the
-// real (non-WIP) commit. (cf. closeout_contract.md — closeout runs on completion.)
-if (isWipCommit(command)) {
+// WIP commits are intentional in-progress checkpoints. Without this, every commit during a
+// tracked task is blocked until ALL AC are checked, pushing people to the blunt
+// `acceptance-done` flag (which disables the gate). In HOOK mode the declaration is the
+// one-shot flag `.omp/harness-state/commit-wip` or `OMP_COMMIT_WIP=1` — pre-commit runs before
+// the commit message exists, so a `wip:` marker cannot be read there (scraping COMMIT_EDITMSG
+// would return the PREVIOUS commit's message). The message marker still applies on the
+// non-hook/standalone path. (cf. closeout_contract.md — closeout runs on completion.)
+if (isWip()) {
   log(`WIP commit, ${unchecked.length} unchecked criteria but allowing (wip marker)`);
   console.error(`HARNESS WARNING: WIP commit with ${unchecked.length} unmet acceptance criteria (allowed by wip marker).`);
   process.exit(0);
@@ -205,5 +227,9 @@ console.error('');
 console.error('Options:');
 console.error('  1. Check off completed criteria in docs/harness/current-scope.md');
 console.error('  2. Create docs/harness/acceptance-done to override');
+if (isHookMode) {
+  console.error('  3. WIP checkpoint: create .omp/harness-state/commit-wip or run OMP_COMMIT_WIP=1 git commit …');
+  console.error('     (a `wip:` message prefix cannot work here — pre-commit runs before the message exists)');
+}
 
 process.exit(2);

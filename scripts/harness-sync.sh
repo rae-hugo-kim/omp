@@ -97,7 +97,9 @@ PATHS=(
   "INDEX.md"
   "EXAMPLES.md"
   ".omp/extensions/harness"
+  ".githooks/pre-commit"
   ".githooks/post-commit"
+  ".githooks/post-merge"
   ".githooks/pre-push"
   "scripts/harness-version-bump.sh"
   "scripts/harness-sync.sh"
@@ -154,6 +156,12 @@ for p in "${PATHS[@]}"; do
     cp -r "$tmp/$p" "$REPO_ROOT/$p"
   else
     cp "$tmp/$p" "$REPO_ROOT/$p"
+    # `cp` PRESERVES an existing destination's mode, so a hook that is already present and
+    # non-executable stays non-executable — and git skips non-executable hooks WITHOUT a
+    # warning, silently disarming the only blocking surface (review round 2, measured).
+    case "$p" in
+      .githooks/*) chmod +x "$REPO_ROOT/$p" ;;
+    esac
   fi
 done
 
