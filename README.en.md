@@ -148,7 +148,7 @@ Integration paths (merge auto-commits, cherry-pick, revert, rebase) are **delibe
 - **rubric** — 4-dimension clarity gate (HIGH/MED/LOW)
 - **audit log** — event tracking (append-only JSONL)
 - **glossary** — project terms (`docs/glossary.yaml`)
-- Runtime state lives in `.omp/harness-state/` (gitignored); gates run standalone via `node --test tests/`
+- Runtime state lives in `.omp/harness-state/` (gitignored); gates run standalone via `node --test tests/*.test.mjs`
 
 Unlike the Claude Code original, failed bash verifications ARE recorded — the adapter routes bash `tool_result`s with a non-zero `details.exitCode` (or `isError`) to the failure tracker, resolving the original PostToolUseFailure limitation.
 
