@@ -12,6 +12,9 @@ docs/harness/*-done
 # OMC state, if OMC tooling is used alongside (transient)
 .omc/
 
+# Serena MCP tool state (per-machine, transient)
+.serena/
+
 # Obsidian vault config (viewer-local UI state, per-machine)
 .obsidian/
 
