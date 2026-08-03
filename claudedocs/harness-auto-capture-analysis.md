@@ -527,3 +527,69 @@ P2 thread-goal 복원(current-scope 재생성) + audit provenance/verdict + L2 b
 - `omp://rpc.md` — `omp --mode rpc` JSONL-over-stdio: `new_session`/`prompt`/이벤트 스트림/host-tool = 외부 컨트롤러가 N개 OMP 세션 구동하는 substrate.
 - web: Paseo(getpaseo/paseo, paseo.sh — Mac 전용) · Maestro(CarlosDanielDev) · LINCE(lince.sh) · hive(lucascaro) = 멀티-세션 AI 오케스트레이터 카테고리(외부, 비-OMP).
 - 실측 환경(이 박스, 2026-06-17): `/etc/wsl.conf` `systemd=true` · pid1=systemd(running) · `/usr/bin/tmux` 설치 · gh 인증 rae-hugo-kim(scopes: repo,delete_repo,admin:public_key,read:org,gist; SSH) · `~/actions-runner` 미설치 · WSL2(상시가동 아님).
+
+---
+
+## Q11. 하네스 텔레메트리 — 사용·준수 로깅으로 하네스 자체 평가 (2026-07-10)
+
+### Q11.0 질문 (사용자 원본)
+"하네스 자체를 평가하기 위해, 각 프로젝트에서 sum을 중앙 vault로 모으듯이 각 세션에서 하네스의 어떤 스킬과 어떤 구조를 사용하고 지키고 있는지를 로깅하는 시스템."
+
+### Q11.1 기존 자산과의 구분 — 이건 세 번째 축이다
+
+| 축 | 기록 대상 | 자산 | 상태 |
+|---|---|---|---|
+| 작업 내용 | 커밋·테스트 PASS/FAIL·파일 편집 | breadcrumb(`session-log.jsonl`, Q1) + sum/sum-vault | ✅ 가동 |
+| 작업 흐름 이벤트 | kickoff/seed/rubric/closeout | `docs/harness/audit.jsonl` | ✅ 가동 (35줄) |
+| **하네스 사용·준수** | 게이트 발동/판정, 스킬 호출, 세션 메타 | **없음** (게이트 BLOCK stderr는 비영속, HARNESS_DEBUG는 기본 off) | ❌ 갭 = Q11 |
+
+Q1 breadcrumb은 "세션이 무엇을 했나"를, Q11은 "하네스가 어떻게 쓰였고 지켜졌나"를 기록한다. 목적이 달라 스키마·수집처도 분리한다(단 저장 패턴은 breadcrumb, 중앙화 패턴은 sum-vault 재사용).
+
+### Q11.2 설계 — 3층
+
+```mermaid
+flowchart LR
+  RG[index.ts runGate 계측] -->|kind:gate| UL[(usage-log<br/>세션별 jsonl)]
+  CG[commit-gates 디스패처<br/>child별 구조화] -->|kind:gate| UL
+  SK[스킬 관측 2+1경로] -->|kind:skill| UL
+  SS[세션 라이프사이클] -->|kind:session| UL
+  UL -->|per-event, fail-open| V[(vault: sum-vault/_harness/<br/>&lt;project_id&gt;/&lt;aggregation_session_id&gt;.jsonl)]
+  UL -->|per-event, fail-open| SP[(global spool: ~/.omp/<br/>harness-telemetry-spool/&lt;project_id&gt;/)]
+  V --> MG[report: vault∪spool<br/>event_id 병합·dedup]
+  SP --> MG
+  MG --> AG[배치 집계: 차단·회복(마찰 후보)<br/>스킬 빈도·미사용 후보]
+```
+
+**캡처 이벤트 스키마** (no-LLM, append-only, 전부 fail-open; **공통 identity 필드** = `event_id`(병합·dedup 조인 키), `project_id`, `session_id`(발생 세션), `parent_session_id`(worker→main, 매핑 불가 시 null), `aggregation_session_id`(= parent ?? self, 파일 키) — 파일 존재 기반 복사로는 부분 append 실패를 복구 못 하므로 sync/report는 event_id 병합·잘린 꼬리 skip+경고):
+- `{…identity, kind:"session", omp_version, harness_version, repo}` — 세션 시작/전환 시.
+- `{ts, session_id, kind:"gate", gate, tool, execution: ok|infra_error, decision: allow|warn|block, failure_reason?: spawn|timeout|badstatus, ms, target_fp}` — 게이트 기회당 1건 (A9: infra_error 시 decision 없음). **기회→결과의 원자 이벤트**만 기록하고, BLOCK→동일 gate+target_fp의 후속 allow를 평가 시점에 recovery로 join(캡처 레이어는 join하지 않음).
+- `{ts, session_id, kind:"tracker", gate, ms}` — read/write/breadcrumb 등 트래커 실행은 **compliance 게이트와 별도 kind** (A4; activation/준수 지표 왜곡 방지).
+- `{ts, session_id, kind:"skill", name, via: command|read|message, invocation_key}` — 아래 A5/A7의 다중 경로를 invocation_key로 dedup.
+
+**수집**: sum/commit 트리거 의존 금지(A2) — 요약을 안 부르는 조사-only 세션도 "각 세션" 요구에 포함된다. **기본안 = per-event 중앙 세션파일 append**: 이벤트마다 `$SUM_VAULT_DIR/_harness/<project_id>/<aggregation_session_id>.jsonl`에 fail-open append + **user-global spool** `$HOME/.omp/harness-telemetry-spool/<project_id>/<aggregation_session_id>.jsonl` 미러(vault 부재 시에도 spool은 남음; project_id = git remote owner/repo safe slug + short hash, remote 부재 시 git-root basename + hash). 미러를 프로젝트 내부(.omp/harness-state)에 두지 않는 이유: report는 소스 레포에서 실행되므로 각 프로젝트 내부 파일은 발견 불가 — **고정 2위치(vault, spool)** 병합이 어느 디렉토리에서 실행해도 완전하다. `session_stop`은 flush/checkpoint **보조**로만 (A8 — main 세션에만 발화). **git commit/push·집계는 별도 배치로 분리** — 세션별 파일이라 동시 세션 충돌 없음, 이벤트별 push 폭주 없음.
+
+**평가**: vault∪spool 병합본에서 배치 집계(jq/duckdb) — 게이트별 기회/차단/회복 집계(block→즉시 recovery 비율 높음 = **마찰(friction) 후보** — false-block 판정이 아니라 인간 리뷰용 시그널), 스킬 사용 빈도(미사용 자산 **후보** = 정리 검토 대상), 프로젝트×omp/하네스 버전 매트릭스.
+
+### Q11.3 정확성 제약 (advisory 반영, 구현 시 불변식)
+
+- **A1 세션 경계**: `session_start` 이벤트에는 ID가 없다 — `ctx.sessionManager.getSessionId()/getSessionFile()`로 조회. 같은 프로세스의 `/new`·resume·fork는 `session_switch`/`session_branch`/`session_tree`로 ID가 바뀌므로 이 라이프사이클 이벤트에서 **writer를 rotate**(또는 이벤트마다 현재 ID 조회). "completion 시 copy" 같은 의미적 종료 가정 금지.
+- **A2 수집 트리거**: sum/commit-only 금지 (위 수집 절).
+- **A3 commit-gates 분해**: 디스패처가 4개 child를 내부 `spawnSync`하고 합산 exit만 반환 → 부모 계측만으론 어느 child가 평가/차단했는지 뭉개진다. 디스패처가 **child별 `{gate, status, duration, failure}`를 구조화 기록**하거나 machine-readable 결과를 부모에 반환해야 한다.
+- **A4 tracker/gate kind 분리** (위 스키마).
+- **A5 스킬 2경로**: `/skill:<name>` 명시 호출은 런타임이 SKILL.md를 직접 주입해 **read tool call이 없다** → `input` 이벤트에서 토큰 관측(`via:command`). 모델 주도 로드는 `tool_call read skill://…`(`via:read`).
+- **A6 준수 의미론**: gate PASS/BLOCK은 "그 기회에서의 집행/위반 탐지"이지 규칙 전체 준수율이 아니다. `opportunity→outcome→recovery`를 session_id+gate+target_fp로 연결하고, **계측 불가 규칙(프로즈 규칙)은 평가표에서 `unknown`** — 과대평가 금지.
+- **A7 비인터랙티브 `/skill`**: `input` 이벤트는 interactive 전용 — RPC/headless는 `tryRunRpcSkillCommand()`가 `promptCustomMessage({customType: SKILL_PROMPT_MESSAGE_TYPE,…})`로 직접 주입한다. `message_start`/`message_end`의 custom skill message(또는 branch entry details)를 함께 관측(`via:message`)하고 command/read/message 중복은 invocation_key로 dedup.
+- **A8 session_stop 한계**: `session_stop`은 **main 세션에만** 발화하고 task/subagent 세션에는 발화하지 않는다(`omp://extensions.md`) — "각 세션"이 워커/서브에이전트를 포함하는 한 session_stop-only 동기화는 구조적 누락. 완전한 기본안은 per-event 중앙 append(+user-global spool 미러)뿐이고 session_stop은 보조.
+- **A9 실행/판정 분리**: `allow|warn|block`만으로는 **하네스 고장과 정책 판정을 구분 못 한다** — runGate는 spawn 실패/timeout(`failure`)을 따로 가지며 fail-open이라 사용자 작업은 계속된다. 게이트 이벤트는 `execution: ok|infra_error` + `decision: allow|warn|block`(infra_error 시 decision 없음)으로 분리하고 failure reason은 제한된 enum(spawn|timeout|badstatus)으로 기록 — "차단 0%"가 실제 준수인지 게이트 미가동인지 판별 가능해야 한다.
+- **A10 in-process 체크 커버리지**: mermaid-check는 `runGate` 스폰이 아니라 in-process 함수라 runGate 계측에 안 잡힌다 — **v1 확정: 별도 계측**(index.ts가 problems 결과를 이미 보유하므로 같은 usage writer로 `gate:"mermaid-check"` 1줄 append; 스폰 없음·비용 0) — 침묵 누락 금지.
+
+### Q11.4 미결 결정 — 전부 해소 (kickoff 인터뷰 2026-07-10)
+
+- [x] ~~수집 방식~~ — **A8로 해소**: per-event 중앙 append + user-global spool 미러가 기본, session_stop은 flush 보조.
+- [x] 서브에이전트 활동 귀속 — **v1은 main session_id로 합산** (사용자 결정; 세션별 분리는 v2 후보, 관측 가능성 실측 후).
+- [x] `target_fp` 수준 — **상대경로 그대로** (사용자 결정; vault=private, 최대 가독·정확한 recovery join. 외부 공유 시 별도 익명화 단계).
+- [x] 평가 실행 형태 — **수동 스크립트** (사용자 결정; 이 레포 `scripts/`에 집계 스크립트, 배치/크론은 비범위 — ecc2 경계).
+
+### Q11.5 비범위 (ecc2 경계 유지)
+
+대시보드/데몬 제품화, 실시간 알림, 미사용 자산 자동 삭제, LLM 기반 판정(전 층 no-LLM), 타 프로젝트 과거 세션 백필.
