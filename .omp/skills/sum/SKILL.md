@@ -191,11 +191,13 @@ git -C "<vault>" commit -m "sum: <proj>/<filename>"
    ("nothing to commit" 실패는 무해 — 재백업과 동일, 그대로 진행)
 
 ```bash
-# 4) 푸시 (fail-open)
+# 4) 동기화 + 푸시 (fail-open) — vault는 다중 기록자(여러 프로젝트·머신) 공유 레포라
+#    plain push가 non-fast-forward로 거절될 수 있다. push 전에 rebase로 원격을 흡수한다.
+git -C "<vault>" pull --rebase --autostash || echo "vault rebase 실패 — 로컬 커밋은 보존됨; 수동 해소 후 push"
 git -C "<vault>" push || echo "vault push 실패 — 로컬 vault에는 저장됨; 네트워크 복구 후 재시도"
 ```
 
-- **fail-open**: vault 부재·push 실패는 sum 저장 성공에 영향 없음 — 안내만 남긴다.
+- **fail-open**: vault 부재·rebase/push 실패는 sum 저장 성공에 영향 없음 — 안내만 남긴다.
 - vault는 **PRIVATE** 저장소여야 한다 — 서사·프로젝트명이 공개 노출되지 않도록.
 
 ### 8. 저장·보고
