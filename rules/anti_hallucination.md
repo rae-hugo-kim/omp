@@ -17,7 +17,7 @@ For version-sensitive decisions or “what command do we run” questions, estab
 1) **Lockfiles / manifests / tool config**
 2) **CI configuration** (actual executed steps)
 3) **Repo docs** (README, CONTRIBUTING, ADRs)
-4) **Official docs via tooling** (e.g., Context7) when external/library behavior matters
+4) **Official docs / library source** (direct doc reads, `librarian` agent) when external/library behavior matters
 
 ## MUST: cite evidence for key claims
 

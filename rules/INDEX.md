@@ -43,7 +43,6 @@ If both global and local guidance exist for the same tool choice, apply global-h
 ## Tool rails
 
 - MCP server policies (when/how to use): [`mcp_policy.md`](mcp_policy.md)
-- Context7 policy (trigger-based): [`context7_policy.md`](context7_policy.md)
 - Hook recipes (OMP extension recipes for quality automation): [`hook_recipes.md`](hook_recipes.md)
 
 ## Process rails

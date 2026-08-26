@@ -99,8 +99,6 @@ MCP 서버는 OMP 자체 MCP 설정에 등록한다 (`~/.claude.json` 아님).
 
 이미 등록된 서버는 스킵. 미등록 서버만 추가:
 
-- **context7** — 라이브러리/프레임워크 공식 문서 조회: `npx -y @upstash/context7-mcp@latest`
-- **serena** — 시맨틱 코드 탐색/리팩토링: `uvx --from "git+https://github.com/oraios/serena" serena start-mcp-server`
 - **exa** — AI 웹 검색 (HTTP transport): `https://mcp.exa.ai/mcp`
 - **browser-tools-mcp** — 브라우저 콘솔/네트워크/스크린샷: `npx -y @agentdeskai/browser-tools-mcp@1.2.0`
 
@@ -141,8 +139,6 @@ MCP 서버는 OMP 자체 MCP 설정에 등록한다 (`~/.claude.json` 아님).
 ### MCP Servers
 | Server | Status |
 |--------|--------|
-| context7 | ✓ registered |
-| serena | ✓ registered |
 | exa | ✓ registered |
 | browser-tools-mcp | ✓ registered |
 | supabase | ✓ registered (또는 — skipped) |

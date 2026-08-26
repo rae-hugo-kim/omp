@@ -119,7 +119,7 @@ Harness 검증 계약 세부 사항: [`rules/harness_integration_contract.md`](.
 ## MCP 서버 정책 (트리거 기반)
 
 - 전체 정책은 [`rules/mcp_policy.md`](../rules/mcp_policy.md)를 참조합니다.
-- **Context7**: 새로운 외부 API/SDK, 의존성, 버전 민감 문법에는 MUST 사용.
+- **외부 라이브러리/API 검증**: `librarian` 에이전트(소스 직독) 또는 공식 문서 직독을 사용합니다. (Context7 정책은 2026-08-26 폐기 — `rules/mcp_policy.md` 참조.)
 - **Supabase**: DDL에는 MUST 마이그레이션 사용; 쿼리에는 MAY 직접 SQL 사용.
 - **Web Search**: 최신 이벤트, 오류, 최신 문서에 SHOULD 사용.
 
@@ -137,7 +137,6 @@ Harness 검증 계약 세부 사항: [`rules/harness_integration_contract.md`](.
 - Repo command discovery: [`rules/repo_command_discovery.md`](../rules/repo_command_discovery.md)
 - Information discovery (breadth-first): [`rules/information_discovery.md`](../rules/information_discovery.md)
 - MCP server policies: [`rules/mcp_policy.md`](../rules/mcp_policy.md)
-- Context7 trigger policy: [`rules/context7_policy.md`](../rules/context7_policy.md)
 - Verification (tests + evals): [`rules/verification_tests_and_evals.md`](../rules/verification_tests_and_evals.md)
 - Change control (minimal change, scope, tidy): [`rules/change_control.md`](../rules/change_control.md)
 - Documentation policy (optional): [`rules/documentation_policy.md`](../rules/documentation_policy.md)

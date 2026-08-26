@@ -126,7 +126,7 @@ If you cannot comply with any MUST:
 ## MCP Server Policy (Trigger-based)
 
 - See [`rules/mcp_policy.md`](rules/mcp_policy.md) for full policies on all MCP servers. Servers are registered in OMP's MCP config (`omp://mcp-config.md`).
-- **Context7**: MUST use for new external APIs/SDKs, dependencies, version-sensitive syntax.
+- **External library/API truth**: use the `librarian` agent (source-reading) or direct official-doc reads. (Context7 policy retired 2026-08-26 — see `rules/mcp_policy.md`.)
 - **Supabase**: MUST use migrations for DDL; MAY use direct SQL for queries.
 - **Web Search**: SHOULD use for current events, errors, latest docs.
 
@@ -144,7 +144,6 @@ If you cannot comply with any MUST:
 - Repo command discovery: [`rules/repo_command_discovery.md`](rules/repo_command_discovery.md)
 - Information discovery (breadth-first): [`rules/information_discovery.md`](rules/information_discovery.md)
 - MCP server policies: [`rules/mcp_policy.md`](rules/mcp_policy.md)
-- Context7 trigger policy: [`rules/context7_policy.md`](rules/context7_policy.md)
 - Verification (tests + evals): [`rules/verification_tests_and_evals.md`](rules/verification_tests_and_evals.md)
 - Change control (minimal change, scope, tidy): [`rules/change_control.md`](rules/change_control.md)
 - Documentation policy (optional): [`rules/documentation_policy.md`](rules/documentation_policy.md)
