@@ -25,6 +25,8 @@ description: Summarizes the current conversation to docs/sum/ and triages its kn
 <project-root>/docs/sum/INDEX.md   (매 실행 갱신)
 ```
 
+링크드 워크트리에서 실행되면 7단계(Vault backup)가 메인 체크아웃의 `docs/sum/`에도 사본을 남긴다 — `git worktree remove`가 ignored인 로컬본을 함께 지우는 것을 방지.
+
 ## Principles
 
 | 원칙 | 설명 |
@@ -160,9 +162,9 @@ API·스키마·env 키·스케줄·인터페이스 등 "다른 코드/사람이
 | 2026-07-28 | [session_2026-07-28_topic.md](session_2026-07-28_topic.md) | <한 줄> | 승격 1(AGENTS.md) · 미결 2(이슈 #12·보류 1) · 폐기 1 |
 ```
 
-### 7. Vault backup (fail-open)
+### 7. Vault backup + 워크트리 사본 (fail-open)
 
-등재 직후 sum 문서와 `INDEX.md`를 중앙 아카이브(sum-vault)로 백업한다 — 프로젝트 레포는 `docs/sum/`을 추적하지 않으므로(untracked 정책, omp `rules/doc_standards.md`) vault가 유일한 백업이다.
+등재 직후 sum 문서와 `INDEX.md`를 중앙 아카이브(sum-vault)로 백업한다 — 프로젝트 레포는 `docs/sum/`을 추적하지 않으므로(untracked 정책, omp `rules/doc_standards.md`) vault가 유일한 백업이다. 링크드 워크트리에서 실행된 세션은 추가로 메인 체크아웃 `docs/sum/`에 사본을 남긴다(①.5).
 
 커밋 게이트는 이제 **대상 레포의 `.githooks/pre-commit`** 에서 집행된다(2026-07-30 재설계).
 sum-vault는 하네스를 보유하지 않으므로 **관할 밖**이고, `git -C <vault> commit`은 게이트를
@@ -170,18 +172,38 @@ sum-vault는 하네스를 보유하지 않으므로 **관할 밖**이고, `git -
 아니라 위생(실패 지점 분리)으로 유지한다. vault 미보유 머신은 ①에서 안내만 남기고 끝(fail-open).
 
 ```bash
-# 1) 사전 체크 + 실경로 출력 (커밋 없음 — 게이트 비대상; SUM_VAULT_DIR 커스텀 반영)
+# 1) 경로 산출 + vault 사전 체크 (커밋 없음 — 게이트 비대상; SUM_VAULT_DIR 커스텀 반영)
+#    링크드 워크트리에서도 <proj>가 워크트리 폴더명이 아닌 메인 프로젝트명이 되도록
+#    메인 워크트리 루트 기준으로 산출한다 (git worktree list 첫 항목 = 항상 메인).
+T="$(git rev-parse --show-toplevel)"
+M="$(git worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')"
+{ [ -n "$M" ] && [ -d "$M" ]; } || M="$T"   # 메인 특정 불가 → 현재 루트로 폴백 (fail-open)
+echo "PROJ=$(basename "$M")"; [ "$M" = "$T" ] || echo "MAIN=$M"
 V="${SUM_VAULT_DIR:-$HOME/projects/workspace/sum-vault}"
 [ -d "$V/.git" ] && realpath "$V" \
   || echo "sum-vault 클론 없음 — 백업 생략 (위치 규약: ~/projects/workspace/sum-vault, env SUM_VAULT_DIR로 재정의)"
 ```
 
-실경로가 출력됐을 때만 진행 — 아래 `<vault>`를 ①의 출력으로, `<proj>`를
-`basename "$(git rev-parse --show-toplevel)"` 값으로 **리터럴 치환**:
+`MAIN=`이 출력됐으면(= 링크드 워크트리에서 실행) 메인 체크아웃에도 사본을 남긴다 — `git worktree remove`는 ignored인 `docs/sum/`을 경고 없이 함께 지우고, `breadcrumb-surface`는 세션 cwd의 `docs/sum`만 읽으므로 사본이 없으면 서사가 소실된다. `<main>`을 `MAIN=` 값으로, `<index-row>`를 6단계에서 등재한 표 행으로 **리터럴 치환**. vault 유무와 무관하게 수행하고, 실패해도 다음 단계로 진행한다(fail-open):
+
+```bash
+# 1.5) 워크트리 → 메인 체크아웃 사본 (MAIN= 출력 시에만; 커밋 없음)
+mkdir -p "<main>/docs/sum" && cp "docs/sum/<filename>.md" "<main>/docs/sum/" \
+  || echo "메인 체크아웃 사본 실패 — sum 저장·vault 백업은 그대로 진행"
+if [ -f "<main>/docs/sum/INDEX.md" ]; then   # 메인 INDEX는 덮어쓰지 않는다 — 행 append만
+  cat >> "<main>/docs/sum/INDEX.md" <<'EOF'
+<index-row>
+EOF
+else
+  cp "docs/sum/INDEX.md" "<main>/docs/sum/" || echo "메인 INDEX 사본 실패 — 그대로 진행"
+fi
+```
+
+vault 실경로가 출력됐을 때만 이후 단계 진행 — 아래 `<vault>`를 ①의 실경로 출력으로, `<proj>`를 ①의 `PROJ=` 값으로, `<index>`를 INDEX 원본 경로(메인 체크아웃 실행 시 `docs/sum/INDEX.md`, 워크트리 실행 시 ①.5에서 병합된 `<main>/docs/sum/INDEX.md` — 워크트리의 1행짜리 INDEX로 vault 이력을 덮어쓰지 않기 위함)로 **리터럴 치환**:
 
 ```bash
 # 2) 스테이징 (커밋 없음) — sum 문서 + INDEX.md 함께 백업
-mkdir -p "<vault>/<proj>/sum" && cp "docs/sum/<filename>.md" "docs/sum/INDEX.md" "<vault>/<proj>/sum/" && git -C "<vault>" add -A
+mkdir -p "<vault>/<proj>/sum" && cp "docs/sum/<filename>.md" "<index>" "<vault>/<proj>/sum/" && git -C "<vault>" add -A
 ```
 
 ```bash
@@ -197,7 +219,7 @@ git -C "<vault>" pull --rebase --autostash || echo "vault rebase 실패 — 로�
 git -C "<vault>" push || echo "vault push 실패 — 로컬 vault에는 저장됨; 네트워크 복구 후 재시도"
 ```
 
-- **fail-open**: vault 부재·rebase/push 실패는 sum 저장 성공에 영향 없음 — 안내만 남긴다.
+- **fail-open**: vault 부재·rebase/push 실패·메인 체크아웃 특정 불가/사본 실패는 sum 저장 성공에 영향 없음 — 안내만 남긴다.
 - vault는 **PRIVATE** 저장소여야 한다 — 서사·프로젝트명이 공개 노출되지 않도록.
 
 ### 8. 저장·보고
@@ -226,3 +248,4 @@ After saving, suggest `/clear` to reset conversation context.
 | INDEX.md 충돌/수동 편집 흔적 | 기존 행 보존, append만 수행 |
 | gh 없음 / 원격이 GitHub 아님 | 이슈화 단계 조용히 생략 |
 | Vault 클론 없음/push 실패 | 백업 생략·안내만, sum 저장은 성공 처리 (fail-open) |
+| 워크트리: 메인 특정 불가/사본 실패 | PROJ는 현재 루트 기준으로 폴백·안내만, sum 저장은 성공 처리 (fail-open) |
