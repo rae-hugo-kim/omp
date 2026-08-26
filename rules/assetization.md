@@ -31,7 +31,7 @@ When a decision is not obvious, record:
 - Evidence
 - Trade-offs
 
-Suggested home: `docs/adr/` or the PR Decision Log.
+Home: [`docs/decisions/`](../docs/decisions/README.md) or the PR Decision Log.
 
 ## SHOULD: retro for repeated failures
 
