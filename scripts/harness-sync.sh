@@ -132,6 +132,8 @@ PATHS=(
   "docs/rules/seed_contract.md"
   "docs/rules/seed_evolution_policy.md"
   "docs/rules/startdev_seed_contract.md"
+  # 실전 절차 핸드북 — 원리 룰(rules/prompt_engineering.md)의 짝. 개별 파일 등재 (docs/는 소비 레포 공간).
+  "docs/prompt-writing-handbook.md"
 )
 
 if [[ $DRY_RUN -eq 1 ]]; then

@@ -336,5 +336,6 @@ LLM 출력을 심사하는 기계 게이트가 의심될 때의 절차 (원 프�
 ## Related
 
 - [`agent_security.md`](agent_security.md) — 에이전트 환경의 주입·공급망·메모리 방어 (본 문서와 관할 분리)
+- [`../docs/prompt-writing-handbook.md`](../docs/prompt-writing-handbook.md) — 쓸 때의 순서·체크리스트 (원리는 본 문서가, 절차는 핸드북이 소유)
 - [`verification_tests_and_evals.md`](verification_tests_and_evals.md) — 프롬프트 골든/결합 테스트가 속하는 검증 체계
 - [`anti_hallucination.md`](anti_hallucination.md) — 에이전트 자신의 출력 근거 규율

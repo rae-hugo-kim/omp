@@ -49,6 +49,7 @@ HARNESS_PATHS=(
   # aligned with harness-sync.sh: docs/rules contracts sync as individual files;
   # the dir prefix here just makes ANY contract change trigger a version bump.
   "docs/rules/"
+  "docs/prompt-writing-handbook.md"
 )
 
 # Literal path match (no regex): exact for file entries, prefix for "dir/" entries.
