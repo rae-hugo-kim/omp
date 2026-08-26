@@ -16,6 +16,11 @@
 If a local policy conflicts with a global harness rule, follow the global harness rule and document the deviation.
 If both global and local guidance exist for the same tool choice, apply global-harness rules first, then local policy ordering.
 
+## Jurisdiction (rules/ vs docs/rules/)
+
+- `rules/` — behavioral rails for how the agent works (applies to all work in this repo).
+- `docs/rules/` — output contracts for the mission/seed workflow (kickoff·startdev·closeout 등 해당 워크플로 안에서만 적용).
+
 ## Core rails
 
 - Safety & security (hard rails): [`safety_security.md`](safety_security.md)
@@ -33,6 +38,7 @@ If both global and local guidance exist for the same tool choice, apply global-h
 - Code review policy (severity, thresholds, confidence gating): [`code_review_policy.md`](code_review_policy.md)
 - Quality gates (FORMAT/LINT/TYPECHECK/TEST/BUILD/EVAL): [`quality_gates.md`](quality_gates.md)
 - Writing style (human-facing tone, 두괄식·번역투 금지): [`writing_style.md`](writing_style.md)
+- Prompt engineering (LLM 파이프라인 프롬프트 설계·신뢰 경계·게이트 철거): [`prompt_engineering.md`](prompt_engineering.md)
 
 ## Tool rails
 

@@ -14,6 +14,7 @@
 - **Internal Rules / Checklists** — `docs/rules`, `docs/checklists` 모듈
 - **Session Summaries** — `docs/sum/` 회고 기록 (로컬 전용)
 - **Templates** — 문서 템플릿 모음
+- **Guides** — [프롬프트 작성 핸드북](prompt-writing-handbook.md) (실전 절차·체크리스트; 원리는 `rules/prompt_engineering.md`)
 
 "로컬 전용" 섹션은 gitignore 대상이라 원격에는 없지만 vault에서는 열람·검색된다.
 
