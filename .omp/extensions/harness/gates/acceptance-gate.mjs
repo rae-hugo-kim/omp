@@ -4,7 +4,7 @@
 // Logic: Pass if (all checkboxes checked) OR (acceptance-done flag exists)
 // Exit 0 = allow, Exit 2 = block (uses stderr for messages)
 
-import { readFileSync, existsSync, appendFileSync, mkdirSync } from 'fs';
+import { readFileSync, existsSync, appendFileSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { isGitCommit, isWipCommit, parseCommitForm } from './git-commit-detect.mjs';
 import { assessRisk } from './risk-assess.mjs';
@@ -52,6 +52,25 @@ const isHookMode = data?.mode === 'hook';
 const hookWip = isHookMode
   && (existsSync(join(stateDir, 'commit-wip')) || process.env.OMP_COMMIT_WIP === '1');
 const isWip = () => hookWip || isWipCommit(command);
+// Observability for the WIP lane (audit symmetry with review_override): in hook mode, queue an
+// `acceptance_wip` audit intent for post-commit to append into docs/harness/audit.jsonl — a
+// direct append here would be swept into the commit by `git commit -a` (the same TOCTOU the
+// review-gate defers around via pending-consume). The message-prefix wip on the non-hook path
+// is self-documenting in commit history and is not separately audited.
+const queueWipAudit = (reason) => {
+  if (!hookWip) return;
+  try {
+    const pendDir = join(stateDir, 'pending-consume');
+    mkdirSync(pendDir, { recursive: true });
+    const event = {
+      ts: new Date().toISOString(),
+      event: 'acceptance_wip',
+      actor: process.env.USER || 'unknown',
+      meta: { mechanism: process.env.OMP_COMMIT_WIP === '1' ? 'env' : 'flag', reason },
+    };
+    writeFileSync(join(pendDir, 'append-audit-acceptance-wip.json'), JSON.stringify(event) + '\n');
+  } catch { /* observability only — never block or unblock the lane */ }
+};
 // Same synthetic form the other gates use in hook mode: the staged index is the commit's
 // content (git already materialized -a/pathspec into the inherited temporary index), and
 // Content already in HEAD is out of scope (including under --amend) — a documented residual.
@@ -101,6 +120,7 @@ function backstop(reason, opts = {}) {
     process.exit(0);
   }
   if (isWip()) {
+    queueWipAudit(`backstop:${reason}`);
     log(`backstop(${reason}): wip marker -> allow`);
     process.exit(0);
   }
@@ -202,6 +222,7 @@ if (unchecked.length === 0) {
 // would return the PREVIOUS commit's message). The message marker still applies on the
 // non-hook/standalone path. (cf. closeout_contract.md — closeout runs on completion.)
 if (isWip()) {
+  queueWipAudit(`unchecked:${unchecked.length}`);
   log(`WIP commit, ${unchecked.length} unchecked criteria but allowing (wip marker)`);
   console.error(`HARNESS WARNING: WIP commit with ${unchecked.length} unmet acceptance criteria (allowed by wip marker).`);
   process.exit(0);
