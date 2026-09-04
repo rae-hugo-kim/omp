@@ -27,11 +27,20 @@ This can live in an issue/PR description.
 When a decision is not obvious, record:
 
 - The decision
-- Alternatives considered
+- Alternatives considered (and why each was rejected)
 - Evidence
 - Trade-offs
+- Revisit triggers (the conditions under which the decision should be re-examined)
 
-Home: [`docs/decisions/`](../docs/decisions/README.md) or the PR Decision Log.
+Home: `docs/decisions/` (ADR files `NNN-slug.md`, 3-digit sequence; the body is immutable
+once settled — later changes go under `## Amendment (YYYY-MM-DD)`) or the PR Decision Log
+(`templates/decision_log.md`) for lighter decisions. Create a file only for decisions whose
+rejected alternatives will be questioned again, that overturn an existing rule's premise, or
+that were promoted from a session close-out.
+
+`docs/` is consumer project space and is not synced by the harness, so this rule carries
+the convention inline instead of linking a `docs/decisions/README.md` that consumer repos
+do not have (#27).
 
 ## SHOULD: retro for repeated failures
 

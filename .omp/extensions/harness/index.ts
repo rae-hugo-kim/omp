@@ -21,7 +21,7 @@
 //
 // The gate scripts are unchanged stdin-JSON CLIs (exit 0 = allow, stderr
 // "HARNESS WARNING" = advisory; exit 2 = block, stderr = reason) so the
-// existing test suite under tests/ keeps covering them directly.
+// existing test suite under .omp/extensions/harness/tests/ (synced with the gates) keeps covering them directly.
 //
 // Requires `node` on PATH (gates are spawned with node, NOT process.execPath —
 // inside OMP, process.execPath is the omp binary itself).

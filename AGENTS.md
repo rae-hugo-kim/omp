@@ -16,6 +16,19 @@ This file is **always-on** agent policy. Keep it short.
 - If a linked module conflicts with this file, **this file wins**.
 - **This policy complements user-global rules** (OMP also discovers `~/.claude/CLAUDE.md` and OMC skills/agents) — it does not replace them.
 
+## Consumer extension points
+
+This file, `rules/`, `checklists/`, `templates/`, `.omp/extensions/harness/`, the harness skills, and the four harness agents are **harness-owned**: `harness-check` overwrites them (remote wins) on every sync, and directory entries are `rm -rf` + copy. A project built from this template keeps its own policy in the places the sync never touches:
+
+| Need | Put it in | How OMP loads it |
+|---|---|---|
+| Project rules (prompting conventions, domain constraints) | `.omp/rules/<name>.md` | Native rule file: `alwaysApply: true` injects it every session; `globs`/`description` list it in the rulebook (`rule://<name>`); `condition` makes it a TTSR stream rule. Stronger than a `rules/` link. |
+| Short hard requirements that must stay visible in long sessions | `.omp/RULES.md` | Sticky always-apply rule, re-attached near the current turn. |
+| Project background and the project's own module index | `.omp/AGENTS.md` | Project context, loaded **together with** this file. |
+| Custom agents / skills | `.omp/agents/<custom>.md`, `.omp/skills/<custom>/` | Discovered like the harness ones; the sync lists harness agents and skills per file/dir and does not sweep siblings. |
+
+Precedence: a project rule in `.omp/rules/` or `.omp/RULES.md` is the **local specialization** of this policy and wins over a linked module on the same topic; only this file's MUSTs (safety, gates, verification) are not overridable that way. Never add project files under `rules/`, `.omp/agents/` harness names, or the harness skill directories — they are deleted or overwritten on the next sync.
+
 ## Harness Enforcement (OMP)
 
 This repo ships its own enforcement layer as an **OMP extension**. The following are enforced automatically:
@@ -157,6 +170,7 @@ If you cannot comply with any MUST:
 - Cost awareness: [`rules/cost_awareness.md`](rules/cost_awareness.md)
 - Learning policy: [`rules/learning_policy.md`](rules/learning_policy.md)
 - Coding standards: [`rules/coding_standards.md`](rules/coding_standards.md)
+- Prompt engineering (LLM pipeline prompt design, trust boundaries): [`rules/prompt_engineering.md`](rules/prompt_engineering.md)
 - Documentation standards: [`rules/doc_standards.md`](rules/doc_standards.md)
 - Writing style (human-facing tone): [`rules/writing_style.md`](rules/writing_style.md)
 - Agent security: [`rules/agent_security.md`](rules/agent_security.md)

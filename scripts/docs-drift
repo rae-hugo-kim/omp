@@ -865,6 +865,6 @@ if (require.main === module) {
   main();
 }
 
-// Exported for unit tests (tests/docs-drift.test.mjs). When required as a
+// Exported for unit tests (.omp/extensions/harness/tests/docs-drift.test.mjs). When required as a
 // module, main() does not run (guarded above) so the checks have no side effects.
 module.exports = { computeReachableHooks, getHookScriptRootPaths, refDocStaleSeverity, getRegisteredHookPaths, closeoutConsistency };
