@@ -110,8 +110,15 @@ Serena MCP에 대한 MUST/SHOULD 정책(구 레이어 D, 심볼 단위 의미 �
   편집)은 실재하나, agentic 편집은 블록 재생성 + `edit` 라인 앵커가 흡수하고
   (context-gate의 read-before-edit 강제로 "안 읽고 편집"이라는 전제 자체가 불성립),
   탐색·rename·진단 수요는 레이어 A/C가 흡수한다 — 정책이 가치를 벌지 못함.
-- **서버는 폐기하지 않음**: 설치는 그대로이며 ad-hoc 사용은 MAY (OMP에서 쓰려면 OMP MCP config 등록 필요 — `omp://mcp-config.md`).
-  켜고 끄는 법: `rules/context_management.md`의 lazy-loading 스크립트 참조.
+- **마운트도 제거 (2026-08-26)**: 원래는 "서버는 폐기하지 않음, ad-hoc MAY"였으나,
+  bootstrap 스킬 Phase 3가 user 레벨(`~/.omp/agent/mcp.json`)에 자동 재등록해 폐기가
+  무효화되는 문제가 확인됐다. bootstrap 목록에서는 상류에서 제거됐고(2026.72+),
+  잔존하던 user config 엔트리도 제거했다.
+  추가 근거: OMP 하네스에서 `mcp__*` 도구는 advisory mcp-gate만 통과하므로
+  (`.omp/extensions/harness/index.ts`의 `isEditToolName`은 `edit`/`write`만 커버),
+  serena의 편집/셸 도구는 context-gate(read-before-edit)와 destructive-guard를
+  우회한다 — 마운트 자체가 게이트 모델을 약화시킨다.
+  ad-hoc 사용이 필요하면 그때 `/mcp add`로 일시 등록 후 제거.
 - **재도입 트리거**: 2000줄+ 파일 다수의 대형 레포 작업이 일상화되거나, 의미 편집이
   `edit` 대비 우위인 사례가 실제 관측될 때. 복원은 git history의 이 섹션 참조.
 
