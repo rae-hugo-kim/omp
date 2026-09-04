@@ -1,5 +1,6 @@
 name: consumer-safe-sync
-status: approved
+status: done
+completed: 2026-09-05
 version: 1
 task_id: "20260903-120000-c5a1"
 # 사후 작성 seed: 2026-09-03 세션에서 이슈 #17/#24/#26/#27/#28 + 핸드오프
