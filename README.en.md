@@ -74,8 +74,8 @@ Skills also trigger from natural language ("let's kick off", "brainstorm this", 
 │   └── extensions/harness/
 │       ├── index.ts       gate-wiring extension (tool_call/tool_result/before_agent_start/session_start)
 │       ├── gates/         gate scripts — stdin JSON CLIs, covered by tests/
-│       └── harness-meta.json  harness version metadata
-├── tests/                 gate unit tests (node --test)
+│       ├── harness-meta.json  harness version metadata
+│       └── tests/         gate unit tests (node --test) — synced to consumers with the gates, same tag
 ├── docs/                  markdown SST + harness runtime files (seed.yaml, ...)
 ├── scripts/               drift audit / version management
 └── claudedocs/            reference docs (incl. Claude Code era history)
@@ -148,7 +148,7 @@ Integration paths (merge auto-commits, cherry-pick, revert, rebase) are **delibe
 - **rubric** — 4-dimension clarity gate (HIGH/MED/LOW)
 - **audit log** — event tracking (append-only JSONL)
 - **glossary** — project terms (`docs/glossary.yaml`)
-- Runtime state lives in `.omp/harness-state/` (gitignored); gates run standalone via `node --test tests/*.test.mjs`
+- Runtime state lives in `.omp/harness-state/` (gitignored); gates run standalone via `node --test .omp/extensions/harness/tests/*.test.mjs`
 
 Unlike the Claude Code original, failed bash verifications ARE recorded — the adapter routes bash `tool_result`s with a non-zero `details.exitCode` (or `isError`) to the failure tracker, resolving the original PostToolUseFailure limitation.
 

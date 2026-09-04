@@ -81,8 +81,8 @@ MCP 서버(OMP 설정에 등록)를 설치합니다. docs는 빌드 도구 없�
 │   └── extensions/harness/
 │       ├── index.ts       게이트 배선 확장 (tool_call/tool_result/before_agent_start/session_start)
 │       ├── gates/         게이트 스크립트 — stdin JSON CLI, 테스트로 커버됨
-│       └── harness-meta.json  하네스 버전 메타
-├── tests/                 게이트 단위 테스트 (node --test)
+│       ├── harness-meta.json  하네스 버전 메타
+│       └── tests/         게이트 단위 테스트 (node --test) — 게이트와 같은 태그로 소비 리포에 동기화
 ├── docs/
 │   ├── README.md          docs 색인 노트 (Obsidian vault 진입점)
 │   ├── brainstorming/     발산 캡처 (gitignored)
@@ -158,7 +158,7 @@ kickoff → startdev 흐름에서 자동으로 작동하는 장치들. 집행 �
 - **rubric** — 4차원 명확도 게이트 (HIGH/MED/LOW)
 - **audit log** — 이벤트 추적 (append-only JSONL)
 - **glossary** — 프로젝트 용어 정의 (`docs/glossary.yaml`)
-- 런타임 상태는 `.omp/harness-state/`(gitignored), 게이트 단독 실행·테스트는 `node --test tests/*.test.mjs`
+- 런타임 상태는 `.omp/harness-state/`(gitignored), 게이트 단독 실행·테스트는 `node --test .omp/extensions/harness/tests/*.test.mjs`
 
 Claude Code 원본과 달리, 실패한 bash 검증도 기록됩니다 — 어댑터가 비정상 종료(`details.exitCode`≠0) 또는 도구 오류(`isError`)인 bash `tool_result`를 failure-tracker로 라우팅해, 원본의 PostToolUseFailure 한계가 해소됐습니다.
 

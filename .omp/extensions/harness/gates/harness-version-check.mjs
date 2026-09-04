@@ -13,13 +13,14 @@
 // 1h). Failed probes write a short-lived marker (FAILURE_TTL_MS) so per-turn
 // callers never re-stall on a dead network every invocation.
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, renameSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, renameSync, realpathSync } from 'node:fs';
+import { join, dirname, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import process from 'node:process';
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const FAILURE_TTL_MS = 10 * 60 * 1000;
+const HOOKS_NOTICE_TTL_MS = 24 * 60 * 60 * 1000;
 
 let stdin = '';
 try { stdin = readFileSync(0, 'utf-8'); } catch { /* no stdin is fine */ }
@@ -46,6 +47,12 @@ if (!existsSync(metaPath)) process.exit(0);
 
 let meta;
 try { meta = JSON.parse(readFileSync(metaPath, 'utf-8')); } catch { process.exit(0); }
+// Hook activation probe (#26): `core.hooksPath` is LOCAL git config, so no file sync
+// (init template copy, harness-sync) can ever propagate it. A repo that ships
+// `.githooks/` but never pointed git at it has the whole commit/push gate layer
+// declared in AGENTS.md silently dead. Runs before the source-repo skip on purpose:
+// the probe is one `git config` read and applies to every repo carrying hooks.
+emitIfHooksInactive(cwd);
 
 const sourceRemote = meta.source_remote;
 if (!sourceRemote) process.exit(0);
@@ -115,21 +122,27 @@ function parseRemoteTags(output) {
   let m;
   while ((m = re.exec(output)) !== null) {
     const [, sha, yr, seq, caret] = m;
-    const rank = (+yr) * 1e6 + (+seq);
+    const version = `${yr}.${seq}`;
     const peeled = Boolean(caret);
     // Annotated tags list the tag-object line before the peeled `^{}` line; prefer the
     // peeled COMMIT sha on equal rank — harness-sync stores `rev-parse HEAD` (a commit
     // sha) in meta, so comparing against the tag-object sha would report drift forever.
-    if (!best || rank > best.rank || (rank === best.rank && peeled && !best.peeled)) {
-      best = { rank, version: `${yr}.${seq}`, sha, peeled };
+    if (!best || versionGreater(version, best.version) || (version === best.version && peeled && !best.peeled)) {
+      best = { version, sha, peeled };
     }
   }
   return best ? { remoteLatestVersion: best.version, remoteLatestSha: best.sha } : null;
 }
 
-function versionRank(v) {
+// (year, seq) tuple compare — no arithmetic packing, so seq never overflows the year.
+function versionParts(v) {
   const m = /^(\d{4})\.(\d+)$/.exec(v || '');
-  return m ? (+m[1]) * 1e6 + (+m[2]) : -1;
+  return m ? [+m[1], +m[2]] : null;
+}
+function versionGreater(a, b) {
+  const x = versionParts(a), y = versionParts(b);
+  if (!x || !y) return false;
+  return x[0] !== y[0] ? x[0] > y[0] : x[1] > y[1];
 }
 
 function emitIfDrift(localMeta, remoteInfo) {
@@ -138,7 +151,7 @@ function emitIfDrift(localMeta, remoteInfo) {
   const lsha = localMeta.commit_sha;
   const rsha = remoteInfo.remoteLatestSha;
 
-  const primaryDrift = versionRank(rv) > versionRank(lv);
+  const primaryDrift = versionGreater(rv, lv);
   const fallbackDrift = !primaryDrift && lsha && rsha && lsha !== rsha;
 
   if (primaryDrift) {
@@ -146,4 +159,44 @@ function emitIfDrift(localMeta, remoteInfo) {
   } else if (fallbackDrift) {
     console.log(`HARNESS DRIFT: version matches (${lv}) but commit SHA differs from source. Before starting the next task, run /skill:harness-check (working tree dirty? ask the user first).`);
   }
+}
+
+// Emit at most once per HOOKS_NOTICE_TTL_MS (marker: .omp/state/harness-hooks-check.json)
+// unless --force. Silent when: no `.githooks/` dir, not a git work tree, or
+// core.hooksPath already resolves to that directory. Never throws, never exits.
+function emitIfHooksInactive(root) {
+  const hooksDir = join(root, '.githooks');
+  if (!existsSync(hooksDir)) return;
+
+  let top;
+  try {
+    top = execFileSync('git', ['-C', root, 'rev-parse', '--show-toplevel'],
+      { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }).trim();
+  } catch { return; }
+  if (!top) return;
+
+  let configured = '';
+  try {
+    configured = execFileSync('git', ['-C', root, 'config', '--get', 'core.hooksPath'],
+      { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }).trim();
+  } catch { /* unset => exit 1 => stays '' */ }
+  // A relative hooksPath is resolved by git against the work-tree top. Compare REAL paths:
+  // `--show-toplevel` is canonical while `root` may be a symlinked session cwd (review 2026-09-05).
+  const real = (p) => { try { return realpathSync(p); } catch { return resolve(p); } };
+  if (configured && real(resolve(top, configured)) === real(hooksDir)) return;
+
+  const markerPath = join(root, '.omp/state/harness-hooks-check.json');
+  if (!force && existsSync(markerPath)) {
+    try {
+      const marker = JSON.parse(readFileSync(markerPath, 'utf-8'));
+      if (marker.notifiedAt && (Date.now() - marker.notifiedAt) < HOOKS_NOTICE_TTL_MS) return;
+    } catch { /* stale/corrupt marker — re-emit */ }
+  }
+  try {
+    mkdirSync(dirname(markerPath), { recursive: true });
+    writeFileSync(markerPath, JSON.stringify({ notifiedAt: Date.now(), configured: configured || null }, null, 2));
+  } catch { /* ignore marker write failure */ }
+
+  const state = configured ? `points at \`${configured}\`` : 'is not set';
+  console.log(`HARNESS HOOKS INACTIVE: .githooks/ exists but core.hooksPath ${state}, so the pre-commit/pre-push gates declared in AGENTS.md never run. Before the next commit, run \`git config core.hooksPath .githooks\` (local git setting — file sync alone cannot carry it) or /skill:harness-check, whose sync sets it idempotently and verifies the effective value.`);
 }

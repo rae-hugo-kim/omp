@@ -51,10 +51,11 @@ The script:
 - Self-skips in the source repo
 - Falls back to `git@github.com:rae-hugo-kim/omp.git` if no `source_remote` (unregistered case)
 - Fetches the latest `harness/*` tag from remote
-- Shallow-clones that tag into a temp dir
-- Overwrites whitelist paths (`rules/`, `checklists/`, `templates/`, `AGENTS.md`, `.omp/extensions/harness/`, `.omp/agents/`, `.githooks/post-commit`, `scripts/harness-*.sh`, harness skill dirs)
+- Shallow-clones that tag into a temp dir, then **hands execution to that tag's own `scripts/harness-sync.sh`** (#24) so the whitelist applied is the target version's, not the consumer's stale copy — a new whitelist entry lands on the first sync
+- Overwrites whitelist paths (`rules/`, `checklists/`, `templates/`, `AGENTS.md`, `.omp/extensions/harness/`, the four harness agents in `.omp/agents/` (per file — consumer agents next to them are kept), `.githooks/*`, `scripts/harness-*.sh`, harness skill dirs)
 - Rewrites `harness-meta.json` with new version/SHA + preserved `bootstrapped_at`
-- Clears the `session_start` cache
+- Sets `core.hooksPath=.githooks` when `.githooks/` exists and git is not already pointing at it (idempotent). This is local git config that no file sync can carry, so a repo registered before `bootstrap` gained the step is otherwise disarmed forever (#26) — the `HARNESS HOOKS INACTIVE` session/turn notice from `harness-version-check.mjs` routes here.
+- Clears the `harness-version-check` and `harness-hooks-check` caches
 
 ### 3. Report
 
@@ -71,7 +72,9 @@ The script:
 
 ```bash
 cat .omp/extensions/harness/harness-meta.json
+git config --get core.hooksPath   # → .githooks
 git status --short
+node --test .omp/extensions/harness/tests/*.test.mjs   # gate tests ship with the gates (#17)
 ```
 
 Confirm `version`, `commit_sha`, `updated` reflect the remote's latest; review changes before committing.

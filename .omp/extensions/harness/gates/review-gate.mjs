@@ -364,6 +364,35 @@ const form = isHookMode
 const risk = assessRisk(cwd, form);
 log(`Risk: ${risk.level} (${risk.reason}), ${risk.files.length} files, ~${risk.diffSize} lines`);
 
+// Provenance audit (handoff 2026-09-02 AC3): a commit whose files are byte-exact harness-sync
+// copies is scored by risk-assess without them. That exemption must leave a trace distinct
+// from review_override, so a pure sync commit is visible in audit.jsonl as `harness_sync`.
+// Hook mode only: the intent is queued for post-commit, so it lands iff the commit lands (the
+// command layer no longer gates commits, and a pre-verdict append there would be a lie).
+if (isHookMode && Array.isArray(risk.synced) && risk.synced.length > 0) {
+  const event = {
+    ts: new Date().toISOString(),
+    event: 'harness_sync',
+    actor: process.env.USER || 'unknown',
+    meta: {
+      version: risk.syncVersion ?? null,
+      tag: risk.syncVersion ? `refs/harness/${risk.syncVersion}` : null,
+      tree_sha: risk.syncTree ?? null,
+      synced_files: risk.synced.length,
+      synced: risk.synced,
+      other_files: risk.files.length,
+      other: risk.files,
+      risk: risk.level,
+    },
+  };
+  try {
+    const pendDir = join(cwd, '.omp', 'harness-state', 'pending-consume');
+    mkdirSync(pendDir, { recursive: true });
+    writeFileSync(join(pendDir, 'append-audit-harness-sync.json'), JSON.stringify(event) + '\n');
+    log(`harness_sync audit queued: ${risk.synced.length} synced file(s) excluded from risk`);
+  } catch { /* observability only */ }
+}
+
 if (risk.level === 'low' || risk.level === 'none') {
   log('Low/no risk, review not required');
   process.exit(0);

@@ -33,7 +33,9 @@
 
 - 1회성 explainer·mockup·design preview·PR 시각화 등은 `artifacts/` 트리에 둔다.
 - `docs/` 안에 HTML 파일을 두지 않는다 (SST 오염; md 뷰어의 대상도 아님).
-- 상세는 [`artifacts/README.md`](../artifacts/README.md) 참조.
+- `artifacts/` 정책: 전부 gitignore(`artifacts/*`), 단 `README.md`·`<subdir>/README.md`는
+  구조 문서화 목적으로 추적 허용. 영속이 필요한 산출물은 `docs/` 안의 MD로 승격한다.
+  (`artifacts/`는 소비 리포 공간이라 동기화되지 않으므로 정책을 여기 인라인한다.)
 
 ### R5. 스킬 정의 파일은 대문자 `SKILL.md`
 
@@ -74,4 +76,4 @@
   미션별로 회전하므로 현행 원본은 본 문서다. (mdBook+mmdc 파이프라인은 2026-07
   Obsidian 전환으로 폐지, 검증은 하네스 게이트로 이관)
 - `rules/change_control.md` — 최소 변경 원칙 (본 표준의 over-prescription 방지)
-- `artifacts/README.md` — 1회성 HTML 산출물 정책
+- `artifacts/` — 1회성 HTML 산출물 격리 위치 (R4에 정책 인라인; 디렉터리 README는 소비 리포 소유)

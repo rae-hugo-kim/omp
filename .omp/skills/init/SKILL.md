@@ -68,6 +68,18 @@ cd <project-name>
 4. README 교체 (템플릿 README가 derived repo에 새지 않도록):
    - README.md, README.en.md를 아래 placeholder로 덮어쓴다.
    - `<!-- claude-template-placeholder -->` 마커는 `/kickoff`(OMP: `/skill:kickoff`)이 "아직 사용자가 손대지 않음"을 판별하는 데 사용된다.
+
+5. 소스 리포 전용 자산 제거 (GitHub 템플릿 복사는 소스 트리 전체를 가져온다):
+   - scripts/docs-drift          → 삭제. 소스 전용 문서 감사기. 소비 리포에 남으면 harness-sync
+                                   화이트리스트 밖이라 영원히 구버전으로 남고, .githooks/pre-push가
+                                   이를 실행해 소스 전용 링크(claudedocs/, docs/decisions/) 부재를
+                                   FAIL로 판정 → push 차단 (#26)
+   - claudedocs/                 → 삭제 (AGENTS.md 한국어 미러 등 소스 리포 문서)
+   - docs/harness/handoff_*.md   → 삭제 (있으면; 소스 리포 세션 간 인수인계 문서)
+   판단 기준: `scripts/harness-sync.sh`의 PATHS 배열이 "소비 리포가 가져야 할 하네스 파일"의
+   SoT다. 그 밖의 하네스성 파일이 템플릿에서 딸려왔다면 같은 이유로 제거 대상이다.
+   (하네스 게이트 테스트는 `.omp/extensions/harness/tests/`에 있어 게이트와 같은 태그로
+   동기화된다 — 삭제하지 않는다. 검증: `node --test .omp/extensions/harness/tests/*.test.mjs`)
 ```
 
 **README.md placeholder**:
@@ -127,7 +139,18 @@ BOOTSTRAPPED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 `edit` 툴로 JSON 파일 직접 수정 (마지막 `}` 앞에 세 필드 삽입).
 
-### Phase 4: 초기 커밋
+### Phase 4: 하네스 훅 활성화
+
+`core.hooksPath`는 **로컬 git 설정**이라 템플릿 복사로는 전파되지 않는다 (`harness-sync.sh`는 8단계에서 멱등 설정하지만, 첫 sync 전인 init 시점에는 이 단계가 유일한 활성화 경로다).
+이 단계가 없으면 AGENTS.md가 선언하는 pre-commit/pre-push 게이트가 처음부터 비활성이다 (#26).
+bootstrap/migrate와 동일한 명령:
+
+```bash
+[ -d .githooks ] && git config core.hooksPath .githooks
+git config --get core.hooksPath   # → .githooks
+```
+
+### Phase 5: 초기 커밋
 
 ```bash
 git add -A
@@ -135,7 +158,11 @@ git commit -m "chore: initialize from omp template"
 git push
 ```
 
-### Phase 4: 안내
+커밋은 이제 활성화된 `.githooks/pre-commit`을 통과해야 한다. 템플릿 초기화 커밋은 스코프 파일이
+없어 `HARNESS WARNING: No scope file`이 뜨지만 차단은 아니다. push는 `.githooks/pre-push`의
+archive-guard를 지나며, Phase 2-5를 건너뛰었다면 여기서 docs-drift FAIL로 막힌다.
+
+### Phase 6: 안내
 
 ```markdown
 ## Project Ready: <project-name>
@@ -152,6 +179,13 @@ git push
 - Skills (`.omp/skills/`): bootstrap, init, kickoff, startdev, sum, compr, compush
 - Harness gates (`.omp/extensions/harness/gates/`, registered by the `.omp/extensions/harness/index.ts` extension): context-gate, acceptance-gate, backpressure-gate, kickoff-detector, read-tracker, backpressure-tracker (the full template registers more)
 - Agents (`.omp/agents/`), AGENTS.md, rules, templates, glossary
+
+### Your project's own policy (survives `harness-check` sync)
+- `.omp/rules/<name>.md` — project rules (`alwaysApply: true` / `globs` / `condition`)
+- `.omp/RULES.md` — short sticky hard requirements
+- `.omp/AGENTS.md` — project background + your own module index
+- `.omp/agents/<custom>.md`, `.omp/skills/<custom>/` — custom agents/skills
+Do NOT add files under `rules/` or the harness skill/agent names — the next sync deletes or overwrites them. See AGENTS.md "Consumer extension points".
 ```
 
 ## Error Handling

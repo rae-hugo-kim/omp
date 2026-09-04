@@ -27,6 +27,19 @@ source_commit_hash: b379ed5a64db3eea14433d41706b5d385782e203
 - 링크된 모듈 문서가 이 파일과 충돌하면, **이 파일을 우선**합니다.
 - **이 정책은 oh-my-claudecode 글로벌 규칙을 보완합니다** (대체하지 않음).
 
+## 소비 리포 확장 지점
+
+이 파일, `rules/`, `checklists/`, `templates/`, `.omp/extensions/harness/`, 하네스 스킬, 하네스 에이전트 4종은 **하네스 소유**입니다. `harness-check`가 매 동기화에서 덮어쓰고(remote wins), 디렉터리 항목은 `rm -rf` 후 복사합니다. 이 템플릿으로 만든 프로젝트의 고유 정책은 동기화가 건드리지 않는 곳에 둡니다:
+
+| 필요 | 위치 | OMP 로딩 방식 |
+|---|---|---|
+| 프로젝트 규칙 (프롬프팅 관례, 도메인 제약) | `.omp/rules/<name>.md` | 네이티브 rule 파일. `alwaysApply: true`면 매 세션 주입, `globs`/`description`이면 룰북 등재(`rule://<name>`), `condition`이면 TTSR 스트림 룰. `rules/` 링크보다 강함. |
+| 긴 세션에서도 보여야 하는 짧은 하드 요구 | `.omp/RULES.md` | sticky always-apply 룰, 현재 턴 근처에 재부착. |
+| 프로젝트 배경과 자체 모듈 색인 | `.omp/AGENTS.md` | 프로젝트 컨텍스트, 이 파일과 **함께** 로드. |
+| 커스텀 에이전트 / 스킬 | `.omp/agents/<custom>.md`, `.omp/skills/<custom>/` | 하네스 것과 같은 방식으로 발견. 동기화는 하네스 에이전트·스킬을 파일/디렉터리 단위로 열거하므로 이웃 파일을 지우지 않음. |
+
+우선순위: `.omp/rules/`나 `.omp/RULES.md`의 프로젝트 규칙은 이 정책의 **로컬 특화**이며 같은 주제의 링크 모듈보다 우선합니다. 이 파일의 MUST(안전, 게이트, 검증)만 그 방식으로 덮어쓸 수 없습니다. `rules/`, 하네스 이름의 `.omp/agents/`, 하네스 스킬 디렉터리에는 프로젝트 파일을 두지 않습니다 — 다음 동기화에서 삭제되거나 덮어써집니다.
+
 ## oh-my-claudecode 통합
 
 이 레포는 **oh-my-claudecode**가 전역으로 활성화되어 있다고 가정합니다. 다음 항목들은 자동으로 적용됩니다:
@@ -150,6 +163,7 @@ Harness 검증 계약 세부 사항: [`rules/harness_integration_contract.md`](.
 - Cost awareness: [`rules/cost_awareness.md`](../rules/cost_awareness.md)
 - Learning policy: [`rules/learning_policy.md`](../rules/learning_policy.md)
 - Coding standards: [`rules/coding_standards.md`](../rules/coding_standards.md)
+- Prompt engineering (LLM 파이프라인 프롬프트 설계·신뢰 경계): [`rules/prompt_engineering.md`](../rules/prompt_engineering.md)
 - Documentation standards: [`rules/doc_standards.md`](../rules/doc_standards.md)
 - Writing style (human-facing tone): [`rules/writing_style.md`](../rules/writing_style.md)
 - Agent security: [`rules/agent_security.md`](../rules/agent_security.md)
