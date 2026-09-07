@@ -189,6 +189,11 @@ function runGate(script: string, payload: GatePayload, timeoutMs = GATE_TIMEOUT_
 		});
 		child.on("error", (err: Error) => settle({ status: null, stdout, stderr, failure: err.message }));
 		child.on("close", (status: number | null) => settle({ status, stdout, stderr }));
+		// A gate that exits before draining stdin (early no-op paths, cached verdicts) closes the
+		// pipe under our pending write. The resulting EPIPE is not a gate failure — the verdict
+		// arrives via `close` — but with no listener it is an UNCAUGHT stream error that takes the
+		// whole omp process down (observed on omp 18.1.13, which no longer swallows it).
+		child.stdin?.on("error", () => {});
 		child.stdin?.end(JSON.stringify(payload));
 	} catch (err) {
 		settle({ status: null, stdout, stderr, failure: err instanceof Error ? err.message : String(err) });
