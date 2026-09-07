@@ -125,7 +125,7 @@ echo "Source: $source_remote"
 latest_tag=$(git ls-remote --tags "$source_remote" 'refs/tags/harness/*' 2>/dev/null \
   | awk '{ print $2 }' \
   | sed 's|refs/tags/harness/||; s|\^{}$||' \
-  | grep -E '^[0-9]{4}\.[0-9]+$' \
+  | { grep -E '^[0-9]{4}\.[0-9]+$' || true; } \
   | sort -u -t. -k1,1n -k2,2n \
   | tail -1)
 
@@ -333,11 +333,13 @@ MANIFEST_FILE="$REPO_ROOT/.omp/extensions/harness/harness-manifest.json"
 } > "$MANIFEST_FILE"
 # Retroactive init cleanup (#26): an init-created consumer still carries source-only
 # assets that a sync never removes (they are outside the whitelist). Advise, never delete.
-# `tests/harness-wiring.test.mjs` is the marker of a copied harness test tree (the gate
-# tests now live under .omp/extensions/harness/tests); a consumer's own tests/ is left alone.
-for stale in scripts/docs-drift claudedocs tests/harness-wiring.test.mjs; do
+# Judged by SPECIFIC source files, never by directory: a consumer may keep its own notes
+# under claudedocs/ or tests/, and those must not be flagged. `tests/harness-wiring.test.mjs`
+# marks a copied harness test tree (the gate tests now live under .omp/extensions/harness/tests).
+for stale in scripts/docs-drift claudedocs/CLAUDEKR.md claudedocs/CLAUDE_original.md \
+             claudedocs/bootstrap_oh_my_claudecode.md claudedocs/agreements.md tests/harness-wiring.test.mjs; do
   [[ -e "$REPO_ROOT/$stale" ]] || continue
-  echo "advisory: $stale exists — source-repo-only asset copied by an older init; remove it (see .omp/skills/init Phase 2, step 5)"
+  echo "advisory: $stale exists — source-repo-only file copied by an older init; remove it (see .omp/skills/init Phase 2, step 5)"
 done
 
 # --- 8. Activate the synced hooks (#26) ---

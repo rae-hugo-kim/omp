@@ -107,7 +107,7 @@ Harness 검증 계약 세부 사항: [`rules/harness_integration_contract.md`](.
 - **검증**: 사용자 영향 변경은 최소 1개의 재현 가능한 검증 아티팩트가 있어야 합니다.
 - **문서/정책 전용 모드**: 순수 마크다운/정책/템플릿 편집의 경우, `rules/verification_tests_and_evals.md`의 docs-only 검증 경로를 따르고 필요한 증거 형식을 포함합니다.
 - **근거 제시**: 핵심 결정은 구체적 근거(파일 경로 + 발췌 또는 커맨드 출력)를 함께 제공합니다.
-- **Reference doc sync**: 동일한 PR에서 `claudedocs/CLAUDEKR.md`와 `claudedocs/CLAUDE_original.md`를 업데이트하거나, 명시적으로 stale로 표시합니다.
+- **Reference doc sync (소스 리포 전용)**: omp 소스 리포에서는 동일한 PR에서 `claudedocs/CLAUDEKR.md`(이 파일의 한국어 미러)를 업데이트하거나 명시적으로 stale로 표시합니다. 소비 리포에는 이 미러가 없습니다(`claudedocs/`는 동기화되지 않음; 구버전 `init`이 남긴 사본이 있다면 관리되지 않는 것이므로 삭제합니다).
 - **스코프 자가감지 (L1)**: 세션 중 scope-add / fix / 새 요구가 등장하면 AC를 제안하고, 테스트가능·명확하면 silent-append, material gap이면 질문(push→pull) — 추적 AC 없이 코드 변경이 진행되지 않게 합니다 ([`docs/rules/scope_self_detect_policy.md`](../docs/rules/scope_self_detect_policy.md); 기계적 backstop = `acceptance-gate`).
 - **사이클 인테이크 (L1)**: 새 지시를 받으면 1사이클 정의(한 줄 완료 확인 문장·단수 산출물·1세션 규모)로 판정하고, 미충족이면 구현 전에 사이클별 확인 문장이 포함된 분할안을 역제안합니다 — 제안은 1회, 사용자가 "그냥 진행"을 선택하면 재론하지 않습니다 ([`rules/cycle_definition.md`](../rules/cycle_definition.md)).
 

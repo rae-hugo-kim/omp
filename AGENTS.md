@@ -114,7 +114,7 @@ Harness verification contract details: [`rules/harness_integration_contract.md`]
 - **Verification**: every user-impacting change must include at least one reproducible verification artifact.
 - **Docs/policy-only mode**: for pure markdown/policy/template edits, follow the docs-only verification path in `rules/verification_tests_and_evals.md` and include its required evidence format.
 - **Evidence**: cite concrete evidence for key decisions (file paths + excerpts or command output).
-- **Reference doc sync**: in the same PR, update `claudedocs/CLAUDEKR.md` (Korean mirror of this file) or explicitly mark it as stale.
+- **Reference doc sync (source repo only)**: in the omp source repo, update `claudedocs/CLAUDEKR.md` (Korean mirror of this file) in the same PR or explicitly mark it as stale. Consumer repos have no such mirror (`claudedocs/` is not synced; an older `init` may have left a stale copy — delete it, it is not maintained).
 - **Scope self-detection (L1)**: during a session, when a scope-add / fix / new requirement appears, propose AC and either silent-append (testable + unambiguous) or ask on a material fidelity gap (push→pull) — never let a code change proceed with no tracking AC ([`docs/rules/scope_self_detect_policy.md`](docs/rules/scope_self_detect_policy.md); mechanical backstop = `acceptance-gate`).
 - **Cycle intake (L1)**: on receiving a new instruction, judge it against the 1-cycle definition (one-line verifiable completion check, singular deliverable, one-session scale). If it fails, propose a numbered decomposition with per-cycle check sentences before implementing — one proposal only; the user's "just proceed" is final ([`rules/cycle_definition.md`](rules/cycle_definition.md)).
 
