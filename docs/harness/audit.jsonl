@@ -115,3 +115,4 @@
 {"ts":"2026-09-07T04:16:31.523Z","event":"thread_opened","actor":"assistant","meta":{"thread_id":"T-20260907041631-7634","seed_task_id":"20260903-120000-c5a1","seed_version":2,"ac_targeted":["AC1-tests-sync","AC2-first-sync-landing","AC3-hooks-active","AC4-link-contract","AC5-provenance-gates"]}}
 {"ts":"2026-09-07T04:16:51.431Z","event":"thread_closed","actor":"assistant","meta":{"thread_id":"T-20260907041631-7634","verdict":"pass"}}
 {"ts":"2026-09-07T04:16:51Z","event":"task_closed","actor":"assistant","meta":{"task_id":"20260903-120000-c5a1","name":"consumer-safe-sync"}}
+{"ts":"2026-09-07T13:56:12.660Z","event":"acceptance_wip","actor":"rae","meta":{"mechanism":"env","reason":"backstop:closed seed (status:done)"}}

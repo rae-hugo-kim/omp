@@ -41,6 +41,7 @@ Internal function calls between trusted modules do NOT need redundant validation
 - Log detailed error context server-side (stack trace, input values, timestamp).
 - Provide user-friendly messages client-side (no raw stack traces or internal IDs).
 - Propagate or wrap errors — do not discard them.
+- Child-process pipes: any write to a child's stdin (`stdin.end(payload)`) needs an `error` listener — the child exiting before it reads is a normal path, and an unhandled EPIPE on that stream is an uncaught exception that kills the host process (omp 18.1.13 + harness `runGate`, 2026-09-07). This is not swallowing: the verdict/result must come from `close`, never from the write succeeding.
 
 ---
 
