@@ -15,6 +15,7 @@
 - **CRITICAL 블로킹**: CRITICAL 판정 시 수정 없이 다음 단계로 진행 불가.
 - **구조적 증거 수집**: 프레이밍(framing)이 아닌 템플릿 기반 반대 증거를 수집한다. (OMC A/B 테스트 #1240 결론 반영)
 - **기존 규칙 확장**: completion-attack은 기존 Mandatory Architect Verification을 대체하지 않고 확장한다.
+- **우회 경로 변경의 리뷰 입력**: 게이트에 면제·skip·override 경로를 추가하거나 넓히는 변경은 리뷰 컨텍스트에 위조 시나리오를 명시한다 — 신뢰 근거가 워크트리 파일·환경변수처럼 호출자가 쓸 수 있는 곳에 있는가, env로 삭제·실행 경로가 열리는가. (2026-09-05 provenance 게이트: 이 질문으로 이종 리뷰가 HIGH 2건을 잡음 — docs/decisions/001-consumer-safe-sync.md)
 
 ---
 

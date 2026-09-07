@@ -120,6 +120,8 @@ git push --follow-tags
 
 `--follow-tags` ensures annotated tags (e.g., a deliberate harness version bump via `scripts/harness-version-bump.sh`) are pushed with the branch in one operation.
 
+`--follow-tags` push가 non-ff로 거부됐다면 **태그는 이미 올라갔을 수 있다**(브랜치와 태그 push는 원자적이지 않다). rebase 전에 `git ls-remote --tags origin 'refs/tags/harness/*'`로 원격 태그의 커밋을 확인한다. rebase로 그 커밋이 고아가 되면 태그를 강제 이동하지 말고(이미 sync한 소비 리포에 DRIFT 유발) **다음 버전을 새로 발행**한다. (2026-09-05 harness/2026.74 실측)
+
 ### 7. Output
 
 Show:
@@ -143,7 +145,7 @@ Confirm working tree clean and commit exists.
 |-----------|--------|
 | No changes | Report and exit |
 | Sensitive file | List files, abort |
-| Push rejected (non-ff) | Suggest `git pull --rebase` |
+| Push rejected (non-ff) | 원격 태그 상태 확인(`git ls-remote --tags`) 후 `git pull --rebase`; 고아가 된 태그는 이동 대신 새 버전 발행 |
 | Push rejected (auth) | Suggest SSH key check |
 | Behind remote | Require pull first |
 | Detached HEAD | Warn, suggest creating branch |

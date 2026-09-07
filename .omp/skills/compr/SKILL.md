@@ -104,6 +104,8 @@ gh pr create --base <target> --head <branch> --title "<title>" --body "<body>"
 
 `--follow-tags` ensures annotated tags (e.g., a deliberate harness version bump via `scripts/harness-version-bump.sh`) are pushed with the branch.
 
+`--follow-tags` push가 non-ff로 거부됐다면 **태그는 이미 올라갔을 수 있다**(브랜치와 태그 push는 원자적이지 않다). rebase 전에 `git ls-remote --tags origin 'refs/tags/harness/*'`로 원격 태그의 커밋을 확인한다. rebase로 그 커밋이 고아가 되면 태그를 강제 이동하지 말고(이미 sync한 소비 리포에 DRIFT 유발) **다음 버전을 새로 발행**한다. (2026-09-05 harness/2026.74 실측)
+
 **PR body format**:
 ```markdown
 ## Summary
