@@ -65,6 +65,7 @@ Use concrete checks, not assumptions.
 - Files: `.omp/extensions/harness/gates/context-gate.mjs`, `.omp/extensions/harness/gates/read-tracker.mjs`, `.omp/extensions/harness/gates/write-tracker.mjs`
 - Log: `.omp/harness-state/hook-debug.log` (written only when `HARNESS_DEBUG` is set)
 - State: `.omp/harness-state/read-log.txt` (appended by both `read-tracker` on read and `write-tracker` on edit|write)
+- Anchor sources: a `read` of the file, a `grep`/`ast_grep` result that minted a `[path#TAG]` anchor for it, or a `write` this session — all mark the file as read for context-gate. **Passing context-gate is not passing omp's own edit guard**: since omp 18.2.5 `edit.enforceSeenLines` is on by default, so a hashline edit whose anchor lines were never DISPLAYED (a grep that showed other lines, a structural summary that elided the body) is rejected by the `edit` tool itself. Read the exact range before editing it; the harness only guarantees the file was seen, not the lines.
 
 ### 2) `acceptance-gate`
 
