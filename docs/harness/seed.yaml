@@ -1,5 +1,6 @@
 name: estimate-vs-actual
-status: approved
+status: done
+completed: 2026-09-23
 version: 1
 task_id: "20260918-023000-e5a1"
 # 사후 작성 seed: docs/harness/handoff_2026-09-21_estimate-vs-actual.md(chats 세션 발신)를

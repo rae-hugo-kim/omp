@@ -116,3 +116,5 @@
 {"ts":"2026-09-07T04:16:51.431Z","event":"thread_closed","actor":"assistant","meta":{"thread_id":"T-20260907041631-7634","verdict":"pass"}}
 {"ts":"2026-09-07T04:16:51Z","event":"task_closed","actor":"assistant","meta":{"task_id":"20260903-120000-c5a1","name":"consumer-safe-sync"}}
 {"ts":"2026-09-07T13:56:12.660Z","event":"acceptance_wip","actor":"rae","meta":{"mechanism":"env","reason":"backstop:closed seed (status:done)"}}
+{"ts":"2026-09-23T13:03:48.007Z","event":"acceptance_wip","actor":"rae","meta":{"mechanism":"flag","reason":"unchecked:7"}}
+{"ts":"2026-09-23T13:03:48.074Z","event":"estimate_vs_actual","actor":"rae","meta":{"predicted":{"risk":"high","files":12,"depth":"high","model":"claude-fable-5-1","effort":"high","ts":"2026-09-21T15:43:12Z"},"actual":{"risk":"high","diffSize":1175,"files":17,"reason":"1175+ lines of code changed"},"fails_since_estimate":1}}
