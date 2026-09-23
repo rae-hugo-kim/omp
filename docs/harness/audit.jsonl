@@ -120,3 +120,4 @@
 {"ts":"2026-09-23T13:03:48.074Z","event":"estimate_vs_actual","actor":"rae","meta":{"predicted":{"risk":"high","files":12,"depth":"high","model":"claude-fable-5-1","effort":"high","ts":"2026-09-21T15:43:12Z"},"actual":{"risk":"high","diffSize":1175,"files":17,"reason":"1175+ lines of code changed"},"fails_since_estimate":1}}
 {"ts":"2026-09-23T13:06:07Z","event":"task_closed","actor":"assistant","meta":{"task_id":"20260918-023000-e5a1","name":"estimate-vs-actual"}}
 {"ts":"2026-09-23T13:13:45.082Z","event":"acceptance_wip","actor":"rae","meta":{"mechanism":"env","reason":"backstop:closed seed (status:done)"}}
+{"ts":"2026-09-23T13:20:45.221Z","event":"acceptance_wip","actor":"rae","meta":{"mechanism":"env","reason":"backstop:closed seed (status:done)"}}
