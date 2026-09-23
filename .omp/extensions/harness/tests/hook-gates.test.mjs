@@ -596,8 +596,11 @@ test('U11: hung child gate is killed and the verdict fails closed', () => {
   assert.equal(r.status, 2, `hung gate must fail closed: status=${r.status} stderr=${r.stderr}`);
   // The verdict must come from the sleeper hitting ITS budget, not from a sibling crashing first
   // (review 2026-09-23: a cloned dir missing a module let this pass on ERR_MODULE_NOT_FOUND).
+  // ETIMEDOUT on the named gate is that proof. No LOWER elapsed bound: spawnSync with `input` +
+  // `timeout` reports ETIMEDOUT anywhere from ~1.2s to ~3s (measured 1/6 runs at 1192ms on node
+  // 24.13) — a lower bound made this flaky (verifier 2026-09-23: 3/10 runs). Only the ceiling matters.
   assert.match(r.stderr, /HARNESS BLOCK \[acceptance-gate\.mjs\]: the gate did not run cleanly \(ETIMEDOUT\)/);
-  assert.ok(elapsed >= 2_500 && elapsed < 10_000, `the 3s per-child budget must be what fires (elapsed ${elapsed}ms)`);
+  assert.ok(elapsed < 10_000, `the per-child budget, not the 25s outer timeout, must be what fires (elapsed ${elapsed}ms)`);
 });
 
 // I11 (A-6): an index.lock loser is a GIT failure, not a harness block — the two surfaces
