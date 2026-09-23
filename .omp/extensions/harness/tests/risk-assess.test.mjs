@@ -15,7 +15,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, symlinkSync, unlinkSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { assessRisk, isHighRiskFile } from '../gates/risk-assess.mjs';
@@ -218,4 +218,328 @@ test('assessRisk(no form): legacy union default is unchanged -> critical', () =>
   withMixed((dir) => {
     assert.equal(assessRisk(dir).level, 'critical');
   });
+});
+
+// --- Template bootstrap window (#35-2) ---
+// `init` commits the Phase 2 cleanup as the SECOND commit of a fresh template clone: many
+// deletions (including a source-only `*credentials*` prose doc that scores critical) plus the
+// README/meta/glossary/audit edits. Inside the window — one commit, no refs/harness/*, committed
+// harness-meta.json carrying bootstrapped_at + source_remote — deletions and the init-edited
+// files are excluded; anything else in the commit is scored as usual, and outside the window
+// nothing changes.
+
+const META = '.omp/extensions/harness/harness-meta.json';
+const TEMPLATE = {
+  'README.md': '# omp template\nlong\n',
+  'AGENTS.md': '# policy\n',
+  [META]: '{"version":"2026.77"}\n',
+  '.omp/extensions/harness/index.ts': 'export default function harness() {}\n',
+  '.githooks/pre-commit': '#!/usr/bin/env bash\nexit 0\n',
+  'rules/tdd_policy.md': '# tdd\n',
+  'claudedocs/CLAUDEKR.md': '# mirror\n',
+  'docs/plans/agent-browser-credentials-plan.md': '# plan\n',
+  'scripts/docs-drift': '#!/usr/bin/env node\n',
+  'docs/harness/audit.jsonl': '{"event":"x"}\n',
+};
+const BOOTSTRAP_META = '{"version":"2026.77","source_remote":"git@github.com:o/omp.git","commit_sha":"abc","bootstrapped_at":"2026-09-23T00:00:00Z"}\n';
+
+function makeTemplateClone(extraCommits = 0) {
+  const dir = makeRepo(TEMPLATE);
+  const git = (args) => {
+    const r = spawnSync('git', args, { cwd: dir, encoding: 'utf-8' });
+    if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${r.stderr}`);
+  };
+  git(['commit', '-q', '-m', 'Initial commit']);
+  for (let i = 0; i < extraCommits; i++) git(['commit', '-q', '--allow-empty', '-m', `more ${i}`]);
+  const cleanup = () => {
+    for (const rel of ['claudedocs/CLAUDEKR.md', 'docs/plans/agent-browser-credentials-plan.md', 'scripts/docs-drift']) rmSync(join(dir, rel));
+    writeFileSync(join(dir, 'README.md'), '# proj\n<!-- claude-template-placeholder -->\n');
+    writeFileSync(join(dir, 'docs/harness/audit.jsonl'), '');
+    writeFileSync(join(dir, META), BOOTSTRAP_META);
+    git(['add', '-A']);
+  };
+  return { dir, git, cleanup };
+}
+
+function withTemplateClone(extraCommits, fn) {
+  const t = makeTemplateClone(extraCommits);
+  try { return fn(t); } finally { rmSync(t.dir, { recursive: true, force: true }); }
+}
+
+test('bootstrap: the init cleanup commit of a fresh clone is low (deletions + README/meta edits excluded)', () => {
+  withTemplateClone(0, ({ dir, cleanup }) => {
+    cleanup();
+    const r = assessRisk(dir, parseCommitForm('git commit -m x'));
+    assert.equal(r.level, 'low', r.reason);
+    assert.match(r.reason, /template bootstrap/);
+    assert.equal(r.files.length, 0, 'nothing is left to score');
+    assert.ok(r.bootstrap.includes('docs/plans/agent-browser-credentials-plan.md'), 'the credential-named deletion is inside the window');
+  });
+});
+
+test('bootstrap: user code or an AGENTS.md edit mixed into the cleanup commit is still scored', () => {
+  withTemplateClone(0, ({ dir, git, cleanup }) => {
+    cleanup();
+    mkdirSync(join(dir, 'src'), { recursive: true });
+    writeFileSync(join(dir, 'src/app.ts'), 'export const x = 1;\n');
+    writeFileSync(join(dir, 'AGENTS.md'), '# policy\nconsumer edit\n');
+    git(['add', '-A']);
+    const r = assessRisk(dir, parseCommitForm('git commit -m x'));
+    assert.equal(r.level, 'medium', r.reason);
+    assert.deepEqual(r.files.sort(), ['AGENTS.md', 'src/app.ts'], 'only the non-cleanup remainder is scored');
+  });
+});
+
+test('bootstrap: outside the window (a second commit exists) the same diff is critical', () => {
+  withTemplateClone(1, ({ dir, cleanup }) => {
+    cleanup();
+    const r = assessRisk(dir, parseCommitForm('git commit -m x'));
+    assert.equal(r.level, 'critical', r.reason);
+    assert.equal(r.bootstrap.length, 0);
+  });
+});
+
+test('bootstrap: without bootstrapped_at/source_remote in the COMMITTED meta the window does not open', () => {
+  withTemplateClone(0, ({ dir, git, cleanup }) => {
+    cleanup();
+    // The worktree copy carries the fields but the staged copy does not: a plain commit
+    // ships the index, so the index decides.
+    git(['add', '-A']);
+    spawnSync('git', ['update-index', '--cacheinfo', `100644,${spawnSync('git', ['hash-object', '-w', '--stdin'], { cwd: dir, input: '{"version":"2026.77"}\n', encoding: 'utf-8' }).stdout.trim()},${META}`], { cwd: dir });
+    const r = assessRisk(dir, parseCommitForm('git commit -m x'));
+    assert.equal(r.level, 'critical', r.reason);
+  });
+});
+
+// Review 2026-09-23 (high): `rev-list --count HEAD == 1` alone also describes a `--depth 1` clone.
+// This fixture is a shallow clone of a TEMPLATE (HEAD meta carries no marker, the source has more
+// history) and then performs a textbook cleanup commit — so ONLY the shallow guard closes the
+// window here (round 3: the earlier consumer-clone variant was also closed by the HEAD-marker rule
+// and survived removal of the shallow guard).
+test('bootstrap: a shallow clone is never a bootstrap window, even for a textbook cleanup commit', () => {
+  const src = makeRepo(TEMPLATE);
+  const g = (cwd, args) => { const r = spawnSync('git', args, { cwd, encoding: 'utf-8' }); if (r.status !== 0) throw new Error(r.stderr); return r.stdout; };
+  g(src, ['commit', '-q', '-m', 'template history 1']);
+  g(src, ['commit', '-q', '--allow-empty', '-m', 'template history 2']);
+  const clone = join(mkdtempSync(join(tmpdir(), 'risk-shallow-')), 'c');
+  g(src, ['clone', '-q', '--depth', '1', `file://${src}`, clone]);
+  g(clone, ['config', 'user.email', 't@example.com']);
+  g(clone, ['config', 'user.name', 'Test']);
+  try {
+    assert.equal(g(clone, ['rev-list', '--count', 'HEAD']).trim(), '1', 'precondition: the clone has exactly one commit');
+    assert.equal(g(clone, ['rev-parse', '--is-shallow-repository']).trim(), 'true');
+    for (const rel of ['claudedocs/CLAUDEKR.md', 'docs/plans/agent-browser-credentials-plan.md', 'scripts/docs-drift']) rmSync(join(clone, rel));
+    writeFileSync(join(clone, META), BOOTSTRAP_META);
+    g(clone, ['add', '-A']);
+    const r = assessRisk(clone, parseCommitForm('git commit -m x'));
+    assert.equal(r.level, 'critical', r.reason);
+    assert.equal(r.bootstrap.length, 0, 'nothing may be exempted in a shallow clone');
+  } finally {
+    rmSync(src, { recursive: true, force: true });
+    rmSync(dirname(clone), { recursive: true, force: true });
+  }
+});
+
+// Round 3 (C-1 residual): the HEAD marker test is KEY presence — any value type closes the window —
+// and a non-object meta root at HEAD is not a template copy either.
+test('bootstrap: non-string marker values or a non-object meta root at HEAD close the window', () => {
+  const cases = [
+    '{"version":"2026.77","bootstrapped_at":null}\n',
+    '{"version":"2026.77","source_remote":false}\n',
+    '{"version":"2026.77","bootstrapped_at":0}\n',
+    '{"version":"2026.77","bootstrapped_at":["x"]}\n',
+    '["version","2026.77"]\n',
+    '"2026.77"\n',
+  ];
+  for (const headMetaText of cases) {
+    const dir = makeRepo({ ...TEMPLATE, [META]: headMetaText });
+    const g = (args) => { const r = spawnSync('git', args, { cwd: dir, encoding: 'utf-8' }); if (r.status !== 0) throw new Error(r.stderr); };
+    g(['commit', '-q', '-m', 'Initial commit']);
+    try {
+      rmSync(join(dir, 'docs/plans/agent-browser-credentials-plan.md'));
+      writeFileSync(join(dir, META), BOOTSTRAP_META);
+      g(['add', '-A']);
+      const r = assessRisk(dir, parseCommitForm('git commit -m x'));
+      assert.equal(r.level, 'critical', `${headMetaText.trim()} -> ${r.reason}`);
+      assert.equal(r.bootstrap.length, 0, `${headMetaText.trim()} must not open the window`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+});
+
+// Round 3 (low): in the unverifiable union, a path whose index status (M) and worktree status (D)
+// disagree is neither a clean edit nor a clean deletion — it is scored.
+test('bootstrap (unverifiable form): index-modified + worktree-deleted README.md is scored, not exempted', () => {
+  withTemplateClone(0, ({ dir, cleanup }) => {
+    cleanup();                                   // README.md: M in the index
+    rmSync(join(dir, 'README.md'));              // README.md: D in the worktree
+    const r = assessRisk(dir, parseCommitForm('git commit -m x README.md'));
+    assert.ok(!r.bootstrap.includes('README.md'), 'a disagreeing status must not be exempted');
+    assert.ok(r.files.includes('README.md'), 'README.md is scored');
+  });
+});
+
+test('bootstrap: a single-commit repo whose HEAD already carries bootstrap meta is a consumer, not a template copy', () => {
+  // Same shape as an init clone (one commit, not shallow, no refs/harness) but the meta transition
+  // already happened in HEAD: the deletion of a credential-named file must be scored.
+  const dir = makeRepo({ ...TEMPLATE, [META]: BOOTSTRAP_META });
+  const g = (args) => { const r = spawnSync('git', args, { cwd: dir, encoding: 'utf-8' }); if (r.status !== 0) throw new Error(r.stderr); };
+  g(['commit', '-q', '-m', 'Initial commit']);
+  try {
+    rmSync(join(dir, 'docs/plans/agent-browser-credentials-plan.md'));
+    g(['add', '-A']);
+    const r = assessRisk(dir, parseCommitForm('git commit -m x'));
+    assert.equal(r.level, 'critical', r.reason);
+    assert.equal(r.bootstrap.length, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('bootstrap: any ref under refs/harness/ closes the window, version-shaped or not', () => {
+  withTemplateClone(0, ({ dir, git, cleanup }) => {
+    cleanup();
+    git(['update-ref', 'refs/harness/manual', 'HEAD']);
+    const r = assessRisk(dir, parseCommitForm('git commit -m x'));
+    assert.equal(r.level, 'critical', r.reason);
+    assert.equal(r.bootstrap.length, 0);
+  });
+});
+
+// Advisory 2026-09-23 (blocker): the window must not exempt EVERY deletion. Inside a legitimate
+// template->consumer transition, deleting harness assets (the extension entry point, a git hook,
+// a rule) would have passed as low and silently unwired the gates. Deletions are exempt only for
+// the Phase 2 source-only cleanup set (docs/, claudedocs/, scripts/docs-drift, CHANGELOG.md, never
+// a harness asset path); everything else is scored.
+test('bootstrap: deleting harness assets inside the window is scored, cleanup deletions stay exempt', () => {
+  withTemplateClone(0, ({ dir, git, cleanup }) => {
+    cleanup();
+    for (const f of ['.omp/extensions/harness/index.ts', '.githooks/pre-commit', 'rules/tdd_policy.md']) rmSync(join(dir, f));
+    git(['add', '-A']);
+    const r = assessRisk(dir, parseCommitForm('git commit -m x'));
+    assert.notEqual(r.level, 'low', `harness-asset deletions must be scored: ${r.reason}`);
+    assert.deepEqual(r.files.sort(), ['.githooks/pre-commit', '.omp/extensions/harness/index.ts', 'rules/tdd_policy.md'], 'exactly the harness-asset deletions are scored');
+    assert.ok(r.bootstrap.includes('claudedocs/CLAUDEKR.md') && r.bootstrap.includes('scripts/docs-drift') && r.bootstrap.includes('docs/plans/agent-browser-credentials-plan.md'), 'source-only cleanup deletions remain exempt');
+    assert.ok(!r.bootstrap.some((f) => f.startsWith('.omp/extensions/harness/index') || f.startsWith('.githooks/') || f.startsWith('rules/')), 'no harness asset may appear in the exempt set');
+  });
+});
+
+test('bootstrap: a deletion under a harness-owned docs/ prefix (docs/rules) is not cleanup', () => {
+  const dir = makeRepo({ ...TEMPLATE, 'docs/rules/seed_contract.md': '# contract\n' });
+  const g = (args) => { const r = spawnSync('git', args, { cwd: dir, encoding: 'utf-8' }); if (r.status !== 0) throw new Error(r.stderr); };
+  g(['commit', '-q', '-m', 'Initial commit']);
+  try {
+    rmSync(join(dir, 'docs/rules/seed_contract.md'));
+    writeFileSync(join(dir, META), BOOTSTRAP_META);
+    g(['add', '-A']);
+    const r = assessRisk(dir, parseCommitForm('git commit -m x'));
+    assert.deepEqual(r.files, ['docs/rules/seed_contract.md'], 'docs/rules/ is a harness asset path, so its deletion is scored');
+    assert.ok(!r.bootstrap.includes('docs/rules/seed_contract.md'));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// Review 2026-09-23 round 2 (C-1): a HEAD meta with a PARTIAL or empty bootstrap marker is still a
+// consumer — the window opens only when HEAD carries no marker at all — and a committed meta with
+// empty-string markers does not count as bootstrapped.
+test('bootstrap: a partial marker at HEAD (bootstrapped_at without source_remote) closes the window', () => {
+  const dir = makeRepo({ ...TEMPLATE, [META]: '{"version":"2026.77","bootstrapped_at":"2026-09-01T00:00:00Z"}\n' });
+  const g = (args) => { const r = spawnSync('git', args, { cwd: dir, encoding: 'utf-8' }); if (r.status !== 0) throw new Error(r.stderr); };
+  g(['commit', '-q', '-m', 'Initial commit']);
+  try {
+    rmSync(join(dir, 'docs/plans/agent-browser-credentials-plan.md'));
+    writeFileSync(join(dir, META), BOOTSTRAP_META);
+    g(['add', '-A']);
+    const r = assessRisk(dir, parseCommitForm('git commit -m x'));
+    assert.equal(r.level, 'critical', r.reason);
+    assert.equal(r.bootstrap.length, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('bootstrap: empty-string markers in the committed meta do not open the window', () => {
+  withTemplateClone(0, ({ dir, git, cleanup }) => {
+    cleanup();
+    writeFileSync(join(dir, META), '{"version":"2026.77","source_remote":"","bootstrapped_at":" "}\n');
+    git(['add', '-A']);
+    const r = assessRisk(dir, parseCommitForm('git commit -m x'));
+    assert.equal(r.level, 'critical', r.reason);
+    assert.equal(r.bootstrap.length, 0);
+  });
+});
+
+// Review 2026-09-23 round 2 (C-4): under `-a` the committed meta is read from the worktree, so
+// removing harness-meta.json from the INDEX while keeping the worktree copy must not let the
+// meta DELETION ride the edited-path exemption.
+test('bootstrap (-a form): a staged deletion of harness-meta.json is scored, not exempted as an edit', () => {
+  withTemplateClone(0, ({ dir, git, cleanup }) => {
+    cleanup();
+    git(['rm', '-q', '--cached', META]);          // index: deleted; worktree: bootstrapped copy
+    const r = assessRisk(dir, parseCommitForm('git commit -am x'));
+    assert.ok(!r.bootstrap.includes(META), 'the meta deletion must not be in the exempt set');
+    assert.ok(r.files.includes(META), 'the meta deletion is scored');
+  });
+});
+
+// Review 2026-09-23 rounds 4–5: a harness-meta.json that is a SYMLINK must never satisfy the
+// transition, wherever it is observed. Three fixtures, each of which ONLY the named guard can
+// reject (mutation-verified: removing that guard fails exactly that test):
+//   index guard  — a 120000 index entry whose LINK TEXT is the bootstrapped JSON (`git show :path`
+//                  returns the link text, which JSON.parse accepts); plain-commit form.
+//   lstat guard  — a worktree symlink to a REAL file holding the bootstrapped JSON (readFileSync
+//                  follows it happily); -a form, index also holds the link.
+//   HEAD guard   — HEAD's entry is a 120000 symlink whose link text is the template JSON; the
+//                  commit replaces it with a regular bootstrapped file (index gets a T/M entry).
+test('bootstrap (index guard): a 120000 index entry with JSON link text never opens the window', () => {
+  withTemplateClone(0, ({ dir, git, cleanup }) => {
+    cleanup();
+    unlinkSync(join(dir, META));
+    symlinkSync(BOOTSTRAP_META.trim(), join(dir, META));
+    git(['add', '-A']);
+    assert.match(spawnSync('git', ['ls-files', '-s', '--', META], { cwd: dir, encoding: 'utf-8' }).stdout, /^120000 /, 'precondition: index entry is a symlink');
+    assert.doesNotThrow(() => JSON.parse(spawnSync('git', ['show', `:${META}`], { cwd: dir, encoding: 'utf-8' }).stdout), 'precondition: the link text parses as JSON');
+    const r = assessRisk(dir, parseCommitForm('git commit -m x'));
+    assert.equal(r.level, 'critical', r.reason);
+    assert.equal(r.bootstrap.length, 0);
+  });
+});
+
+test('bootstrap (lstat guard, -a form): a worktree symlink to a real bootstrapped JSON file never opens the window', () => {
+  withTemplateClone(0, ({ dir, git, cleanup }) => {
+    cleanup();
+    unlinkSync(join(dir, META));
+    writeFileSync(join(dir, 'meta-target.json'), BOOTSTRAP_META);
+    symlinkSync('../../../meta-target.json', join(dir, META));
+    git(['add', '-A']);
+    assert.equal(readFileSync(join(dir, META), 'utf-8'), BOOTSTRAP_META, 'precondition: readFileSync follows the link to bootstrapped JSON');
+    const r = assessRisk(dir, parseCommitForm('git commit -am x'));
+    assert.equal(r.level, 'critical', r.reason);
+    assert.equal(r.bootstrap.length, 0);
+  });
+});
+
+test('bootstrap (HEAD guard): a 120000 harness-meta.json AT HEAD is not a template copy', () => {
+  const dir = makeRepo({ ...TEMPLATE });
+  const g = (args) => { const r = spawnSync('git', args, { cwd: dir, encoding: 'utf-8' }); if (r.status !== 0) throw new Error(r.stderr); return r.stdout; };
+  try {
+    unlinkSync(join(dir, META));
+    symlinkSync('{"version":"2026.77"}', join(dir, META));
+    g(['add', '-A']);
+    g(['commit', '-q', '-m', 'Initial commit']);
+    assert.match(g(['ls-tree', 'HEAD', '--', META]), /^120000 /, 'precondition: HEAD entry is a symlink');
+    unlinkSync(join(dir, META));                       // unlink, not rm: a dangling link must go
+    writeFileSync(join(dir, META), BOOTSTRAP_META);
+    rmSync(join(dir, 'docs/plans/agent-browser-credentials-plan.md'));
+    g(['add', '-A']);
+    assert.match(g(['ls-files', '-s', '--', META]), /^100644 /, 'precondition: the index now holds a regular file');
+    assert.match(g(['diff', '--cached', '--name-status', '--', META]), /^T\t/, 'precondition: the commit is a type change of the meta');
+    const r = assessRisk(dir, parseCommitForm('git commit -m x'));
+    assert.equal(r.level, 'critical', r.reason);
+    assert.equal(r.bootstrap.length, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

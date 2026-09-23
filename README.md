@@ -140,7 +140,7 @@ kickoff → startdev 흐름에서 자동으로 작동하는 장치들. 집행 �
 | `tool_result` (bash) | backpressure-tracker / failure-tracker | 검증 명령 PASS/FAIL 기록 |
 | `tool_result` (bash 커밋·검증 / edit·write) | breadcrumb-tracker | 세션 재개용 breadcrumb 기록 (커밋·테스트·파일변경, no-LLM) |
 | `before_agent_start` | kickoff-detector | 새 작업 감지 시 킥오프 리마인더 주입 |
-| `session_start` | harness-version-check | 원격 하네스 드리프트 알림 (24h 캐시) |
+| `session_start` | harness-version-check | 원격 하네스 드리프트 알림 (24h 캐시), 훅 비활성·정책 shadow(비어 있지 않은 `.omp/AGENTS.md`) 프로브 |
 | `session_start` | breadcrumb-surface | 최근 docs/sum 표면화 (고아 요약 해소, no-LLM) |
 
 커밋 계열은 git 경계에서 집행됩니다(어떤 철자·경로로 커밋해도, 사람 커밋도 동일):

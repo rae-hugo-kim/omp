@@ -13,6 +13,8 @@
 3. **소비자 확장 공간은 화이트리스트 밖이다.** `.omp/rules/`, `.omp/RULES.md`, `.omp/AGENTS.md`, 커스텀 `.omp/agents/*.md`·`.omp/skills/<name>/`, `docs/`. 화이트리스트의 디렉터리 항목(`rm -rf`+복사)은 하네스 소유 디렉터리만 허용하고, 공유 디렉터리(`.omp/agents`, `docs/rules`)는 파일 단위로 열거한다. 동기화되는 문서는 화이트리스트 밖을 상대 링크하지 않는다.
 4. **순수 sync 커밋의 게이트 면제는 리포 객체 저장소만 신뢰한다.** sync가 태그 체크아웃의 화이트리스트 경로를 blob/tree 객체로 써 넣고 `refs/harness/<ver>`(최신 2개 유지)로 고정한다. `risk-assess`는 (a) 경로가 하네스 자산 경로이고 (b) manifest가 **가장 높은** ref를 지목하며 `tree_sha`가 일치하고 (c) 커밋될 항목의 blob **및 mode**가 그 tree와 같을 때만 파일을 채점에서 제외한다. 삭제는 직전 tree에 있던 경로를 HEAD가 그대로 갖고 있다가 현재 tree에서 사라진 경우만. 나머지 파일만 위험도를 결정한다.
 
+> 정정 (2026-09-23, 이슈 #35): 3항의 확장 공간 중 `.omp/AGENTS.md`는 sync가 건드리지 않는다는 점은 그대로지만 **권장 확장점에서 제외**한다. 실측상(omp 18.1.14/18.2.5) native `.omp/AGENTS.md`(priority 100)는 내용이 있으면 같은 depth의 루트 `AGENTS.md`를 대체해 하네스 정책을 통째로 지운다. 프로젝트 배경은 `.omp/rules/<project>-context.md`(`alwaysApply: true`)로 두고, `harness-version-check`가 세션 시작 시 비어 있지 않은 `.omp/AGENTS.md`를 `HARNESS POLICY SHADOWED`로 경고한다. `.omp/RULES.md`는 user `RULES.md`와 함께 로드됨을 같은 날 실측해 확장점으로 유지한다.
+
 ## 검토한 대안과 기각 사유
 
 | 대안 | 기각 사유 |

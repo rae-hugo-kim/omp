@@ -44,8 +44,8 @@ function syncPaths() {
 // W3: the sync whitelist must never sweep a consumer extension point. A directory entry is
 // `rm -rf` + copy, so only harness-OWNED directories may be listed as directories; anything
 // in a shared directory (.omp/agents, .omp/skills, docs) is listed file by file. Consumers
-// keep their own rules/agents/skills in .omp/rules, .omp/RULES.md, .omp/AGENTS.md,
-// .omp/agents/<custom>.md, .omp/skills/<custom> — all of which must survive a sync.
+// keep their own rules/agents/skills in .omp/rules, .omp/RULES.md, .omp/agents/<custom>.md,
+// .omp/skills/<custom> — all of which must survive a sync (never .omp/AGENTS.md: it shadows the policy).
 test('W3: whitelist directory entries are harness-owned; shared dirs are listed per file', () => {
   const paths = syncPaths();
   const HARNESS_OWNED_DIRS = new Set(['rules', 'checklists', 'templates', '.omp/extensions/harness']);
@@ -60,6 +60,22 @@ test('W3: whitelist directory entries are harness-owned; shared dirs are listed 
   // Every harness agent that exists in the source repo must be listed, or it silently stops syncing.
   for (const f of readdirSync(join(repoRoot, '.omp', 'agents')).filter((n) => n.endsWith('.md'))) {
     assert.ok(paths.includes(`.omp/agents/${f}`), `.omp/agents/${f} exists in the source repo but is not on the whitelist`);
+  }
+});
+
+// W3b (#35-7): the kickoff/init skills read these consumer-space files directly; if any drops off
+// the whitelist, a template change upstream silently never reaches consumers again.
+test('W3b: kickoff/init contract templates and checklist are whitelisted as individual files', () => {
+  const paths = syncPaths();
+  for (const f of [
+    'docs/templates/seed.template.yaml',
+    'docs/templates/rubric-report.template.md',
+    'docs/templates/kickoff-summary.template.md',
+    'docs/templates/glossary.template.yaml',
+    'docs/checklists/kickoff_rubric_checklist.md',
+  ]) {
+    assert.ok(existsSync(join(repoRoot, f)), `${f} must exist in the source repo`);
+    assert.ok(paths.includes(f), `${f} must be on the harness-sync whitelist (individual file, never the directory)`);
   }
 });
 

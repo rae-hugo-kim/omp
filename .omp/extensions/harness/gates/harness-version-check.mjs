@@ -20,7 +20,7 @@ import process from 'node:process';
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const FAILURE_TTL_MS = 10 * 60 * 1000;
-const HOOKS_NOTICE_TTL_MS = 24 * 60 * 60 * 1000;
+const NOTICE_TTL_MS = 24 * 60 * 60 * 1000;   // shared by the hooks-inactive and policy-shadow probes
 
 let stdin = '';
 try { stdin = readFileSync(0, 'utf-8'); } catch { /* no stdin is fine */ }
@@ -53,6 +53,10 @@ try { meta = JSON.parse(readFileSync(metaPath, 'utf-8')); } catch { process.exit
 // declared in AGENTS.md silently dead. Runs before the source-repo skip on purpose:
 // the probe is one `git config` read and applies to every repo carrying hooks.
 emitIfHooksInactive(cwd);
+// Policy shadow probe (#35): OMP's native provider (priority 100) REPLACES a root
+// AGENTS.md at the same depth when a non-empty `.omp/AGENTS.md` exists, so the harness
+// policy is silently absent from the session. Runs before the source-repo skip.
+emitIfPolicyShadowed(cwd);
 
 const sourceRemote = meta.source_remote;
 if (!sourceRemote) process.exit(0);
@@ -165,7 +169,7 @@ function emitIfDrift(localMeta, remoteInfo) {
   }
 }
 
-// Emit at most once per HOOKS_NOTICE_TTL_MS (marker: .omp/state/harness-hooks-check.json)
+// Emit at most once per NOTICE_TTL_MS (marker: .omp/state/harness-hooks-check.json)
 // unless --force. Silent when: no `.githooks/` dir, not a git work tree, or
 // core.hooksPath already resolves to that directory. Never throws, never exits.
 function emitIfHooksInactive(root) {
@@ -190,17 +194,51 @@ function emitIfHooksInactive(root) {
   if (configured && real(resolve(top, configured)) === real(hooksDir)) return;
 
   const markerPath = join(root, '.omp/state/harness-hooks-check.json');
-  if (!force && existsSync(markerPath)) {
-    try {
-      const marker = JSON.parse(readFileSync(markerPath, 'utf-8'));
-      if (marker.notifiedAt && (Date.now() - marker.notifiedAt) < HOOKS_NOTICE_TTL_MS) return;
-    } catch { /* stale/corrupt marker — re-emit */ }
-  }
-  try {
-    mkdirSync(dirname(markerPath), { recursive: true });
-    writeFileSync(markerPath, JSON.stringify({ notifiedAt: Date.now(), configured: configured || null }, null, 2));
-  } catch { /* ignore marker write failure */ }
+  if (noticeThrottled(markerPath)) return;
+  writeNoticeMarker(markerPath, { configured: configured || null });
 
   const state = configured ? `points at \`${configured}\`` : 'is not set';
   console.log(`HARNESS HOOKS INACTIVE: .githooks/ exists but core.hooksPath ${state}, so the pre-commit/pre-push gates declared in AGENTS.md never run. Before the next commit, run \`git config core.hooksPath .githooks\` (local git setting — file sync alone cannot carry it) or /skill:harness-check, whose sync sets it idempotently and verifies the effective value.`);
+}
+
+// Emit at most once per NOTICE_TTL_MS (marker: .omp/state/harness-policy-check.json)
+// unless --force. Silent when there is nothing to shadow. Never throws, never exits.
+//
+// Measured on omp 18.2.5 (`omp -p --no-extensions` marker probes, 2026-09-23):
+//   - a `.omp/AGENTS.md` with ANY bytes — content, a single newline, whitespace only — displaces
+//     the same-depth root AGENTS.md; only a 0-byte file is ignored by the native provider. The
+//     probe therefore keys on size > 0, never on trimmed content (review round 4).
+//   - a project `.omp/RULES.md` and the user `~/.omp/agent/RULES.md` are BOTH loaded (the docs'
+//     "same rule name RULES, user wins" collision no longer holds), so `.omp/RULES.md` is a valid
+//     consumer extension point and is NOT probed.
+function emitIfPolicyShadowed(root) {
+  if (!existsSync(join(root, 'AGENTS.md'))) return;
+  let st;
+  try { st = statSync(join(root, '.omp', 'AGENTS.md')); } catch { return; }
+  if (!st.isFile() || st.size === 0) return;   // a directory of that name is not a context file
+
+  const markerPath = join(root, '.omp/state/harness-policy-check.json');
+  if (noticeThrottled(markerPath)) return;
+  writeNoticeMarker(markerPath, { file: '.omp/AGENTS.md' });
+
+  console.log('HARNESS POLICY SHADOWED: `.omp/AGENTS.md` exists, so OMP\'s native provider (priority 100) replaces `AGENTS.md` at the same depth — the harness policy is NOT in this session\'s context. Move its content to `.omp/rules/<project>-context.md` (frontmatter `alwaysApply: true`), delete `.omp/AGENTS.md`, then restart the session (/new) so the policy loads (AGENTS.md "Consumer extension points").');
+}
+
+// Notice window shared by the health probes: true when a marker inside NOTICE_TTL_MS exists and
+// --force is absent. A stale, corrupt, or FUTURE-dated marker (wall clock stepped back, or a
+// hand-written suppressor) re-emits — same rule as the drift cache above.
+function noticeThrottled(markerPath) {
+  if (force || !existsSync(markerPath)) return false;
+  try {
+    const marker = JSON.parse(readFileSync(markerPath, 'utf-8'));
+    const age = Date.now() - marker.notifiedAt;
+    return Boolean(marker.notifiedAt) && age >= 0 && age < NOTICE_TTL_MS;
+  } catch { return false; }
+}
+
+function writeNoticeMarker(markerPath, extra) {
+  try {
+    mkdirSync(dirname(markerPath), { recursive: true });
+    writeFileSync(markerPath, JSON.stringify({ notifiedAt: Date.now(), ...extra }, null, 2));
+  } catch { /* ignore marker write failure */ }
 }

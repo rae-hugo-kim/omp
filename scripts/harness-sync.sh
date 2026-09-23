@@ -172,9 +172,9 @@ fi  # end of local-script preamble (skipped on the fetched fast path)
 # --- 5. Paths to overwrite (harness assets only — never user code) ---
 # Directory entries are `rm -rf` + copy: ONLY harness-owned directories may appear as a
 # directory (rules/, checklists/, templates/, .omp/extensions/harness, the harness skill
-# dirs). Consumer extension points — .omp/rules/, .omp/RULES.md, .omp/AGENTS.md, custom
-# .omp/agents/*.md, custom .omp/skills/<name>, docs/ — must never be swept, so anything
-# living in a shared directory is listed file by file. Guarded by harness-wiring W3.
+# dirs). Consumer extension points — .omp/rules/, .omp/RULES.md, custom .omp/agents/*.md,
+# custom .omp/skills/<name>, docs/ — must never be swept, so anything living in a shared
+# directory is listed file by file. Guarded by harness-wiring W3.
 PATHS=(
   "rules"
   "checklists"
@@ -224,6 +224,13 @@ PATHS=(
   "docs/rules/startdev_seed_contract.md"
   # 실전 절차 핸드북 — 원리 룰(rules/prompt_engineering.md)의 짝. 개별 파일 등재 (docs/는 소비 레포 공간).
   "docs/prompt-writing-handbook.md"
+  # kickoff/init 계약 템플릿·체크리스트 (#35-7) — .omp/skills/kickoff, init이 직접 참조하는 파일.
+  # docs/rules와 같은 이유로 개별 파일 등재 (docs/templates·docs/checklists는 소비 레포 공간).
+  "docs/templates/seed.template.yaml"
+  "docs/templates/rubric-report.template.md"
+  "docs/templates/kickoff-summary.template.md"
+  "docs/templates/glossary.template.yaml"
+  "docs/checklists/kickoff_rubric_checklist.md"
 )
 
 if [[ $DRY_RUN -eq 1 ]]; then

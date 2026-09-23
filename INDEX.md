@@ -28,7 +28,7 @@ Run policy sync whenever `AGENTS.md` changes (same PR) and refresh both referenc
 - Rules: [`rules/INDEX.md`](rules/INDEX.md)
 - Checklists: [`checklists/INDEX.md`](checklists/INDEX.md)
 - Templates: [`templates/INDEX.md`](templates/INDEX.md)
-- Consumer extension points (survive `harness-check` sync): `.omp/rules/*.md` (native rule files, `alwaysApply`/`globs`), `.omp/RULES.md` (sticky), `.omp/AGENTS.md` (project context, loaded alongside this policy), `.omp/agents/<custom>.md`, `.omp/skills/<custom>/` — see AGENTS.md "Consumer extension points"
+- Consumer extension points (survive `harness-check` sync): `.omp/rules/*.md` (native rule files, `alwaysApply`/`globs`), `.omp/RULES.md` (sticky; loads alongside the user-level one), `.omp/agents/<custom>.md`, `.omp/skills/<custom>/` — see AGENTS.md "Consumer extension points". Never `.omp/AGENTS.md` (any non-empty file replaces the root policy at the same depth).
 - Source repo only: project-specific examples `claudedocs/INDEX.md`, agreements / notes `claudedocs/agreements.md`
 
 
