@@ -260,6 +260,7 @@ echo "$(date -Iseconds)" > docs/harness/kickoff-done
 - `assumptions`: Phase 1 Context 중 증거 없이 전제한 항목
 - `risks`: Phase 1 Risks + Phase 3 Edge Cases
 - `references`: kickoff-summary.md + 관련 파일 경로 + (doc-ingest 시 원본 상위 문서 경로) + (Phase -1에서 채택한 brainstorm 캡처 경로, 있을 때만)
+- `estimate` (선택, `rules/cycle_definition.md` "예상 레코드"): 인터뷰가 끝난 시점의 **예측** — `risk` (low|medium|high|critical, risk-assess taxonomy), `files` (정수), `depth` (low|high, 추론 깊이 — risk와 독립 축), `model`, `effort`. Step 6에서 `.omp/harness-state/cycle-estimate`로 파생되어 커밋 착지 시 실측과 대조된다. 판정에 관여하지 않는다.
 
 **per-AC `source:` 컨벤션** (AC3 — 출처추적 / coverage 역매핑의 기계적 근거):
 
@@ -373,6 +374,8 @@ seed.yaml 내용을 기반으로 **5개 차원**(clarity 4축 + `coverage`)을 �
 ```
 
 > **참고**: current-scope.md는 기존 훅 호환성을 위해 유지한다. seed.yaml이 권위 있는 원본이며, current-scope.md는 파생물이다.
+
+**예상 레코드 파생** (seed에 `estimate`가 있을 때): `.omp/harness-state/cycle-estimate`에 한 줄로 쓴다 — `["omp-estimate/v1", <risk>, <files>, <depth>, <model>, <effort>, "<ts>"]` (`ts`는 존 지정자가 있는 ISO 8601, `date -u +%Y-%m-%dT%H:%M:%SZ`). `current-scope.md`와 같은 관계(seed가 원본, 레코드는 파생물). 채팅 인테이크 경로(cycle intake)에서는 seed 없이 이 레코드만 쓴다.
 
 #### Step 7: audit.jsonl 기록
 

@@ -116,7 +116,7 @@ cd <existing-project>
 
 ## Harness
 
-Mechanisms that operate automatically in the kickoff → startdev flow. There are two enforcement points: **the commit gates run from a git hook (`.githooks/pre-commit`)**, everything else is wired to OMP events by the extension `index.ts`. The gate CLIs are stdin-JSON programs in `.omp/extensions/harness/gates/` (21):
+Mechanisms that operate automatically in the kickoff → startdev flow. There are two enforcement points: **the commit gates run from a git hook (`.githooks/pre-commit`)**, everything else is wired to OMP events by the extension `index.ts`. The gate CLIs are stdin-JSON programs in `.omp/extensions/harness/gates/` (22):
 
 | OMP event | Gate | Role |
 |-----------|------|------|
@@ -139,6 +139,7 @@ Commit enforcement happens at git's own boundary, so it holds for every spelling
 |----------|------|------|
 | `pre-commit` (blocking) | commit-gates → acceptance/backpressure/review/archive | Judge the staged index; on failure no commit object is created. Fails closed without node (`OMP_NODE_BIN` is the escape hatch) |
 | `post-commit` (non-blocking) | backstop + deferred consumption | Advisory for ungated commits (`--no-verify`, cherry-pick, revert, rebase) and one-shot flag consumption |
+| `pre-commit` (observing) | review-gate → estimate-vs-actual | Pairs the intake's `.omp/harness-state/cycle-estimate` (predicted risk, file count, depth, model) with the measured `risk-assess` result, records `estimate_vs_actual` in `audit.jsonl` and consumes the record. Never enters a verdict. Read with `node .omp/extensions/harness/estimate-report.mjs` |
 | `post-merge` (non-blocking) | backstop | Observes merge auto-commits — the one path where git fires neither pre-commit nor post-commit |
 | `pre-push` (blocking) | archive leak + docs drift | Block tracked `docs/sum`·`docs/reviews` and FAIL-severity drift |
 

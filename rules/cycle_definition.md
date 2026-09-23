@@ -45,7 +45,35 @@ high-risk 커밋을 함의하면 분할을 *의심*한다(어차피 커밋에서
 ```
 판정: 1사이클 | 분할 제안 | 확인문장 필요
 확인 문장: <한 줄 — 실행/관찰 가능. 못 채우면 판정을 "1사이클"로 둘 수 없다>
+예상: 위험 <low|medium|high|critical> / 파일 <n> / 깊이 <low|high>
 ```
+
+### 예상 레코드 (MUST — 1사이클 판정 시)
+
+`예상:` 줄의 값은 **예측**이며 실측이 아니다. 판정이 "1사이클"이면 같은 값을
+`.omp/harness-state/cycle-estimate`에 한 줄 JSON 튜플로 기록한다(기존 one-shot 플래그
+관례: JSON 튜플 + 버전 태그):
+
+```
+["omp-estimate/v1", <risk>, <files>, <depth>, <model>, <effort>, <ts>]
+  risk   : "low" | "medium" | "high" | "critical"   — risk-assess taxonomy 그대로 (폭발 반경)
+  files  : 정수 (예상 변경 파일 수)
+  depth  : "low" | "high"                            — 추론 깊이. risk와 독립 축 (500줄 기계적 rename = high/low, 20줄 동시성 버그 = medium/high)
+  model  : 문자열 (세션이 아는 값, 예: "claude-fable-5-1")
+  effort : 문자열 또는 null (예: "medium", "high")
+  ts     : ISO 8601 날짜-시각 + 존 지정자 (예: "2026-09-18T02:00:00Z" — `date -u +%Y-%m-%dT%H:%M:%SZ`)
+```
+
+커밋이 착지하면 review-gate가 이 레코드를 `risk-assess` 실측과 붙여
+`docs/harness/audit.jsonl`에 `estimate_vs_actual` 이벤트로 남기고 소비한다.
+레코드는 **어떤 게이트의 판정에도 관여하지 않는다** — 예측 기반 완화는 금지.
+목적은 자동 라우팅이 아니라 몇 달 뒤 `agent_routing.md`의 모델·에포트 기준을 실측
+근거로 갱신할 원자료다(`.omp/extensions/harness/estimate-report.mjs`로 읽는다).
+
+**사이클 미만(오타 수정 등)은 판정과 함께 레코드도 생략한다** — 과잉 발동 금지 조항과
+같은 경계. 분할 제안·확인문장 필요 상태에서는 아직 쓰지 않고, 합의된 사이클이 시작될
+때(사이클마다 1건) 쓴다. 하나의 커밋에 여러 사이클이 실리면 마지막 레코드만 대조된다
+(one-shot).
 
 ## 인테이크 프로토콜
 

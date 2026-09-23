@@ -94,6 +94,20 @@ references:
     reason: 원본 킥오프 요약
 ```
 
+### `estimate`
+- 선택 필드 (`rules/cycle_definition.md` "예상 레코드"). 인터뷰 종료 시점의 **예측**이며 실측이 아니다.
+- 객체: `risk` (`low`|`medium`|`high`|`critical` — risk-assess taxonomy, 폭발 반경), `files` (정수), `depth` (`low`|`high` — 추론 깊이, `risk`와 독립 축), `model` (문자열), `effort` (문자열 또는 null).
+- kickoff Step 6이 `.omp/harness-state/cycle-estimate`로 파생하고, 커밋 착지 시 review-gate가 실측과 대조해 `audit.jsonl`에 `estimate_vs_actual`로 남긴다. **어떤 게이트 판정에도 관여하지 않는다.**
+
+```yaml
+estimate:
+  risk: medium
+  files: 3
+  depth: high
+  model: claude-fable-5-1
+  effort: high
+```
+
 ## Authoring Rules
 
 - `goal`은 하나여야 한다. 여러 목표를 한 파일에 섞지 않는다.

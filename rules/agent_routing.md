@@ -37,6 +37,7 @@ high/critical 위험 코드 변경의 품질 리뷰 필요?
 - **운영 팁**: 완료된 서브에이전트는 잠시 idle로 살아있다(이후 parked). reviewer/verifier 후속 질의는 재스폰 대신 `hub`(send)로 해당 에이전트에 이어가면 컨텍스트를 보존한다.
 - **adversary 모델 선택**: adversary는 `@advisor` 롤을 따른다. 이종(비-primary) 계열 보장이 필요하면 사용자 설정 `modelRoles.advisor`에 GPT 계열 모델을 지정한다 — 계열이 겹치면 verdict가 이종 리뷰 증거로 인정되지 않는다(review-gate). **`advisor` 미설정 시 omp 18.2.1부터 `@slow`로 폴백한다**(이전엔 primary 상속) — 즉 reviewer와 같은 모델이 되어 이종 증거가 자동으로 불성립하므로, 소비 리포는 `modelRoles.advisor`를 명시하지 않으면 high/critical 커밋에서 아래 두 경로 중 하나를 써야 한다. 단일 계열 환경에서 이종 리뷰가 불가능하면 게이트의 나머지 두 경로를 쓴다: human-review(오늘자 `docs/reviews/review-<ts>.json` 사이드카에 `["omp-review-evidence/v1", <hash>, "PASS", null, <이름>, <이름>]` — 게이트는 마크다운을 파싱하지 않는다) 또는 감사된 override(`docs/harness/review-skip`에 `["omp-review-override/v1", <사유>, <승인자>, <hash>]` — `audit.jsonl`에 `review_override`로 기록·소비). bare/비-tuple `review-skip` 파일만으로는 더 이상 우회되지 않는다.
 - **reviewer 모델 선택**: reviewer는 `@slow` 롤을 따른다. `@slow`는 `modelRoles.slow` 미설정 시 default 롤을 상속하므로, 리뷰를 primary보다 강한(또는 명시적으로 의도한) 모델로 돌리려면 `modelRoles.slow`를 직접 지정한다.
+- **라우팅 기준의 근거**: 이 절의 기준값(모델 롤·에포트·reviewer 임계)을 바꿀 때는 `node .omp/extensions/harness/estimate-report.mjs` 출력(인테이크 예상 × `risk-assess` 실측 교차표, (등급·깊이·모델) 셀별 건수·FAIL 합 — `docs/harness/audit.jsonl`의 `estimate_vs_actual`)을 근거로 인용한다. 표는 사람이 읽는 원자료다 — 자동 추천은 없고, 표본이 적은 개인 하네스에서는 셀당 의미 있는 수가 모이는 데 수개월이 걸린다(`rules/cycle_definition.md` "예상 레코드").
 
 ## 폐기된 MCP 라우팅 (2026-06-10)
 

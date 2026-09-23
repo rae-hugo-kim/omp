@@ -49,11 +49,12 @@
 // wins); when the diff hash cannot be computed the gate fails closed on high/critical.
 // Exit 0 = allow, Exit 2 = block
 
-import { readFileSync, readSync, existsSync, appendFileSync, mkdirSync, opendirSync, unlinkSync, openSync, fstatSync, closeSync, writeFileSync, constants as fsConstants } from 'fs';
+import { readFileSync, readSync, existsSync, appendFileSync, mkdirSync, opendirSync, unlinkSync, openSync, fstatSync, lstatSync, closeSync, writeFileSync, constants as fsConstants } from 'fs';
 import { join } from 'path';
 import { execSync } from 'child_process';
 import { assessRisk } from './risk-assess.mjs';
 import { isGitCommit, parseCommitForm } from './git-commit-detect.mjs';
+import { ESTIMATE_FILE, parseEstimate, countFailsSince, buildEstimateEvent, SESSION_LOG_TAIL_BYTES } from './estimate.mjs';
 
 function getStateDir(cwd) {
   const dir = join(cwd, '.omp', 'harness-state');
@@ -393,42 +394,6 @@ if (isHookMode && Array.isArray(risk.synced) && risk.synced.length > 0) {
   } catch { /* observability only */ }
 }
 
-if (risk.level === 'low' || risk.level === 'none') {
-  log('Low/no risk, review not required');
-  process.exit(0);
-}
-
-const reviewDir = join(cwd, 'docs', 'reviews');
-const skipFile = join(cwd, 'docs', 'harness', 'review-skip');
-
-// LOCAL date (not toISOString's UTC): reviewer docs are named by the author's local
-// date, so a UTC "today" mismatched real reviews between local midnight and the UTC
-// offset (e.g. 00:00–08:59 KST → still "yesterday" in UTC), falsely failing coverage.
-const now = new Date();
-const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-
-// Hash the EFFECTIVE committed diff. Computed BEFORE the override check because the override must
-// bind to this hash, and every BLOCK message prints it so evidence can be written from the message
-// alone. parseCommitForm tells us which diff the commit will capture:
-//   all=true (-a/--all) -> all tracked changes  (git diff HEAD)
-//   else (plain)        -> the staged index     (git diff --cached)
-// This closes the gap where `git commit -a` pulled in tracked changes the staged-diff
-// hash never saw, letting a stale PASS review match the wrong content. Every other
-// form (pathspec, --amend, --include/-i, -p, --pathspec-from-file, a commit behind
-// bash -c, >1 commit in one line, or a repo-redirecting global like -C) is UNVERIFIABLE:
-// currentHash stays null and the gate fails closed on high/critical (see the
-// matchedCurrent !== true branch below). execSync runs through a shell, so the pipe
-// needs no `shell` option; both diff commands are constant (no user input on the line).
-let currentHash = null;
-const diffCmd = form.all ? 'git diff HEAD' : 'git diff --cached';
-if (form.verifiable) {
-  try {
-    currentHash = execSync(`${diffCmd} | shasum -a 256`, { cwd, encoding: 'utf-8' }).trim().split(/\s+/)[0];
-  } catch {
-    currentHash = null;
-  }
-}
-
 // I/O bounds. The dispatcher (commit-gates.mjs) kills a gate that exceeds its time/output budget
 // and then FAILS CLOSED — a gate that cannot render a verdict blocks the commit. That closes the
 // old drive-the-gate-over-budget review bypass, but it also turns an over-budget gate into a block
@@ -472,6 +437,112 @@ function readBounded(path) {
     return { ok: false, why: e && e.code === 'ELOOP' ? 'a symlink (evidence must be a plain regular file)' : 'the file could not be read' };
   } finally {
     if (fd !== null) try { closeSync(fd); } catch { /* already reported */ }
+  }
+}
+
+// The estimate reads below share this discipline (see the block that follows): the record via
+// readBounded, the breadcrumb log via readTailBounded — same open flags, same isFile() check, no
+// blocking open, no symlink following. A FIFO planted at either path would otherwise block the
+// open past the dispatcher's kill and turn an observation-only step into a fail-closed BLOCK.
+// Returns { text, partial }: `partial` is true when the window starts inside the file, so the first
+// line may be cut and the counter must drop it.
+function readTailBounded(path, tailBytes) {
+  let fd = null;
+  try {
+    fd = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
+    const st = fstatSync(fd);
+    if (!st.isFile()) return { text: '', partial: false };
+    const start = Math.max(0, st.size - tailBytes);
+    const buf = Buffer.alloc(Math.min(st.size, tailBytes));
+    let bytesRead = 0;
+    while (bytesRead < buf.length) {
+      const n = readSync(fd, buf, bytesRead, buf.length - bytesRead, start + bytesRead);
+      if (n === 0) break;
+      bytesRead += n;
+    }
+    return { text: buf.toString('utf-8', 0, bytesRead), partial: start > 0 };
+  } catch {
+    return { text: '', partial: false };
+  } finally {
+    if (fd !== null) try { closeSync(fd); } catch { /* nothing to report */ }
+  }
+}
+
+// Estimate-vs-actual (seed 20260918-023000-e5a1, rules/cycle_definition.md "예상 레코드"): pair the
+// intake's prediction with the measured risk. Observation ONLY — placed before the low-risk exit so
+// every landed commit is compared, wrapped so no failure here can reach the verdict, and deferred
+// through pending-consume so the record is recorded and consumed iff the commit lands. A malformed
+// record costs exactly one warning and stays on disk (a blocked observation must never block work).
+if (isHookMode) {
+  try {
+    const estimatePath = join(stateDir, ESTIMATE_FILE);
+    // lstat, not existsSync: existsSync follows links, so a dangling or self-looping symlink at the
+    // record path read as "absent" and was skipped silently. Any entry — file, FIFO, symlink — is
+    // handed to readBounded, which decides and names the reason.
+    let present = false;
+    try { lstatSync(estimatePath); present = true; } catch { /* ENOENT: no record this cycle */ }
+    if (present) {
+      const rec = readBounded(estimatePath);
+      const { fields, problems } = rec.ok ? parseEstimate(rec.text) : { fields: null, problems: [rec.why] };
+      if (fields) {
+        const tail = readTailBounded(join(stateDir, 'session-log.jsonl'), SESSION_LOG_TAIL_BYTES);
+        const event = buildEstimateEvent(fields, risk, countFailsSince(tail.text, fields.ts, tail.partial), process.env.USER || 'unknown');
+        const pendDir = join(stateDir, 'pending-consume');
+        mkdirSync(pendDir, { recursive: true });
+        // 'wx' (O_CREAT|O_EXCL): the dispatcher cleared this directory at the start of the attempt,
+        // so a pre-existing entry here is foreign (a planted FIFO/symlink the clear could not remove)
+        // and O_EXCL fails it with EEXIST at once instead of blocking the open past the 3s budget.
+        writeFileSync(join(pendDir, 'append-audit-estimate.json'), JSON.stringify(event) + '\n', { flag: 'wx' });
+        writeFileSync(join(pendDir, `unlink-${ESTIMATE_FILE}`), `.omp/harness-state/${ESTIMATE_FILE}\n`, { flag: 'wx' });
+        log(`estimate_vs_actual queued: predicted ${fields.risk}/${fields.files} files, actual ${risk.level}/${risk.files.length} files`);
+      } else {
+        // One line, always: a parse error echoes record text, so newlines are collapsed (a record
+        // could otherwise print a second line shaped like a gate verdict).
+        const why = problems.join('; ').replace(/[\r\n]+/g, ' ');
+        console.error(`HARNESS WARNING: .omp/harness-state/${ESTIMATE_FILE} is not a valid estimate record (${why}); ignoring it — fix or delete the file (it is not consumed).`);
+      }
+    }
+  } catch (e) {
+    // Only the pending-consume writes can throw here (the reads never do). Say so on stderr:
+    // silence would hide a record that is never going to be compared or consumed.
+    console.error(`HARNESS WARNING: estimate comparison skipped (${e?.message || e}); the record was not consumed.`);
+    log(`estimate comparison skipped: ${e?.message || e}`);
+  }
+}
+
+if (risk.level === 'low' || risk.level === 'none') {
+  log('Low/no risk, review not required');
+  process.exit(0);
+}
+
+const reviewDir = join(cwd, 'docs', 'reviews');
+const skipFile = join(cwd, 'docs', 'harness', 'review-skip');
+
+// LOCAL date (not toISOString's UTC): reviewer docs are named by the author's local
+// date, so a UTC "today" mismatched real reviews between local midnight and the UTC
+// offset (e.g. 00:00–08:59 KST → still "yesterday" in UTC), falsely failing coverage.
+const now = new Date();
+const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+// Hash the EFFECTIVE committed diff. Computed BEFORE the override check because the override must
+// bind to this hash, and every BLOCK message prints it so evidence can be written from the message
+// alone. parseCommitForm tells us which diff the commit will capture:
+//   all=true (-a/--all) -> all tracked changes  (git diff HEAD)
+//   else (plain)        -> the staged index     (git diff --cached)
+// This closes the gap where `git commit -a` pulled in tracked changes the staged-diff
+// hash never saw, letting a stale PASS review match the wrong content. Every other
+// form (pathspec, --amend, --include/-i, -p, --pathspec-from-file, a commit behind
+// bash -c, >1 commit in one line, or a repo-redirecting global like -C) is UNVERIFIABLE:
+// currentHash stays null and the gate fails closed on high/critical (see the
+// matchedCurrent !== true branch below). execSync runs through a shell, so the pipe
+// needs no `shell` option; both diff commands are constant (no user input on the line).
+let currentHash = null;
+const diffCmd = form.all ? 'git diff HEAD' : 'git diff --cached';
+if (form.verifiable) {
+  try {
+    currentHash = execSync(`${diffCmd} | shasum -a 256`, { cwd, encoding: 'utf-8' }).trim().split(/\s+/)[0];
+  } catch {
+    currentHash = null;
   }
 }
 
