@@ -50,6 +50,9 @@ HARNESS_PATHS=(
   # the dir prefix here just makes ANY contract change trigger a version bump.
   "docs/rules/"
   "docs/prompt-writing-handbook.md"
+  # kickoff/init 계약 템플릿·체크리스트 — harness-sync.sh에 개별 파일로 등재 (#35-7).
+  "docs/templates/"
+  "docs/checklists/"
 )
 
 # Literal path match (no regex): exact for file entries, prefix for "dir/" entries.

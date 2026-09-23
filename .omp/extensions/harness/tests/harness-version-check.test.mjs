@@ -85,13 +85,13 @@ function withFixture(opts, fn) {
   try { return fn(fx); } finally { rmSync(fx.root, { recursive: true, force: true }); }
 }
 
-function runGate(cwd, payload = {}) {
+function runGate(cwd, payload = {}, envExtra = {}) {
   const started = Date.now();
   const r = spawnSync('node', [GATE], {
     input: JSON.stringify({ session_state: { cwd }, ...payload }),
     cwd,
     encoding: 'utf-8',
-    env: cleanEnv(),
+    env: { ...cleanEnv(), ...envExtra },
   });
   r.durationMs = Date.now() - started;
   return r;
@@ -355,5 +355,64 @@ test('hooks active through a symlinked session cwd is silent (real-path comparis
     const r = runGate(link);
     assert.equal(r.status, 0);
     assert.equal(r.stdout.trim(), '', 'symlinked cwd must not produce a false HOOKS INACTIVE');
+  });
+});
+
+// --- Policy shadow probe (#35) ---
+// Measured on omp 18.2.5 (`omp -p --no-extensions` marker probes, 2026-09-23): a `.omp/AGENTS.md`
+// with ANY bytes (content, a lone newline, whitespace) replaces the same-depth root AGENTS.md; a
+// 0-byte file is ignored. Project and user RULES.md are both loaded, so `.omp/RULES.md` is not a
+// shadow and is never probed. Contract: root AGENTS.md + non-empty .omp/AGENTS.md => one
+// HARNESS POLICY SHADOWED notice per 24h routing to `.omp/rules/`; otherwise silent, no marker.
+
+test('policy shadowed: .omp/AGENTS.md beside a root AGENTS.md emits POLICY SHADOWED once per window', () => {
+  withFixture({ localVersion: '2026.61' }, (fx) => {
+    writeFileSync(join(fx.consumer, 'AGENTS.md'), '# policy\n');
+    writeFileSync(join(fx.consumer, '.omp', 'AGENTS.md'), '# project\n');
+    const first = runGate(fx.consumer);
+    assert.equal(first.status, 0, 'advisory — exit must stay 0');
+    const out = first.stdout.trim();
+    assert.ok(out.startsWith('HARNESS POLICY SHADOWED'), `must lead with HARNESS POLICY SHADOWED, got: ${JSON.stringify(out)}`);
+    assert.ok(out.includes('.omp/AGENTS.md') && out.includes('.omp/rules/'), 'notice must name the offending file and the replacement location');
+    assert.ok(existsSync(join(fx.consumer, '.omp', 'state', 'harness-policy-check.json')), 'marker must be written');
+
+    const second = runGate(fx.consumer);
+    assert.equal(second.stdout.trim(), '', 'within the 24h window the notice must not repeat');
+  });
+});
+
+test('policy shadowed: a whitespace-only or single-newline .omp/AGENTS.md still shadows (size > 0, not trimmed content)', () => {
+  for (const body of ['\n', ' \n\n', '\t']) {
+    withFixture({ localVersion: '2026.61' }, (fx) => {
+      writeFileSync(join(fx.consumer, 'AGENTS.md'), '# policy\n');
+      writeFileSync(join(fx.consumer, '.omp', 'AGENTS.md'), body);
+      const r = runGate(fx.consumer);
+      assert.ok(r.stdout.trim().startsWith('HARNESS POLICY SHADOWED'), `${JSON.stringify(body)} must be reported`);
+    });
+  }
+});
+
+test('policy not shadowed: no root AGENTS.md, a 0-byte .omp/AGENTS.md, or a project .omp/RULES.md are all silent', () => {
+  withFixture({ localVersion: '2026.61' }, (fx) => {
+    writeFileSync(join(fx.consumer, '.omp', 'AGENTS.md'), '# project\n');  // no root AGENTS.md to shadow
+    writeFileSync(join(fx.consumer, '.omp', 'RULES.md'), 'hard\n');         // both RULES.md load: not a shadow
+    assert.equal(runGate(fx.consumer).stdout.trim(), '', 'nothing is shadowed => no notice');
+    writeFileSync(join(fx.consumer, 'AGENTS.md'), '# policy\n');
+    writeFileSync(join(fx.consumer, '.omp', 'AGENTS.md'), '');              // 0 bytes: ignored by the provider
+    assert.equal(runGate(fx.consumer).stdout.trim(), '', 'a 0-byte .omp/AGENTS.md shadows nothing');
+    assert.ok(!existsSync(join(fx.consumer, '.omp', 'state', 'harness-policy-check.json')), 'no marker when nothing was emitted');
+  });
+});
+
+// Review 2026-09-23 round 2 (C-3): a marker dated in the FUTURE (clock stepped back, or a
+// hand-written suppressor) must not silence the notice — the drift cache applies the same rule.
+test('policy shadowed: a future-dated notice marker does not suppress the notice', () => {
+  withFixture({ localVersion: '2026.61' }, (fx) => {
+    writeFileSync(join(fx.consumer, 'AGENTS.md'), '# policy\n');
+    writeFileSync(join(fx.consumer, '.omp', 'AGENTS.md'), '# project\n');
+    mkdirSync(join(fx.consumer, '.omp', 'state'), { recursive: true });
+    writeFileSync(join(fx.consumer, '.omp', 'state', 'harness-policy-check.json'), JSON.stringify({ notifiedAt: Date.now() + 60 * 60 * 1000 }));
+    const r = runGate(fx.consumer);
+    assert.ok(r.stdout.trim().startsWith('HARNESS POLICY SHADOWED'), 'a future marker is stale, not a valid window');
   });
 });
