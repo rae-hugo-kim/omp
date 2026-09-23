@@ -64,7 +64,11 @@ if (!force && existsSync(cachePath)) {
   try {
     const cached = JSON.parse(readFileSync(cachePath, 'utf-8'));
     const window = cached.failed ? FAILURE_TTL_MS : maxAgeMs;
-    if (cached.checkedAt && (now - cached.checkedAt) < window) {
+    // A checkedAt in the FUTURE means the wall clock stepped backwards since the cache was written
+    // (WSL2 measured: -1.8s steps). `now - checkedAt` is then negative and satisfies ANY window,
+    // including max_age_ms 0 — the caller asked for a refetch and got a stale hit. Treat it as stale.
+    const age = now - cached.checkedAt;
+    if (cached.checkedAt && age >= 0 && age < window) {
       // A failure marker preserves the last-known remote info (below) — a KNOWN drift
       // keeps being reported through failure windows instead of going silent for
       // FAILURE_TTL_MS; only the re-probe is backed off.

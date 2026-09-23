@@ -583,7 +583,9 @@ test('U11: hung child gate is killed and the verdict fails closed', () => {
     copyFileSync(join(gatesSrc, f), join(fakeGates, f));
   }
   writeFileSync(join(fakeGates, 'acceptance-gate.mjs'), 'setTimeout(() => {}, 30000);\n');
-  const start = Date.now();
+  // Monotonic clock: Date.now() stepped backwards by ~1.8s mid-test on WSL2 (measured 2026-09-23:
+  // wall 1224ms vs hrtime 3004ms for the same 3s timeout), which made a wall-clock lower bound flake.
+  const start = process.hrtime.bigint();
   const r = spawnSync(process.execPath, [join(fakeGates, 'commit-gates.mjs')], {
     cwd: dir,
     input: JSON.stringify({ mode: 'hook', hook: 'pre-commit', session_state: { cwd: dir } }),
@@ -592,15 +594,14 @@ test('U11: hung child gate is killed and the verdict fails closed', () => {
     timeout: 25_000,
     killSignal: 'SIGKILL',
   });
-  const elapsed = Date.now() - start;
+  const elapsed = Number((process.hrtime.bigint() - start) / 1_000_000n);
   assert.equal(r.status, 2, `hung gate must fail closed: status=${r.status} stderr=${r.stderr}`);
   // The verdict must come from the sleeper hitting ITS budget, not from a sibling crashing first
-  // (review 2026-09-23: a cloned dir missing a module let this pass on ERR_MODULE_NOT_FOUND).
-  // ETIMEDOUT on the named gate is that proof. No LOWER elapsed bound: spawnSync with `input` +
-  // `timeout` reports ETIMEDOUT anywhere from ~1.2s to ~3s (measured 1/6 runs at 1192ms on node
-  // 24.13) — a lower bound made this flaky (verifier 2026-09-23: 3/10 runs). Only the ceiling matters.
+  // (review 2026-09-23: a cloned dir missing a module let this pass on ERR_MODULE_NOT_FOUND):
+  // ETIMEDOUT on the named gate, and an elapsed time that IS the 3s per-child budget — not a
+  // crash (<1s) and not the 25s outer timeout.
   assert.match(r.stderr, /HARNESS BLOCK \[acceptance-gate\.mjs\]: the gate did not run cleanly \(ETIMEDOUT\)/);
-  assert.ok(elapsed < 10_000, `the per-child budget, not the 25s outer timeout, must be what fires (elapsed ${elapsed}ms)`);
+  assert.ok(elapsed >= 2_500 && elapsed < 10_000, `the 3s per-child budget must be what fires (elapsed ${elapsed}ms)`);
 });
 
 // I11 (A-6): an index.lock loser is a GIT failure, not a harness block — the two surfaces

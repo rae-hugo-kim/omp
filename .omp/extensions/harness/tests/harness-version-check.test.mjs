@@ -168,6 +168,27 @@ test('cache window: a fresh cache pins the remote version; max_age_ms 0 forces a
   });
 });
 
+// Clock step backwards (measured on WSL2, 2026-09-23: Date.now() jumped -1.8s between two reads,
+// which made the test above flake): a cache whose checkedAt is in the FUTURE made `now - checkedAt`
+// negative, which satisfied every window including max_age_ms 0 — the caller asked for a refetch
+// and silently got the stale cache. A future checkedAt must be treated as stale.
+test('cache window: a checkedAt in the future (clock stepped backwards) never satisfies the window', () => {
+  withFixture({ localVersion: '2026.50' }, (fx) => {
+    const seed = runGate(fx.consumer);
+    assert.match(seed.stdout, /2026\.61/);
+    fx.addTag('2026.62');
+    const cached = JSON.parse(readFileSync(fx.cachePath, 'utf-8'));
+    writeFileSync(fx.cachePath, JSON.stringify({ ...cached, checkedAt: Date.now() + 60_000 }));
+    const fresh = runGate(fx.consumer, { max_age_ms: 0 });
+    assert.match(fresh.stdout, /2026\.62/, 'a future checkedAt must not be treated as a cache hit');
+    const after = JSON.parse(readFileSync(fx.cachePath, 'utf-8'));
+    assert.ok(after.checkedAt <= Date.now() + 1000, 'the re-probe rewrites checkedAt to now');
+    // And the normal window still works after the rewrite.
+    const hit = runGate(fx.consumer, { max_age_ms: 3600000 });
+    assert.match(hit.stdout, /2026\.62/);
+  });
+});
+
 test('failure backoff: dead remote is silent, exits 0, records failed marker, then skips the re-probe', () => {
   withFixture({ localVersion: '2026.50', missingRemote: true }, (fx) => {
     rmSync(fx.cachePath, { force: true });
