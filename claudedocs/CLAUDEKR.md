@@ -174,6 +174,7 @@ Harness 검증 계약 세부 사항: [`rules/harness_integration_contract.md`](.
 - Artifact roles (seed/scope/audit 3-tier): [`docs/rules/artifact_roles_contract.md`](../docs/rules/artifact_roles_contract.md)
 - Scope self-detect policy (L1): [`docs/rules/scope_self_detect_policy.md`](../docs/rules/scope_self_detect_policy.md)
 - Cycle definition (1사이클 정의 — 인테이크 판정·분할 역제안): [`rules/cycle_definition.md`](../rules/cycle_definition.md)
+- Design contract (저장소 안 `design/DESIGN.md` + 토큰만 UI 진실원): [`rules/design_contract.md`](../rules/design_contract.md)
 
 ## 체크리스트 (필요 시 사용)
 

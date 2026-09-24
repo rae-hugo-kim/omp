@@ -39,6 +39,7 @@ If both global and local guidance exist for the same tool choice, apply global-h
 - Quality gates (FORMAT/LINT/TYPECHECK/TEST/BUILD/EVAL): [`quality_gates.md`](quality_gates.md)
 - Writing style (human-facing tone, 두괄식·번역투 금지): [`writing_style.md`](writing_style.md)
 - Prompt engineering (LLM 파이프라인 프롬프트 설계·신뢰 경계·게이트 철거): [`prompt_engineering.md`](prompt_engineering.md)
+- Design contract (저장소 안 디자인 계약 — `design/DESIGN.md`·`tokens.css`만 참조, 리터럴 금지): [`design_contract.md`](design_contract.md)
 
 ## Tool rails
 

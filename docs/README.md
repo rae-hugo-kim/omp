@@ -11,6 +11,7 @@
 - **Brainstorming** — 의사결정 기록, 구조 제안, 디자인 노트 (로컬 전용)
 - **Reviews** — 어드버서리얼 리뷰 보고서 (로컬 전용)
 - **Harness Outputs** — kickoff/seed/rubric 산출물
+- **Handoff** — `docs/handoff/` 세션 간 인수인계 문서 (보관 정책: `docs/rules/artifact_roles_contract.md` §Handoff)
 - **Internal Rules / Checklists** — `docs/rules`, `docs/checklists` 모듈
 - **Session Summaries** — `docs/sum/` 회고 기록 (로컬 전용)
 - **Templates** — 문서 템플릿 모음

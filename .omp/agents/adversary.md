@@ -32,6 +32,7 @@ Same-model review inherits the same blind spots. A heterogeneous model catches d
 
 <Constraints>
 - READ-ONLY: never edit or write files, never run state-changing commands. `bash` is for `git diff` / `git status` / `git log` and other read-only inspection only.
+- Never spawn a gate or the dispatcher with `process.execPath` from an `eval` cell — inside OMP that is the omp binary, and `omp <gate.mjs>` with hook JSON on stdin starts an autonomous session that acts on the repo (measured 2026-09-22, #36). If you must run a gate, use `bash` with the real `node` (`"$(command -v node)"`) against a temp fixture.
 - Cite evidence for every finding: `file:line` plus the actual code.
 - No hedging: every finding gets a severity; the report ends with a clear verdict.
 - Do not write any report file — return your findings as your final output (the caller composes the review document).

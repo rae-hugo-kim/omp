@@ -95,6 +95,12 @@ After all three passes:
 - Attribute each finding to its source (self/adversary/code-reviewer).
 - If the adversary pass fails (agent/model unavailable — a missing `task` tool exits at Pass 0 instead, with no output), note the failure, continue with the remaining passes, and write `null` for the sidecar's models element.
 - If the code-reviewer pass fails, note the failure and continue with 2 passes.
+- Reproducing a gate or the dispatcher (`.omp/extensions/harness/gates/*.mjs`) MUST run the
+  real Node binary from `bash` — `"$(command -v node)" <gate.mjs> <<< '<hook JSON>'` — never
+  `process.execPath` from an `eval` cell. Inside OMP, `process.execPath` IS the omp binary, so
+  `spawnSync(process.execPath, [gate], { input })` is `omp <gate.mjs>` with the hook JSON as
+  its prompt: an autonomous session (measured 2026-09-22, #36: it edited this repo's gate files
+  and ran `git stash`). The `.githooks/pre-commit` node check does not cover this path.
 </Constraints>
 
 <Output_Format>
@@ -206,5 +212,6 @@ diff-hash: <hash>          <!-- informational; the gate reads only the .json sid
 - Soft verdicts: "looks mostly fine" — give a clear PASS/FAIL.
 - Missing attribution: every finding must say which pass found it.
 - No document: results must be written to docs/reviews/.
+- Spawning a gate with `process.execPath` from an `eval` cell: that launches an autonomous omp session on the repo, not the gate (2026-09-22, #36). Reproduce only via `bash` + the real `node`.
 </Failure_Modes>
 </Agent_Prompt>

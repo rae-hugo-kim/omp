@@ -181,6 +181,7 @@ If you cannot comply with any MUST:
 - Artifact roles (seed/scope/audit 3-tier): [`docs/rules/artifact_roles_contract.md`](docs/rules/artifact_roles_contract.md)
 - Scope self-detect policy (L1): [`docs/rules/scope_self_detect_policy.md`](docs/rules/scope_self_detect_policy.md)
 - Cycle definition (1사이클 인테이크 판정): [`rules/cycle_definition.md`](rules/cycle_definition.md)
+- Design contract (in-repo `design/DESIGN.md` + tokens as the only UI truth): [`rules/design_contract.md`](rules/design_contract.md)
 
 ## Checklists (Use as needed)
 
