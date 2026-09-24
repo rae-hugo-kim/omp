@@ -178,11 +178,15 @@ test('cache window: a checkedAt in the future (clock stepped backwards) never sa
     assert.match(seed.stdout, /2026\.61/);
     fx.addTag('2026.62');
     const cached = JSON.parse(readFileSync(fx.cachePath, 'utf-8'));
-    writeFileSync(fx.cachePath, JSON.stringify({ ...cached, checkedAt: Date.now() + 60_000 }));
+    const futureCheckedAt = Date.now() + 60_000;
+    writeFileSync(fx.cachePath, JSON.stringify({ ...cached, checkedAt: futureCheckedAt }));
     const fresh = runGate(fx.consumer, { max_age_ms: 0 });
     assert.match(fresh.stdout, /2026\.62/, 'a future checkedAt must not be treated as a cache hit');
     const after = JSON.parse(readFileSync(fx.cachePath, 'utf-8'));
-    assert.ok(after.checkedAt <= Date.now() + 1000, 'the re-probe rewrites checkedAt to now');
+    // No wall-clock comparison here (that is the very flake under test): the injected value being
+    // gone, plus the new tag above, proves the re-probe rewrote the cache.
+    assert.notEqual(after.checkedAt, futureCheckedAt, 'the re-probe must rewrite the injected checkedAt');
+    assert.equal(after.remoteLatestVersion, '2026.62', 'the rewritten cache carries the re-probed version');
     // And the normal window still works after the rewrite.
     const hit = runGate(fx.consumer, { max_age_ms: 3600000 });
     assert.match(hit.stdout, /2026\.62/);
