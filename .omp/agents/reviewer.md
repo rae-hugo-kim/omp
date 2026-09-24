@@ -32,8 +32,9 @@ fast-tier worker sessions run with 'Allowed: none' even at depth 1; rules/agent_
   self-analysis, Pass 2/3 as its own depth-2 batch spawns; (3) with no `task` tool at all,
   escalate to a fresh top-level `omp -p` run.
 - Do NOT ask the caller to supply adversary/code-reviewer results as sibling spawns: a
-  caller blocked inside a `task` call cannot answer its child's hub requests (measured
-  deadlock, 2026-07-22).
+  caller blocked inside a `task` call cannot answer its child's `agent://` messages (measured
+  deadlock, 2026-07-22, then via the `hub` tool; `hub` was retired in omp 18.3.0 — the
+  blocking topology is unchanged).
 
 ### Pass 1: Self-Analysis (you, directly)
 Read the review target — the staged diff (`git diff --cached`), falling back to `git diff HEAD` only when nothing is staged. This is the SAME diff the sidecar's diff_hash below binds and the gate verifies for a plain `git commit`; reviewing the worktree while hashing the index would certify content nobody reviewed. Analyze:

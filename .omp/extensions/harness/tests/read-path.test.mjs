@@ -7,7 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { resolve } from 'node:path';
-import { readTarget, READ_SELECTOR, resolvedAstEditFiles, searchTrackTargets } from '../gates/read-path.mjs';
+import { readTarget, localFileTarget, READ_SELECTOR, resolvedAstEditFiles, searchTrackTargets } from '../gates/read-path.mjs';
 
 const CWD = '/work';
 const BARE = resolve(CWD, 'src/foo.ts');
@@ -63,6 +63,39 @@ test('READ_SELECTOR matches raw in EITHER order, plain/multi ranges; not a bare 
   }
   for (const s of ['x', 'src/v2.ts', 'src/report-2024.md', 'x:notaselector']) {
     assert.doesNotMatch(s, READ_SELECTOR, `should NOT match: ${s}`);
+  }
+});
+
+// #42 (omp 18.2.9–18.3.0, measured 2026-09-24): `:img` is the mandatory selector for SVG
+// rendering. Unstripped, `logo.svg:img` landed in read-log and a later edit of `logo.svg`
+// false-blocked in context-gate. Standalone only — read.md documents no range combination,
+// and the selector regex mirrors that grammar EXACTLY.
+test('strips the :img selector (standalone only) — the F1 phantom class for SVG reads', () => {
+  assert.equal(T('assets/logo.svg:img'), resolve(CWD, 'assets/logo.svg'));
+  assert.match('x:img', READ_SELECTOR);
+  assert.doesNotMatch('x:image', READ_SELECTOR);
+  assert.equal(T('src/img'), resolve(CWD, 'src/img'), 'a path component named img is not a selector');
+});
+
+// `:-N` (last N lines) is advertised by the read tool and accepted live (omp 18.3.0, 2026-09-24:
+// `read current-scope.md:-3` returned the tail AND logged the phantom `current-scope.md:-3`).
+test('strips the :-N tail selector — the same phantom class', () => {
+  assert.equal(T('docs/harness/current-scope.md:-3'), resolve(CWD, 'docs/harness/current-scope.md'));
+  assert.equal(T('src/foo.ts:-60'), BARE);
+  assert.equal(T('src/foo.ts:raw:-60'), BARE, ':raw:-N is accepted live (omp 18.3.0)');
+  assert.equal(T('src/foo.ts:-60:raw'), BARE);
+  assert.match('x:-60', READ_SELECTOR);
+  assert.doesNotMatch('x:-', READ_SELECTOR);
+  assert.equal(T('src/a-b:-c'), resolve(CWD, 'src/a-b:-c'), 'a non-numeric tail is a path, not a selector');
+});
+
+// #42: 18.3.0 job/service control (`write proc://<id>/kill`, `proc://<name>/mode`, `read proc://`)
+// and write-only `conflict://` must never enter the ledgers — in the canonical `://` form OR the
+// single-slash form the event plumbing has been observed to emit for xd (`xd:/retain`).
+test('proc:// and conflict:// are virtual in both slash forms — never a ledger path', () => {
+  for (const p of ['proc://', 'proc://bg_1', 'proc:/', 'proc:/bg_1/kill', 'proc:/web/mode', 'conflict://src/a.ts', 'conflict:/src/a.ts']) {
+    assert.equal(readTarget({ path: p }, CWD), '', `read must not track: ${p}`);
+    assert.equal(localFileTarget(p, CWD), null, `write must not track: ${p}`);
   }
 });
 
