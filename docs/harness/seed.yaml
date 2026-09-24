@@ -1,5 +1,6 @@
 name: omp1830-friction
-status: approved
+status: done
+completed: 2026-09-24
 version: 1
 task_id: "20260924-163908-c420"
 # 사후 작성 seed: omp 18.3.0 마찰 감사(docs/sum/session_2026-09-24_omp1830-friction-audit.md,
