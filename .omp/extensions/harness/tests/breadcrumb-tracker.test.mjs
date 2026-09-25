@@ -88,6 +88,31 @@ test('bash commit that FAILED -> result FAIL, no phantom hash', () => {
   });
 });
 
+// --- #40: backgrounded bash (details.async.state "running") carries no verdict ---
+
+test('backgrounded verification -> result PENDING, never PASS (pending wins over failed)', () => {
+  withDir((dir) => {
+    run('Bash', { command: 'node --test x.test.mjs', pending: true }, dir);
+    run('Bash', { command: 'node --test x.test.mjs', pending: true, failed: true }, dir);
+    const e = log(dir);
+    assert.equal(e.length, 2);
+    assert.equal(e[0].kind, 'test');
+    assert.equal(e[0].result, 'PENDING');
+    assert.equal(e[1].result, 'PENDING');
+  });
+});
+
+test('backgrounded commit -> result PENDING, no phantom hash', () => {
+  withDir((dir) => {
+    run('Bash', { command: 'git commit -m x', pending: true }, dir);
+    const e = log(dir);
+    assert.equal(e.length, 1);
+    assert.equal(e[0].kind, 'commit');
+    assert.equal(e[0].result, 'PENDING');
+    assert.equal(e[0].hash, undefined);
+  });
+});
+
 test('Write to a prefixed *-current-scope.md -> edit, not scope (basename anchor)', () => {
   withDir((dir) => {
     run('Write', { file_path: join(dir, 'my-current-scope.md') }, dir);

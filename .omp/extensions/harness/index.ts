@@ -13,6 +13,7 @@
 //   PostToolUse Bash (ok git commit) -> tool_result bash        : harness-version-check (1h window; drift appended to result)
 //   BeforeAgentStart -> before_agent_start                      : harness-version-check (1h window; agent-facing reminder) + kickoff-detector
 //   PostToolUseFailure Bash  -> tool_result bash (isError)      : backpressure-failure-tracker
+//   (none)      Bash (background start, details.async.state "running") : breadcrumb PENDING only — no verdict, no tracker (#40)
 //   PostToolUse Edit|Write   -> tool_result edit|write           : mutationRoute -> write-tracker + backpressure-invalidator + mermaid-check
 //     (v17 xd:// dispatches ride `write`: ast_edit preview only invalidates backpressure, the REAL
 //      apply is tracked via the xd://resolve dispatch envelope; xd grep/ast_grep results record read anchors)
@@ -69,7 +70,7 @@ interface ToolCallEvent {
 interface ToolResultEvent extends ToolCallEvent {
 	content?: ContentChunk[];
 	isError?: boolean;
-	details?: { exitCode?: number; applied?: boolean } & Record<string, unknown>;
+	details?: { exitCode?: number; applied?: boolean; async?: { state?: string; jobId?: string } } & Record<string, unknown>;
 }
 
 /**
@@ -345,6 +346,19 @@ export default function harness(pi: HarnessExtensionApi): void {
 			if (event.toolName === "bash") {
 				const command = String(event.input?.command ?? "");
 				if (!command) return;
+				// Background-start result (`async: true`, or bash.autoBackground converting a run
+				// that outlived its wait window): details.async.state is "running", isError false,
+				// exitCode absent. The real outcome arrives later via onUpdate / the async job
+				// manager — never as a tool_result — so this event carries NO verdict: leave
+				// backpressure untouched (neither PASS nor FAIL) and record the breadcrumb as
+				// PENDING. Routing it to a tracker recorded a failing `node --test` as PASS and
+				// cleared backpressure-last-fail (live-reproduced on omp 18.3.0, 2026-09-24, #40).
+				// A backgrounded `git commit` is not a commit yet either, so the post-commit drift
+				// recheck / cycle-boundary note must not fire here.
+				if (event.details?.async?.state === "running") {
+					await runGate("breadcrumb-tracker.mjs", { tool_name: "Bash", tool_input: { command, pending: true }, session_state });
+					return;
+				}
 				const payload: GatePayload = { tool_name: "Bash", tool_input: { command }, session_state };
 				const tracker = bashRunFailed(event) ? "backpressure-failure-tracker.mjs" : "backpressure-tracker.mjs";
 				await runGate(tracker, payload);

@@ -77,3 +77,5 @@
   Obsidian 전환으로 폐지, 검증은 하네스 게이트로 이관)
 - `rules/change_control.md` — 최소 변경 원칙 (본 표준의 over-prescription 방지)
 - `artifacts/` — 1회성 HTML 산출물 격리 위치 (R4에 정책 인라인; 디렉터리 README는 소비 리포 소유)
+- `docs/handoff/` — 세션 간 핸드오프 문서. 위치·커밋 시점·마감 후 처분은
+  `docs/rules/artifact_roles_contract.md` §Handoff 가 정의한다(seed의 전신, 3-tier 밖 입력).

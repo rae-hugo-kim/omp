@@ -29,8 +29,13 @@ function entry() {
   if (tool === 'Bash') {
     const command = String(input.command || '');
     if (!command) return null;
+    // index.ts passes the bash outcome through tool_input: `pending` for a background-start
+    // result (no verdict yet — the job finishes via onUpdate, never a tool_result), `failed`
+    // for a non-zero exit / isError. PENDING never becomes PASS/FAIL in this log: the agent
+    // must rerun a backgrounded verification in the foreground for backpressure to see it.
     if (isGitCommit(command)) {
       const cmd = command.slice(0, 80);
+      if (input.pending) return { kind: 'commit', result: 'PENDING', cmd };
       if (input.failed) return { kind: 'commit', result: 'FAIL', cmd };
       let hash;
       try { hash = execSync('git rev-parse --short HEAD', { cwd, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch {}
@@ -38,8 +43,7 @@ function entry() {
     }
     const { isVerification, type } = classifyVerification(command);
     if (isVerification) {
-      // index.ts passes the bash failure signal through tool_input.failed.
-      return { kind: 'test', type, result: input.failed ? 'FAIL' : 'PASS' };
+      return { kind: 'test', type, result: input.pending ? 'PENDING' : input.failed ? 'FAIL' : 'PASS' };
     }
     return null; // ordinary bash (ls/cat/...) is noise — skip
   }

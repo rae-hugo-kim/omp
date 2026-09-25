@@ -34,8 +34,8 @@ source_commit_hash: b379ed5a64db3eea14433d41706b5d385782e203
 | 필요 | 위치 | OMP 로딩 방식 |
 |---|---|---|
 | 프로젝트 규칙 (프롬프팅 관례, 도메인 제약) | `.omp/rules/<name>.md` | 네이티브 rule 파일. `alwaysApply: true`면 매 세션 주입, `globs`/`description`이면 룰북 등재(`rule://<name>`), `condition`이면 TTSR 스트림 룰. `rules/` 링크보다 강함. |
-| 긴 세션에서도 보여야 하는 짧은 하드 요구 | `.omp/RULES.md` | sticky always-apply 룰, 현재 턴 근처에 재부착. user `~/.omp/agent/RULES.md`와 **함께** 로드됨(omp 18.2.5 실측, 2026-09-23 — 두 본문 모두 존재). |
-| 프로젝트 배경과 자체 모듈 색인 | `.omp/rules/<project>-context.md` + `alwaysApply: true` | always-apply 룰, 이 파일과 공존. **`.omp/AGENTS.md`는 절대 만들지 않습니다** — native 프로바이더(priority 100)가 같은 depth의 이 `AGENTS.md`를 *대체*하므로(내용이 있는 파일이면 개행 1개여도 — omp 18.1.14/18.2.5 실측, 2026-09-23) 하네스 MUST 전체가 세션에서 조용히 사라집니다. 파일이 존재하는 동안 세션 시작 프로브가 `HARNESS POLICY SHADOWED`를 냅니다(24h당 1회, `--force`로 재발화). |
+| 긴 세션에서도 보여야 하는 짧은 하드 요구 | `.omp/RULES.md` | sticky always-apply 룰, 현재 턴 근처에 재부착. user `~/.omp/agent/RULES.md`와 **함께** 로드됨(omp 18.2.5 실측, 2026-09-23 · 18.3.0 재측정, 2026-09-24 — 두 본문 모두 존재). |
+| 프로젝트 배경과 자체 모듈 색인 | `.omp/rules/<project>-context.md` + `alwaysApply: true` | always-apply 룰, 이 파일과 공존. **`.omp/AGENTS.md`는 절대 만들지 않습니다** — native 프로바이더(priority 100)가 같은 depth의 이 `AGENTS.md`를 *대체*하므로(내용이 있는 파일이면 개행 1개여도 — omp 18.1.14/18.2.5 실측, 2026-09-23 · 18.3.0 재측정, 2026-09-24) 하네스 MUST 전체가 세션에서 조용히 사라집니다. 파일이 존재하는 동안 세션 시작 프로브가 `HARNESS POLICY SHADOWED`를 냅니다(24h당 1회, `--force`로 재발화). |
 | 커스텀 에이전트 / 스킬 | `.omp/agents/<custom>.md`, `.omp/skills/<custom>/` | 하네스 것과 같은 방식으로 발견. 동기화는 하네스 에이전트·스킬을 파일/디렉터리 단위로 열거하므로 이웃 파일을 지우지 않음. |
 
 우선순위: `.omp/rules/`나 `.omp/RULES.md`의 프로젝트 규칙은 이 정책의 **로컬 특화**이며 같은 주제의 링크 모듈보다 우선합니다. 이 파일의 MUST(안전, 게이트, 검증)만 그 방식으로 덮어쓸 수 없습니다. `rules/`, 하네스 이름의 `.omp/agents/`, 하네스 스킬 디렉터리에는 프로젝트 파일을 두지 않습니다 — 다음 동기화에서 삭제되거나 덮어써집니다.
@@ -174,6 +174,7 @@ Harness 검증 계약 세부 사항: [`rules/harness_integration_contract.md`](.
 - Artifact roles (seed/scope/audit 3-tier): [`docs/rules/artifact_roles_contract.md`](../docs/rules/artifact_roles_contract.md)
 - Scope self-detect policy (L1): [`docs/rules/scope_self_detect_policy.md`](../docs/rules/scope_self_detect_policy.md)
 - Cycle definition (1사이클 정의 — 인테이크 판정·분할 역제안): [`rules/cycle_definition.md`](../rules/cycle_definition.md)
+- Design contract (저장소 안 `design/DESIGN.md` + 토큰만 UI 진실원): [`rules/design_contract.md`](../rules/design_contract.md)
 
 ## 체크리스트 (필요 시 사용)
 

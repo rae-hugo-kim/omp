@@ -84,6 +84,7 @@ function shouldInspectMarkdown(relativePath) {
     'docs/checklists/',
     'docs/templates/',
     'docs/harness/',
+    'docs/handoff/',
     'claudedocs/',
   ];
 
