@@ -136,3 +136,7 @@
 {"ts":"2026-09-24T16:47:50.628Z","event":"acceptance_wip","actor":"rae","meta":{"mechanism":"env","reason":"backstop:closed seed (status:done)"}}
 {"ts":"2026-09-25T13:03:06Z","event":"seed_generated","actor":"assistant","meta":{"seed_path":"docs/harness/seed.yaml","status":"approved","version":1,"task_id":"20260925-130157-a48f","source":"issue #48 (post-hoc, kickoff interview skipped)","archived_previous":"docs/harness/archive/20260924-omp1830-friction/seed.yaml"}}
 {"ts":"2026-09-25T13:03:06.905Z","event":"thread_opened","actor":"assistant","meta":{"thread_id":"T-20260925130306-d598","seed_task_id":"20260925-130157-a48f","seed_version":1,"ac_targeted":["AC1-commit-landed","AC2-closeout-same-commit","AC3-review-window","AC4-verify-commands","AC5-post-commit-ac-guidance","AC6-bump-ready"]}}
+{"ts":"2026-09-25T15:32:09.054Z","event":"acceptance_wip","actor":"rae","meta":{"mechanism":"env","reason":"unchecked:1"}}
+{"ts":"2026-09-25T16:28:23.591Z","event":"acceptance_wip","actor":"rae","meta":{"mechanism":"env","reason":"unchecked:1"}}
+{"ts":"2026-09-25T16:28:23.674Z","event":"estimate_vs_actual","actor":"rae","meta":{"predicted":{"risk":"high","files":16,"depth":"high","model":"claude-fable-5-1","effort":"medium","ts":"2026-09-25T15:32:30Z"},"actual":{"risk":"high","diffSize":330,"files":8,"reason":"330+ lines of code changed"},"fails_since_estimate":0}}
+{"ts":"2026-09-25T16:28:41.567Z","event":"acceptance_wip","actor":"rae","meta":{"mechanism":"env","reason":"unchecked:1"}}
