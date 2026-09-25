@@ -46,7 +46,7 @@ function entry() {
       if (input.failed) return { kind: 'commit', result: 'FAIL', cmd };
       return { kind: 'commit', result: 'UNVERIFIED', cmd };
     }
-    const { isVerification, type } = classifyVerification(command);
+    const { isVerification, type } = classifyVerification(command, cwd);
     if (isVerification) {
       return { kind: 'test', type, result: input.pending ? 'PENDING' : input.failed ? 'FAIL' : 'PASS' };
     }

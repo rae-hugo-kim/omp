@@ -20,6 +20,10 @@
 - append-only 감사 로그
 - kickoff 완료, seed 생성, override, startdev 시작 같은 핵심 이벤트를 기록
 
+### `verify-commands.json` (선택)
+- 프로젝트 고유 검증 명령 등록 — `{"test": ["bash bpy/bench/run.sh"], "lint": [], "build": []}` 리터럴 접두사
+- backpressure 트래커가 내장 표(`npm test`, `node --test`, `pytest`…)보다 먼저 대조한다 (`rules/harness_integration_contract.md` §3)
+
 ## Operating Rules
 
 - `kickoff`는 최소 `kickoff-summary.md`, `seed.yaml`, `rubric-report.md`를 생성해야 한다
