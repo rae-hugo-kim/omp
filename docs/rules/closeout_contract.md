@@ -21,7 +21,7 @@
 a. `docs/harness/seed.yaml`: top-level `status`를 `done`으로, `completed: <YYYY-MM-DD>` 추가(`seed_evolution_policy.md`의 `approved → done` 전이). **이 종료 전이는 `version +1` 규칙에서 면제된다**(내용 revision이 아니라 생명주기 종료이며 `task_closed`가 감사 기록).
 b. `docs/harness/current-scope.md` **삭제**(작업 추적 은퇴 — seed `done` + audit가 기록이므로 아카이브 불필요).
 c. `docs/harness/audit.jsonl`에 append(없으면 생성): `{"ts":"<ISO>","event":"task_closed","actor":"assistant","meta":{"task_id":"<task_id>","name":"<name>"}}`. **`task_id`가 안정적 식별자**(seed의 `name`은 필수 필드 아님); seed에 `task_id`가 없으면 `name`만 기록.
-d. a–c의 변경은 **이 커밋에 함께 포함**되어(스테이징 직전 실행) 마감이 원자적으로 landing한다.
+d. a–c의 변경은 **이 커밋에 함께 포함**되어(스테이징 직전 실행) 마감이 원자적으로 landing한다. acceptance-gate는 이 커밋의 내용(plain commit은 인덱스, `-a`는 워크트리)에서 a·b·c **셋 모두**를 확인할 때만 closeout landing으로 allow한다 — HEAD의 seed가 `approved`이고 커밋되는 seed가 `done`, 커밋 트리에 `current-scope.md`가 없고, 커밋되는 `audit.jsonl`에 `task_closed` 행이 추가됨(디스크의 seed는 이미 `done`이므로 "닫힌 seed 위 코드" 백스톱과 구분하는 근거는 커밋 내용이다 — #48-1). seed 한 줄만 바꾸거나 scope를 남기거나 audit 행이 없으면 마감이 아니며, 코드 변경이 함께 있으면 백스톱에 걸린다(빠진 항목을 `HARNESS WARNING`으로 안내).
 
 ### 4. 스킬 sync 점검 (freshness)
 이번 작업이 `.omp/skills/<name>/`를 수정했다면 전역 미러 `~/.claude/skills/<name>/`도 동기화한다 (OMC 스킬은 OMP에서도 `~/.claude`에서 디스커버리됨). **전역이 stale하면 그게 실행될 수 있다**(cf. `seed_evolution_policy.md`는 아니고 skill-sync 메모리). 양쪽이 동일해야 한다.

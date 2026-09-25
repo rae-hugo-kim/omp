@@ -103,6 +103,6 @@ references:
 estimate:
   risk: high
   files: 16
-  depth: medium
+  depth: high
   model: claude-fable-5-1
   effort: medium
