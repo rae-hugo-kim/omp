@@ -2,7 +2,7 @@
 warning_type: reference_only
 non_normative_reference_only: true
 last_sync_date: 2026-09-26
-status: synced
+status: stale
 source_of_truth: ../AGENTS.md
 source_commit_hash: eba6825bf6bf6bea1970faa56a631fcda239658a
 <!-- policy-sync-warning:end -->
@@ -118,7 +118,7 @@ OMC 관계: `~/.claude` 아래 설치된 OMC 에이전트·스킬은 OMP가 발�
 - **리포 명령**: build/test/lint/typecheck/e2e/eval 명령을 추측하지 않고 찾아냅니다(`rule://harness-repo_command_discovery`).
 - **검증**: 사용자에게 영향이 있는 모든 변경은 재현 가능한 검증 산출물을 최소 하나 포함합니다(`rule://harness-verification_tests_and_evals`).
 - **문서/정책 전용 모드**: 순수 마크다운/정책/템플릿 편집은 `rule://harness-verification_tests_and_evals`의 docs-only 검증 경로를 따르고 그 근거 형식을 포함합니다.
-- **참조 문서 동기(소스 리포만)**: omp 소스 리포에서는 `claudedocs/CLAUDEKR.md`(이 파일의 한국어 미러)를 같은 PR에서 갱신하거나 stale로 명시합니다. 소비 리포에는 미러가 없습니다(`claudedocs/`는 동기화되지 않습니다. 오래된 `init`이 남긴 사본이 있으면 삭제하세요 — 유지되지 않습니다).
+- **참조 문서 동기(소스 리포만)**: omp 소스 리포에서는 `claudedocs/CLAUDEKR.md`(이 파일의 한국어 미러)를 같은 PR에서 갱신하거나 stale로 명시합니다. `source_commit_hash`는 AGENTS.md를 마지막으로 바꾼 커밋이므로, 미러의 `status: synced` 재스탬프는 AGENTS.md를 건드리지 않는 후속 커밋에서 합니다(같은 커밋에서는 일치할 수 없습니다). 소비 리포에는 미러가 없습니다(`claudedocs/`는 동기화되지 않습니다. 오래된 `init`이 남긴 사본이 있으면 삭제하세요 — 유지되지 않습니다).
 - **Scope self-detection (L1)**·**Cycle intake (L1)**: `rule://harness-core` 참조. 계약은 [`docs/rules/scope_self_detect_policy.md`](../docs/rules/scope_self_detect_policy.md)와 `rule://harness-cycle_definition`(기계적 backstop = `acceptance-gate`).
 
 ## 완료 계약 (MUST)
