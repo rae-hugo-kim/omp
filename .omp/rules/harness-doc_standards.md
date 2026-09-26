@@ -67,7 +67,7 @@ description: "Markdown as source of truth, docs/sum untracked policy, HTML as de
 
 ## View
 
-- 뷰어: **Obsidian** — vault 루트 = repo 루트 (`rules/`·`checklists/`·`docs/` 크로스링크 유지).
+- 뷰어: **Obsidian** — vault 루트 = repo 루트 (`.omp/rules/`·`checklists/`·`docs/` 크로스링크 유지).
   WSL 경로: `\\wsl.localhost\<distro>\...\omp`
 - 권장 설정: 기본 보기 모드 Reading / 위키링크 끄기 + 링크 형식 상대 경로 / 가독 폭 켜기
 - 진입점: `docs/README.md` (섹션별 안내 색인). vault 설정 디렉터리 `.obsidian/`은 gitignore.

@@ -7,7 +7,7 @@ description: "Language-agnostic code shape constraints that prevent quality drif
 
 ## Purpose
 
-Enforceable code shape constraints that prevent quality drift. These are language-agnostic — language-specific rules belong in project-level `rules/`.
+Enforceable code shape constraints that prevent quality drift. These are language-agnostic — language-specific rules belong in a project-level `.omp/rules/<name>.md`.
 
 ---
 

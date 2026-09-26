@@ -178,7 +178,7 @@ function syncedSubset(cwd, changedFiles, ranges) {
 //      consumer that already has them at HEAD — any later clone — cannot re-open the window);
 //   3. the path is a DELETION of a SOURCE-ONLY asset (init Phase 2: docs/, claudedocs/,
 //      scripts/docs-drift, CHANGELOG.md — never a harness asset path, so deleting
-//      `.omp/extensions/harness/index.ts`, `.githooks/*` or `rules/*` inside the window is
+//      `.omp/extensions/harness/index.ts`, `.githooks/*` or `.omp/rules/harness-*` inside the window is
 //      scored like any other change), or one of the files init edits.
 // Everything else in that commit is scored exactly as before: user code mixed into the
 // bootstrap commit, an edit to AGENTS.md, or a harness-asset deletion is never covered.

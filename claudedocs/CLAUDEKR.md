@@ -2,14 +2,14 @@
 warning_type: reference_only
 non_normative_reference_only: true
 last_sync_date: 2026-09-26
-status: stale
+status: synced
 source_of_truth: ../AGENTS.md
-source_commit_hash: pending-restamp
+source_commit_hash: eba6825bf6bf6bea1970faa56a631fcda239658a
 <!-- policy-sync-warning:end -->
 
 # AGENTS.md 한국어 미러 (에이전트 규칙 - 계층형)
 
-> 이 문서는 `../AGENTS.md`의 한국어 미러입니다(2026-09-26, ADR 002 재계층화 시점에 재생성). 규범은 항상 `../AGENTS.md`이며, 두 문서가 다르면 원문을 따릅니다. `status`는 원문 커밋 해시를 재스탬프한 뒤 `synced`로 바뀝니다.
+> 이 문서는 `../AGENTS.md`의 한국어 미러입니다(2026-09-26, ADR 002 재계층화 시점에 재생성). 규범은 항상 `../AGENTS.md`이며, 두 문서가 다르면 원문을 따릅니다. `source_commit_hash`는 원문을 마지막으로 바꾼 커밋이며, docs-drift가 불일치를 검사합니다.
 
 이 파일은 **항상 켜져 있는(always-on)** 에이전트 정책입니다. 짧게 유지합니다.
 

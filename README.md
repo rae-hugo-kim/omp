@@ -65,14 +65,7 @@ MCP 서버(OMP 설정에 등록)를 설치합니다. docs는 빌드 도구 없�
 ```
 .
 ├── AGENTS.md              에이전트 정책 진입점 (OMP가 자동 로드)
-├── .omp/rules/harness-*.md  행동 규칙(omp 규칙집, rule://harness-<name>)
-│   ├── safety_security    안전/보안
-│   ├── anti_hallucination 증거 기반 동작
-│   ├── change_control     최소 변경 원칙
-│   ├── tdd_policy         RED → GREEN → TIDY
-│   ├── doc_standards      마크다운 SST + Mermaid 표준
-│   ├── ...                각 파일에 한 줄 설명 포함
-│   └── INDEX.md           전체 목록
+├── .omp/rules/harness-*.md  행동 규칙(omp 규칙집 — 매 프롬프트에 이름+설명, 본문은 rule://harness-<name>; harness-core는 상시)
 ├── checklists/            작업별 체크리스트
 ├── templates/             재사용 템플릿
 ├── .omp/

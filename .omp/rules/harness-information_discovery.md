@@ -21,7 +21,7 @@ The failure mode is treating the second case like the first: forming a hypothesi
 When the target is a class or the path is uncertain:
 
 1. **Global content grep** — `grep -rin "<keyword>" .` (ripgrep searches all text, incl. markdown/docs). Vary the keyword if the first term is a guess.
-2. **Convention directories** — `ls` the places this repo keeps such artifacts: `docs/sum/` (session summaries), `docs/`, `claudedocs/`, `docs/architecture/`, `rules/`, `checklists/`, `templates/`.
+2. **Convention directories** — `ls` the places this repo keeps such artifacts: `docs/sum/` (session summaries), `docs/`, `claudedocs/`, `docs/architecture/`, `.omp/rules/`, `checklists/`, `templates/`.
 3. **Filename/glob** — `find . -iname '*<term>*'` when you expect a name pattern, not body text.
 4. Only after the sweep comes up empty may you state the artifact is absent — and then say *what you searched* (per [`harness-anti_hallucination.md`](harness-anti_hallucination.md) Exception Protocol).
 

@@ -179,7 +179,7 @@ docs/rules/·docs/templates/·docs/checklists/ 같은 하네스 자산 경로는
 README.md·README.en.md·harness-meta.json·docs/glossary.yaml·docs/harness/audit.jsonl 편집일 때
 그 파일들은 채점에서 제외되어 커밋 전체가 low로 판정된다(`HARNESS WARNING: No scope file`은
 뜨지만 차단 아님). **같은 커밋에 다른 파일(사용자 코드, AGENTS.md 편집, 새 파일, 하네스 자산
-삭제 — `.omp/extensions/harness/`·`.githooks/`·`rules/` 등)을 섞으면 그 나머지가
+삭제 — `.omp/extensions/harness/`·`.githooks/`·`.omp/rules/harness-*.md` 등)을 섞으면 그 나머지가
 평소대로 채점**되어 review-gate/backpressure-gate에 걸릴 수 있다 — 초기 커밋은 Phase 2~3의 결과만
 담고, 프로젝트 고유 변경은 `/kickoff` 이후 별도 커밋으로 한다. Phase 3에서 `bootstrapped_at`을
 빠뜨렸거나 `git commit`이 세 번째 커밋이면 창이 닫혀 실제 위험도로 채점된다.
@@ -206,9 +206,9 @@ FAIL로 막힌다.
 
 ### Your project's own policy (survives `harness-check` sync)
 - `.omp/rules/<name>.md` — project rules (`alwaysApply: true` / `globs` / `condition`); use unique names such as `<project>-hard.md`, `<project>-context.md` for sticky requirements and project background
-- `.omp/RULES.md` — short sticky hard requirements (loads alongside the user-level `~/.omp/agent/RULES.md`)
+- `.omp/RULES.md` — short sticky hard requirements (shadowed when a user-level `~/.omp/agent/RULES.md` exists — both carry the fixed name `RULES`; prefer `.omp/rules/<name>.md` with `alwaysApply: true`)
 - `.omp/agents/<custom>.md`, `.omp/skills/<custom>/` — custom agents/skills
-Do NOT create `.omp/AGENTS.md` (any non-empty file makes OMP's native provider replace the root AGENTS.md at the same depth — the harness policy silently disappears). Do NOT add files under `rules/` or the harness skill/agent names — the next sync deletes or overwrites them. See AGENTS.md "Consumer extension points".
+Do NOT create `.omp/AGENTS.md` (any non-empty file makes OMP's native provider replace the root AGENTS.md at the same depth — the harness policy silently disappears). Do NOT name a project rule `harness-*` and do NOT add files under the harness skill/agent names — the next sync deletes or overwrites them. See AGENTS.md "Consumer extension points".
 ```
 
 ## Error Handling
