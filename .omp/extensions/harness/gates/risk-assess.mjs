@@ -33,7 +33,7 @@ const MANIFEST_REL = '.omp/extensions/harness/harness-manifest.json';
 // others exact. Kept static on purpose: the gate must not read the whitelist from a
 // worktree file it is trying not to trust.
 const HARNESS_ASSET_PATHS = [
-  'rules/', 'checklists/', 'templates/', '.omp/rules/harness-*.md', 'AGENTS.md', 'INDEX.md', 'EXAMPLES.md',
+  'checklists/', 'templates/', '.omp/rules/harness-*.md', 'AGENTS.md', 'INDEX.md', 'EXAMPLES.md',
   '.omp/extensions/harness/', '.githooks/', 'scripts/harness-version-bump.sh', 'scripts/harness-sync.sh',
   'scripts/harness-audit.sh', 'scripts/test-harness-audit.sh', '.omp/skills/', '.omp/agents/',
   'docs/rules/', 'docs/prompt-writing-handbook.md', 'docs/templates/', 'docs/checklists/',

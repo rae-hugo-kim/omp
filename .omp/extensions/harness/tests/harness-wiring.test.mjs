@@ -60,7 +60,7 @@ function expandGlob(p) {
 // .omp/skills/<custom> — all of which must survive a sync (never .omp/AGENTS.md: it shadows the policy).
 test('W3: whitelist directory entries are harness-owned; shared dirs are listed per file', () => {
   const paths = syncPaths();
-  const HARNESS_OWNED_DIRS = new Set(['rules', 'checklists', 'templates', '.omp/extensions/harness']);
+  const HARNESS_OWNED_DIRS = new Set(['checklists', 'templates', '.omp/extensions/harness']);
   const CONSUMER_SPACE = ['.omp/agents', '.omp/skills', '.omp/rules', '.omp', 'docs', 'docs/rules', 'scripts', '.githooks'];
   for (const p of paths) {
     assert.ok(!CONSUMER_SPACE.includes(p), `"${p}" is a shared/consumer directory — list its harness files individually, never the directory`);
@@ -113,14 +113,14 @@ test('W3b: kickoff/init contract templates and checklist are whitelisted as indi
   }
 });
 
-// W4 (#27): a synced document must not link to a path that does not sync. rules/ arrives in
+// W4 (#27): a synced document must not link to a path that does not sync. .omp/rules/harness-*.md arrives in
 // every consumer; a relative link from it to an unlisted docs/ file is dead there from day
 // one, and docs-drift (source-only) never sees the consumer tree.
 test('W4: whitelisted markdown never links outside the whitelist', () => {
   const paths = syncPaths();
   const covered = (rel) => paths.some((p) => (isGlob(p) ? globToRe(p).test(rel) : rel === p || rel.startsWith(`${p}/`)));
   const offenders = [];
-  for (const root of paths.filter((p) => ['rules', 'checklists', 'templates'].includes(p) || p.endsWith('.md'))) {
+  for (const root of paths.filter((p) => ['checklists', 'templates'].includes(p) || p.endsWith('.md'))) {
     const abs = join(repoRoot, root);
     if (!isGlob(root) && !existsSync(abs)) continue;
     const files = isGlob(root)

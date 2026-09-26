@@ -65,7 +65,7 @@ Skills also trigger from natural language ("let's kick off", "brainstorm this", 
 ```
 .
 ├── AGENTS.md              agent policy entry point (auto-loaded by OMP)
-├── rules/                 behavior rules (one file per rule, INDEX.md lists all)
+├── .omp/rules/harness-*.md  behavior rules (omp rulebook, rule://harness-<name>)
 ├── checklists/            task checklists
 ├── templates/             reusable templates
 ├── .omp/
@@ -196,7 +196,7 @@ vault (setup and entry point: [`docs/README.md`](docs/README.md)).
 | Layer | Mechanism |
 |-------|-----------|
 | `AGENTS.md` | Auto-loaded by OMP as a context file (when cwd is this repo) |
-| `rules/` etc. | Linked from AGENTS.md — agent opens them on demand via `read` |
+| `.omp/rules/harness-*.md` etc. | Listed in every prompt as the rulebook (name + description); body via `rule://harness-<name>`; `harness-core` is always injected |
 | `.omp/skills/` | OMP-native skill discovery (priority 100 — wins over same-named OMC skills) |
 | `.omp/agents/` | Discovered as task-tool delegation targets |
 | `.omp/extensions/harness/` | Extension auto-loaded at startup — wires the gates |
@@ -206,7 +206,7 @@ Claude Code's `settings.json` hook registration is not interpreted by OMP, so th
 
 ## Rule Customization
 
-Each file under `rules/` is an independent rule.
+Each `.omp/rules/harness-*.md` file is an independent rule.
 Delete what you don't need — the rest keeps working.
 
 | Category | Rules |

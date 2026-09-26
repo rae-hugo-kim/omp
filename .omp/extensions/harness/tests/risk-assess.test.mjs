@@ -421,7 +421,7 @@ test('bootstrap: deleting harness assets inside the window is scored, cleanup de
     assert.notEqual(r.level, 'low', `harness-asset deletions must be scored: ${r.reason}`);
     assert.deepEqual(r.files.sort(), ['.githooks/pre-commit', '.omp/extensions/harness/index.ts', '.omp/rules/harness-tdd_policy.md'], 'exactly the harness-asset deletions are scored');
     assert.ok(r.bootstrap.includes('claudedocs/CLAUDEKR.md') && r.bootstrap.includes('scripts/docs-drift') && r.bootstrap.includes('docs/plans/agent-browser-credentials-plan.md'), 'source-only cleanup deletions remain exempt');
-    assert.ok(!r.bootstrap.some((f) => f.startsWith('.omp/extensions/harness/index') || f.startsWith('.githooks/') || f.startsWith('rules/')), 'no harness asset may appear in the exempt set');
+    assert.ok(!r.bootstrap.some((f) => f.startsWith('.omp/extensions/harness/index') || f.startsWith('.githooks/') || f.startsWith('.omp/rules/harness-')), 'no harness asset may appear in the exempt set');
   });
 });
 

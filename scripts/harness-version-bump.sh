@@ -32,7 +32,6 @@ META_FILE="$REPO_ROOT/.omp/extensions/harness/harness-meta.json"
 # should produce a new version. Entries ending in "/" are directory prefixes;
 # others are exact file paths. (Excludes docs-drift — not synced.)
 HARNESS_PATHS=(
-  "rules/"
   "checklists/"
   "templates/"
   # aligned with harness-sync.sh: harness rulebook files in consumer-space .omp/rules sync by

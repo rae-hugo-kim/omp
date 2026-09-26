@@ -50,7 +50,7 @@ const NEW_ENTRY_LINE = `  "${NEW_ENTRY}"\n)`;
 // Minimal harness tree copied from this repo: enough for the script's PATHS loop to
 // have real things to copy, without dragging the whole repo into every fixture.
 // .omp/rules carries the harness-*.md rulebooks (ADR 002) — the glob whitelist entry's real payload.
-const SEED = ['scripts/harness-sync.sh', 'rules', '.omp/rules', '.githooks', '.omp/extensions/harness', '.omp/agents'];
+const SEED = ['scripts/harness-sync.sh', '.omp/rules', '.githooks', '.omp/extensions/harness', '.omp/agents'];
 
 function seedTree(dir, { withNewEntry }) {
   for (const p of SEED) {
@@ -103,9 +103,6 @@ function makeFixture({ consumerHasNewEntry = false } = {}) {
     const p = join(consumer, '.omp', 'extensions', 'harness', f);
     writeFileSync(p, `// stale consumer copy\n${readFileSync(p, 'utf-8')}`);
   }
-  rmSync(join(consumer, 'rules'), { recursive: true, force: true });
-  mkdirSync(join(consumer, 'rules'));
-  writeFileSync(join(consumer, 'rules', 'INDEX.md'), '# stale\n');
   // A consumer from before ADR 002 has no .omp/rules at all: the first sync must CREATE the
   // harness-*.md rulebooks (a real multi-file diff for the commit gates to exempt).
   rmSync(join(consumer, '.omp', 'rules'), { recursive: true, force: true });
@@ -548,7 +545,7 @@ for (const where of ['.omp/rules', '.omp']) {
       let target;
       if (where === '.omp') {
         // Ancestor case: the consumer's whole .omp/ (meta + extension, which the sync needs to
-        // find its source) moves outside and a link takes its place; rules/ lives under it.
+        // find its source) moves outside and a link takes its place; .omp/rules lives under it.
         renameSync(join(fx.consumer, '.omp'), join(outside, 'omp'));
         target = join(outside, 'omp', 'rules');
         mkdirSync(target, { recursive: true });
@@ -623,10 +620,10 @@ for (const v of ['GIT_LITERAL_PATHSPECS', 'GIT_GLOB_PATHSPECS', 'GIT_NOGLOB_PATH
       assert.doesNotMatch(r.stderr, /could not record the synced tree/);
       const tree = git(fx.consumer, ['ls-tree', '-r', '--name-only', 'refs/harness/2026.99']);
       assert.match(tree, /^\.omp\/rules\/harness-core\.md$/m);
-      assert.match(tree, /^rules\//m, 'directory entries still expand under literal pathspecs');
+      assert.match(tree, /^\.omp\/extensions\/harness\//m, 'directory entries still expand under literal pathspecs');
       const manifest = JSON.parse(readFileSync(join(fx.consumer, '.omp', 'extensions', 'harness', 'harness-manifest.json'), 'utf-8'));
       assert.ok(manifest.files['.omp/rules/harness-core.md']);
-      assert.ok(Object.keys(manifest.files).some((k) => k.startsWith('rules/')), 'directory entries are indexed in the manifest too');
+      assert.ok(Object.keys(manifest.files).some((k) => k.startsWith('.omp/extensions/harness/')), 'directory entries are indexed in the manifest too');
     });
   });
 }

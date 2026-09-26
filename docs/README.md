@@ -23,7 +23,7 @@
 
 1. **Open folder as vault** → repo 루트 선택
    (WSL: `\\wsl.localhost\<distro>\home\<user>\projects\workspace\omp`)
-   — `docs/`가 아닌 repo 루트여야 `rules/`·`checklists/`로의 크로스링크가 살아있다.
+   — `docs/`가 아닌 repo 루트여야 `.omp/rules/`·`checklists/`로의 크로스링크가 살아있다.
 2. 권장 설정:
    - Editor → Default view mode: **Reading**
    - Files & Links → **Use [[Wikilinks]] 끄기**, New link format: **Relative path**

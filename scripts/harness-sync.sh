@@ -138,7 +138,7 @@ echo "Target: harness/$latest_tag"
 # --- 4. Shallow clone the target tag into temp ---
 tmp=$(mktemp -d); tmp_owned=1
 # (removed by the _cleanup EXIT trap of THIS process — also after a hand-off child returns)
-# Containment: a TMPDIR inside the repo (e.g. under rules/) would let step 6 sweep the
+# Containment: a TMPDIR inside the repo (e.g. under checklists/) would let step 6 sweep the
 # clone mid-copy and leave a partial sync (review 2026-09-05 r3).
 case "$(_realdir "$tmp")/" in
   "$(_realdir "$REPO_ROOT")"/*) echo "Error: TMPDIR resolves inside the repository ($tmp); set TMPDIR outside it" >&2; exit 1 ;;
@@ -171,14 +171,13 @@ fi
 fi  # end of local-script preamble (skipped on the fetched fast path)
 # --- 5. Paths to overwrite (harness assets only — never user code) ---
 # Directory entries are `rm -rf` + copy: ONLY harness-owned directories may appear as a
-# directory (rules/, checklists/, templates/, .omp/extensions/harness, the harness skill
+# directory (checklists/, templates/, .omp/extensions/harness, the harness skill
 # dirs). Consumer extension points — .omp/rules/, .omp/RULES.md, custom .omp/agents/*.md,
 # custom .omp/skills/<name>, docs/ — must never be swept, so anything living in a shared
 # directory is listed file by file, or as a FILE GLOB with a literal harness- prefix
 # (ADR 002 §1): every file matching the pattern is replaced (stale matches pruned first),
 # siblings that do not match are never touched. Guarded by harness-wiring W3.
 PATHS=(
-  "rules"
   "checklists"
   "templates"
   # .omp/rules is consumer space (ADR 001 §3): harness rulebook files sync by prefix only.
