@@ -1,6 +1,9 @@
+---
+description: "Breadth-first discovery of prior summaries, docs, decisions before concluding an artifact is absent"
+---
 # Information Discovery (Breadth-First)
 
-The twin of [`repo_command_discovery.md`](repo_command_discovery.md): that file governs discovering **commands**; this one governs discovering **information artifacts** — prior summaries, docs, decisions, past work, "where is X / do we have any X".
+The twin of [`harness-repo_command_discovery.md`](harness-repo_command_discovery.md): that file governs discovering **commands**; this one governs discovering **information artifacts** — prior summaries, docs, decisions, past work, "where is X / do we have any X".
 
 ## MUST: don't conclude from a narrow guess
 
@@ -20,7 +23,7 @@ When the target is a class or the path is uncertain:
 1. **Global content grep** — `grep -rin "<keyword>" .` (ripgrep searches all text, incl. markdown/docs). Vary the keyword if the first term is a guess.
 2. **Convention directories** — `ls` the places this repo keeps such artifacts: `docs/sum/` (session summaries), `docs/`, `claudedocs/`, `docs/architecture/`, `rules/`, `checklists/`, `templates/`.
 3. **Filename/glob** — `find . -iname '*<term>*'` when you expect a name pattern, not body text.
-4. Only after the sweep comes up empty may you state the artifact is absent — and then say *what you searched* (per [`anti_hallucination.md`](anti_hallucination.md) Exception Protocol).
+4. Only after the sweep comes up empty may you state the artifact is absent — and then say *what you searched* (per [`harness-anti_hallucination.md`](harness-anti_hallucination.md) Exception Protocol).
 
 ## Delegate when the sweep is broad
 

@@ -1,3 +1,6 @@
+---
+description: "Record spec, decision log and retro for non-trivial changes (spec -> implement -> retro)"
+---
 # Assetization (Spec → Implement → Retro)
 
 ## SHOULD: leave a lightweight spec for non-trivial changes
@@ -16,7 +19,7 @@ This can live in an issue/PR description.
 - **SST**: During development, the **source of truth is the long-form PRD/overview** (not a separate 1-pager file).
 - **Default**: Do **not** create a separate 1-pager document “for insurance” by default.
 - **If needed**: Add a short **TL;DR (1-pager summary) section at the top of the PRD/overview** instead of creating a new file.
-  - Template: `../templates/prd_tldr_header.md`
+  - Template: `../../templates/prd_tldr_header.md`
 - **Triggers to add TL;DR** (examples):
   - PRD becomes too long to onboard quickly
   - Scope drift debates repeat during implementation
@@ -51,8 +54,8 @@ If a failure mode repeats:
 
 ## Templates
 
-- Assumptions: `../templates/assumptions.md`
-- Decision log: `../templates/decision_log.md`
-- Retro: `../templates/retro.md`
+- Assumptions: `../../templates/assumptions.md`
+- Decision log: `../../templates/decision_log.md`
+- Retro: `../../templates/retro.md`
 
 

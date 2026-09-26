@@ -1,9 +1,12 @@
+---
+description: "Human-facing output style: Korean polite register, conclusion first, no filler"
+---
 # Writing Style (Human-Facing Output)
 
 인간이 읽는 산출물 — PR 본문, 커밋 메시지, 이슈·리뷰 코멘트, `docs/`의 사람용 문서,
 세션 요약 — 의 **문체** 표준. 구조·형식은 `templates/pr_body.md`와
-[`doc_standards.md`](doc_standards.md)가, 언어 선택(한/영 분리)은
-[`documentation_policy.md`](documentation_policy.md)가 담당하고, 본 문서는
+[`harness-doc_standards.md`](harness-doc_standards.md)가, 언어 선택(한/영 분리)은
+[`harness-documentation_policy.md`](harness-documentation_policy.md)가 담당하고, 본 문서는
 "문장을 어떻게 쓸지"만 다룬다. 어조의 바탕은 글로벌 규칙의 경어체(해요체/합니다체)
 일관 원칙이며, 본 문서는 그 위에 가독성 기준을 얹는다.
 
@@ -45,7 +48,7 @@
 
 ### R6. 장식 최소화
 
-- 이모지 금지 — markdown 문서는 [`documentation_policy.md`](documentation_policy.md)의
+- 이모지 금지 — markdown 문서는 [`harness-documentation_policy.md`](harness-documentation_policy.md)의
   MUST와 동일하게 예외 없이 금지한다.
 - 굵은 글씨 강조는 문단당 1회 이내. 표는 비교 축이 2개 이상일 때만 사용한다
   (단순 목록을 표로 만들지 않는다).
@@ -83,7 +86,7 @@
 
 ## Related
 
-- [`commit_and_pr.md`](commit_and_pr.md) — PR 본문의 내용 요건 (무엇을 담을지)
-- [`doc_standards.md`](doc_standards.md) — 문서 형식 표준 (다이어그램·표·요약)
-- [`documentation_policy.md`](documentation_policy.md) — 독자별 언어 분리
-- `../templates/pr_body.md` — PR 본문 구조 템플릿
+- [`harness-commit_and_pr.md`](harness-commit_and_pr.md) — PR 본문의 내용 요건 (무엇을 담을지)
+- [`harness-doc_standards.md`](harness-doc_standards.md) — 문서 형식 표준 (다이어그램·표·요약)
+- [`harness-documentation_policy.md`](harness-documentation_policy.md) — 독자별 언어 분리
+- `../../templates/pr_body.md` — PR 본문 구조 템플릿

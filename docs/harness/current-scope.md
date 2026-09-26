@@ -7,7 +7,7 @@
 ## Acceptance Criteria
 - [x] AC1-adr-landed — ADR 002와 영속 사이클 큐(seed + current-scope)가 첫 커밋으로 착지한다
 - [x] AC2-sync-prefix-glob — harness-sync.sh가 .omp/rules/harness-*.md 접두사 글롭 항목을 소비자 파일 비접촉으로 동기화한다
-- [ ] AC3-rules-moved — rules/*.md 28편이 .omp/rules/harness-<name>.md로 이동하고 규칙집으로 노출된다
+- [x] AC3-rules-moved — rules/*.md 28편이 .omp/rules/harness-<name>.md로 이동하고 규칙집으로 노출된다
 - [ ] AC4-harness-core — .omp/rules/harness-core.md(alwaysApply)가 매 요청에 실린다
 - [ ] AC5-agents-md-slim — AGENTS.md가 색인·집행 표로 축약되고 rules/가 제거된다
 - [ ] AC6-consumer-migration — harness-check/migrate가 소비 리포의 rules/ 고아를 제거하고 링크 치환을 안내한다

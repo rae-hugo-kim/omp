@@ -58,13 +58,13 @@ them. Every other gate is wired by `.omp/extensions/harness/index.ts` (OMP event
 `tool_result`, `before_agent_start`, `session_start`). Gates require `node` on PATH; the pre-commit hook
 **fails closed** without it (`OMP_NODE_BIN` is the escape hatch for nvm/GUI/cron environments), while the
 in-process mermaid check needs no node. Known residuals (sparse-checkout, `stash`, `--no-verify`,
-out-of-jurisdiction repos) are enumerated in [`rules/harness_integration_contract.md`](rules/harness_integration_contract.md).
+out-of-jurisdiction repos) are enumerated in [`.omp/rules/harness-harness_integration_contract.md`](.omp/rules/harness-harness_integration_contract.md).
 
 OMC relationship: OMC agents and skills installed under `~/.claude` are discovered by OMP and usable via the `task` tool; OMC's hook automation (magic keywords, system-reminder injection) does **not** run under OMP — this extension replaces it for repo-level gating.
 
 **What this file adds**: Project-specific constraints, evidence standards, and documentation requirements.
 
-Harness verification contract details: [`rules/harness_integration_contract.md`](rules/harness_integration_contract.md)
+Harness verification contract details: [`.omp/rules/harness-harness_integration_contract.md`](.omp/rules/harness-harness_integration_contract.md)
 
 ## Terminology (RFC 2119)
 
@@ -86,37 +86,37 @@ Harness verification contract details: [`rules/harness_integration_contract.md`]
 - State assumptions explicitly. If uncertain, ask.
 - If multiple interpretations exist, present them — don't pick silently.
 - If a simpler approach exists, say so. Push back when warranted.
-- → Detail: [`rules/anti_hallucination.md`](rules/anti_hallucination.md)
+- → Detail: [`.omp/rules/harness-anti_hallucination.md`](.omp/rules/harness-anti_hallucination.md)
 
 ### 2. Simplicity First
 - No features beyond what was asked. No abstractions for single-use code.
 - If you write 200 lines and it could be 50, rewrite it.
 - Self-check: "Would a senior engineer say this is overcomplicated?"
-- → Detail: [`rules/change_control.md`](rules/change_control.md)
+- → Detail: [`.omp/rules/harness-change_control.md`](.omp/rules/harness-change_control.md)
 
 ### 3. Surgical Changes
 - Edit only lines that trace directly to the user's request.
 - Match existing style. Don't "improve" adjacent code.
 - If you notice unrelated issues, mention them — don't fix them.
-- → Detail: [`rules/change_control.md`](rules/change_control.md)
+- → Detail: [`.omp/rules/harness-change_control.md`](.omp/rules/harness-change_control.md)
 
 ### 4. Goal-Driven Execution
 - Transform vague tasks into verifiable goals with success criteria.
 - "Fix the bug" → "Write a test that reproduces it, then make it pass"
 - Each step should have: [action] → verify: [check]
-- → Detail: [`rules/verification_tests_and_evals.md`](rules/verification_tests_and_evals.md), [`rules/tdd_policy.md`](rules/tdd_policy.md)
+- → Detail: [`.omp/rules/harness-verification_tests_and_evals.md`](.omp/rules/harness-verification_tests_and_evals.md), [`.omp/rules/harness-tdd_policy.md`](.omp/rules/harness-tdd_policy.md)
 
 ## Non-Negotiables (MUST)
 
-- **No guessing**: do not invent versions, commands, APIs, or files; and do not conclude an artifact is absent from one narrow guess — when its path is uncertain, search broadly first ([`rules/information_discovery.md`](rules/information_discovery.md)).
+- **No guessing**: do not invent versions, commands, APIs, or files; and do not conclude an artifact is absent from one narrow guess — when its path is uncertain, search broadly first ([`.omp/rules/harness-information_discovery.md`](.omp/rules/harness-information_discovery.md)).
 - **Repo commands**: do not guess build/test/lint/typecheck/e2e/eval commands. Discover them.
 - **Risky actions**: require explicit approval before proposing/executing risky changes.
 - **Verification**: every user-impacting change must include at least one reproducible verification artifact.
-- **Docs/policy-only mode**: for pure markdown/policy/template edits, follow the docs-only verification path in `rules/verification_tests_and_evals.md` and include its required evidence format.
+- **Docs/policy-only mode**: for pure markdown/policy/template edits, follow the docs-only verification path in `.omp/rules/harness-verification_tests_and_evals.md` and include its required evidence format.
 - **Evidence**: cite concrete evidence for key decisions (file paths + excerpts or command output).
 - **Reference doc sync (source repo only)**: in the omp source repo, update `claudedocs/CLAUDEKR.md` (Korean mirror of this file) in the same PR or explicitly mark it as stale. Consumer repos have no such mirror (`claudedocs/` is not synced; an older `init` may have left a stale copy — delete it, it is not maintained).
 - **Scope self-detection (L1)**: during a session, when a scope-add / fix / new requirement appears, propose AC and either silent-append (testable + unambiguous) or ask on a material fidelity gap (push→pull) — never let a code change proceed with no tracking AC ([`docs/rules/scope_self_detect_policy.md`](docs/rules/scope_self_detect_policy.md); mechanical backstop = `acceptance-gate`).
-- **Cycle intake (L1)**: on receiving a new instruction, judge it against the 1-cycle definition (one-line verifiable completion check, singular deliverable, one-session scale). If it fails, propose a numbered decomposition with per-cycle check sentences before implementing — one proposal only; the user's "just proceed" is final ([`rules/cycle_definition.md`](rules/cycle_definition.md)).
+- **Cycle intake (L1)**: on receiving a new instruction, judge it against the 1-cycle definition (one-line verifiable completion check, singular deliverable, one-session scale). If it fails, propose a numbered decomposition with per-cycle check sentences before implementing — one proposal only; the user's "just proceed" is final ([`.omp/rules/harness-cycle_definition.md`](.omp/rules/harness-cycle_definition.md)).
 
 ## Completion Contract (MUST)
 
@@ -138,50 +138,50 @@ If you cannot comply with any MUST:
 
 ## MCP Server Policy (Trigger-based)
 
-- See [`rules/mcp_policy.md`](rules/mcp_policy.md) for full policies on all MCP servers. Servers are registered in OMP's MCP config (`omp://mcp-config.md`).
-- **External library/API truth**: use the `librarian` agent (source-reading) or direct official-doc reads. (Context7 policy retired 2026-08-26 — see `rules/mcp_policy.md`.)
+- See [`.omp/rules/harness-mcp_policy.md`](.omp/rules/harness-mcp_policy.md) for full policies on all MCP servers. Servers are registered in OMP's MCP config (`omp://mcp-config.md`).
+- **External library/API truth**: use the `librarian` agent (source-reading) or direct official-doc reads. (Context7 policy retired 2026-08-26 — see `.omp/rules/harness-mcp_policy.md`.)
 - **Supabase**: MUST use migrations for DDL; MAY use direct SQL for queries.
 - **Web Search**: SHOULD use for current events, errors, latest docs.
 
 ## Agent Routing Policy (Trigger-based)
 
-- See [`rules/agent_routing.md`](rules/agent_routing.md) for full routing rules
+- See [`.omp/rules/harness-agent_routing.md`](.omp/rules/harness-agent_routing.md) for full routing rules
   (incl. the 2026-06 retirement of the unused MCP delegation matrix).
-- **reviewer**: SHOULD delegate for **high/critical-risk** changes (per `risk-assess`: security/auth/migration files touched, or >100 changed lines of code). Low/medium-risk changes need self-review only — no extra spawn. 3-pass adversarial (self + heterogeneous adversary + code-reviewer, all three defined in `.omp/agents/` — no external plugin required; the reviewer nest-spawns Pass 2/3 via its `spawns:` frontmatter). This matches what `review-gate` enforces: machine evidence is a strict JSON tuple sidecar (`docs/reviews/review-<ts>.json`, `["omp-review-evidence/v1", <hash>, <verdict>, <models|null>, <human|null>, <reviewer>]` — the gate never parses markdown), with second-perspective evidence (a MEASURED >=2-family models array, or a human identity) required only for high/critical commits; the only bypass is an audited override (`docs/harness/review-skip` with `["omp-review-override/v1", <reason>, <approved_by>, <hash>]`, recorded to `docs/harness/audit.jsonl` and consumed). **Dispatch preflight (MUST)**: before spawning the reviewer, verify your own depth and `task`-tool availability — the reviewer needs the `task` tool for Pass 2/3 (recursion cap: depth <= 1), and a session without the `task` tool must not run the review in-session (entry-point priority: `rules/agent_routing.md`).
+- **reviewer**: SHOULD delegate for **high/critical-risk** changes (per `risk-assess`: security/auth/migration files touched, or >100 changed lines of code). Low/medium-risk changes need self-review only — no extra spawn. 3-pass adversarial (self + heterogeneous adversary + code-reviewer, all three defined in `.omp/agents/` — no external plugin required; the reviewer nest-spawns Pass 2/3 via its `spawns:` frontmatter). This matches what `review-gate` enforces: machine evidence is a strict JSON tuple sidecar (`docs/reviews/review-<ts>.json`, `["omp-review-evidence/v1", <hash>, <verdict>, <models|null>, <human|null>, <reviewer>]` — the gate never parses markdown), with second-perspective evidence (a MEASURED >=2-family models array, or a human identity) required only for high/critical commits; the only bypass is an audited override (`docs/harness/review-skip` with `["omp-review-override/v1", <reason>, <approved_by>, <hash>]`, recorded to `docs/harness/audit.jsonl` and consumed). **Dispatch preflight (MUST)**: before spawning the reviewer, verify your own depth and `task`-tool availability — the reviewer needs the `task` tool for Pass 2/3 (recursion cap: depth <= 1), and a session without the `task` tool must not run the review in-session (entry-point priority: `.omp/rules/harness-agent_routing.md`).
 - **verifier**: MUST delegate before claiming task completion when AC exists. The `task` spawn is non-blocking (async job delivery) — **spawning is not completing; declare done only after the verifier's verdict has actually arrived.**
 
 ## Linked Modules
 
-- Safety & security: [`rules/safety_security.md`](rules/safety_security.md)
-- Anti-hallucination & evidence: [`rules/anti_hallucination.md`](rules/anti_hallucination.md)
-- Repo command discovery: [`rules/repo_command_discovery.md`](rules/repo_command_discovery.md)
-- Information discovery (breadth-first): [`rules/information_discovery.md`](rules/information_discovery.md)
-- MCP server policies: [`rules/mcp_policy.md`](rules/mcp_policy.md)
-- Verification (tests + evals): [`rules/verification_tests_and_evals.md`](rules/verification_tests_and_evals.md)
-- Change control (minimal change, scope, tidy): [`rules/change_control.md`](rules/change_control.md)
-- Documentation policy (optional): [`rules/documentation_policy.md`](rules/documentation_policy.md)
-- Assetization (spec/decision/retro): [`rules/assetization.md`](rules/assetization.md)
-- Commit/PR discipline: [`rules/commit_and_pr.md`](rules/commit_and_pr.md)
-- TDD policy: [`rules/tdd_policy.md`](rules/tdd_policy.md)
-- Harness integration contract: [`rules/harness_integration_contract.md`](rules/harness_integration_contract.md)
-- Code review policy: [`rules/code_review_policy.md`](rules/code_review_policy.md)
-- Quality gates: [`rules/quality_gates.md`](rules/quality_gates.md)
-- Context management: [`rules/context_management.md`](rules/context_management.md)
-- Cost awareness: [`rules/cost_awareness.md`](rules/cost_awareness.md)
-- Learning policy: [`rules/learning_policy.md`](rules/learning_policy.md)
-- Coding standards: [`rules/coding_standards.md`](rules/coding_standards.md)
-- Prompt engineering (LLM pipeline prompt design, trust boundaries): [`rules/prompt_engineering.md`](rules/prompt_engineering.md)
-- Documentation standards: [`rules/doc_standards.md`](rules/doc_standards.md)
-- Writing style (human-facing tone): [`rules/writing_style.md`](rules/writing_style.md)
-- Agent security: [`rules/agent_security.md`](rules/agent_security.md)
-- Hook recipes: [`rules/hook_recipes.md`](rules/hook_recipes.md)
-- Session persistence: [`rules/session_persistence.md`](rules/session_persistence.md)
-- Adversarial review: [`rules/adversarial_review.md`](rules/adversarial_review.md)
-- Agent routing: [`rules/agent_routing.md`](rules/agent_routing.md)
+- Safety & security: [`.omp/rules/harness-safety_security.md`](.omp/rules/harness-safety_security.md)
+- Anti-hallucination & evidence: [`.omp/rules/harness-anti_hallucination.md`](.omp/rules/harness-anti_hallucination.md)
+- Repo command discovery: [`.omp/rules/harness-repo_command_discovery.md`](.omp/rules/harness-repo_command_discovery.md)
+- Information discovery (breadth-first): [`.omp/rules/harness-information_discovery.md`](.omp/rules/harness-information_discovery.md)
+- MCP server policies: [`.omp/rules/harness-mcp_policy.md`](.omp/rules/harness-mcp_policy.md)
+- Verification (tests + evals): [`.omp/rules/harness-verification_tests_and_evals.md`](.omp/rules/harness-verification_tests_and_evals.md)
+- Change control (minimal change, scope, tidy): [`.omp/rules/harness-change_control.md`](.omp/rules/harness-change_control.md)
+- Documentation policy (optional): [`.omp/rules/harness-documentation_policy.md`](.omp/rules/harness-documentation_policy.md)
+- Assetization (spec/decision/retro): [`.omp/rules/harness-assetization.md`](.omp/rules/harness-assetization.md)
+- Commit/PR discipline: [`.omp/rules/harness-commit_and_pr.md`](.omp/rules/harness-commit_and_pr.md)
+- TDD policy: [`.omp/rules/harness-tdd_policy.md`](.omp/rules/harness-tdd_policy.md)
+- Harness integration contract: [`.omp/rules/harness-harness_integration_contract.md`](.omp/rules/harness-harness_integration_contract.md)
+- Code review policy: [`.omp/rules/harness-code_review_policy.md`](.omp/rules/harness-code_review_policy.md)
+- Quality gates: [`.omp/rules/harness-quality_gates.md`](.omp/rules/harness-quality_gates.md)
+- Context management: [`.omp/rules/harness-context_management.md`](.omp/rules/harness-context_management.md)
+- Cost awareness: [`.omp/rules/harness-cost_awareness.md`](.omp/rules/harness-cost_awareness.md)
+- Learning policy: [`.omp/rules/harness-learning_policy.md`](.omp/rules/harness-learning_policy.md)
+- Coding standards: [`.omp/rules/harness-coding_standards.md`](.omp/rules/harness-coding_standards.md)
+- Prompt engineering (LLM pipeline prompt design, trust boundaries): [`.omp/rules/harness-prompt_engineering.md`](.omp/rules/harness-prompt_engineering.md)
+- Documentation standards: [`.omp/rules/harness-doc_standards.md`](.omp/rules/harness-doc_standards.md)
+- Writing style (human-facing tone): [`.omp/rules/harness-writing_style.md`](.omp/rules/harness-writing_style.md)
+- Agent security: [`.omp/rules/harness-agent_security.md`](.omp/rules/harness-agent_security.md)
+- Hook recipes: [`.omp/rules/harness-hook_recipes.md`](.omp/rules/harness-hook_recipes.md)
+- Session persistence: [`.omp/rules/harness-session_persistence.md`](.omp/rules/harness-session_persistence.md)
+- Adversarial review: [`.omp/rules/harness-adversarial_review.md`](.omp/rules/harness-adversarial_review.md)
+- Agent routing: [`.omp/rules/harness-agent_routing.md`](.omp/rules/harness-agent_routing.md)
 - Artifact roles (seed/scope/audit 3-tier): [`docs/rules/artifact_roles_contract.md`](docs/rules/artifact_roles_contract.md)
 - Scope self-detect policy (L1): [`docs/rules/scope_self_detect_policy.md`](docs/rules/scope_self_detect_policy.md)
-- Cycle definition (1사이클 인테이크 판정): [`rules/cycle_definition.md`](rules/cycle_definition.md)
-- Design contract (in-repo `design/DESIGN.md` + tokens as the only UI truth): [`rules/design_contract.md`](rules/design_contract.md)
+- Cycle definition (1사이클 인테이크 판정): [`.omp/rules/harness-cycle_definition.md`](.omp/rules/harness-cycle_definition.md)
+- Design contract (in-repo `design/DESIGN.md` + tokens as the only UI truth): [`.omp/rules/harness-design_contract.md`](.omp/rules/harness-design_contract.md)
 
 ## Checklists (Use as needed)
 

@@ -226,7 +226,7 @@ PATHS=(
   "docs/rules/seed_contract.md"
   "docs/rules/seed_evolution_policy.md"
   "docs/rules/startdev_seed_contract.md"
-  # 실전 절차 핸드북 — 원리 룰(rules/prompt_engineering.md)의 짝. 개별 파일 등재 (docs/는 소비 레포 공간).
+  # 실전 절차 핸드북 — 원리 룰(.omp/rules/harness-prompt_engineering.md)의 짝. 개별 파일 등재 (docs/는 소비 레포 공간).
   "docs/prompt-writing-handbook.md"
   # kickoff/init 계약 템플릿·체크리스트 (#35-7) — .omp/skills/kickoff, init이 직접 참조하는 파일.
   # docs/rules와 같은 이유로 개별 파일 등재 (docs/templates·docs/checklists는 소비 레포 공간).

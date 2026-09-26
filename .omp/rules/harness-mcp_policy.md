@@ -1,3 +1,6 @@
+---
+description: "When and how to use each MCP server (Supabase migrations, web search, retired Context7)"
+---
 # MCP Server Policies
 
 This document defines when and how to use MCP (Model Context Protocol) servers.

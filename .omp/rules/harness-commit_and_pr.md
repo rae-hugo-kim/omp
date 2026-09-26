@@ -1,3 +1,6 @@
+---
+description: "Commit message and PR body discipline, review evidence expectations"
+---
 # Commit & PR Discipline
 
 ## SHOULD: commit in small, reviewable units
@@ -21,7 +24,7 @@ At minimum:
 
 ## Template
 
-- PR description: `../templates/pr_body.md`
+- PR description: `../../templates/pr_body.md`
 
 
 

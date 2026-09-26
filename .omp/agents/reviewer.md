@@ -21,13 +21,13 @@ Single-perspective review misses bugs. Three independent reviewers catching the 
 Check your toolset first. If the `task` tool is ABSENT — either you are at the harness's
 recursion ceiling (`task.maxRecursionDepth`, default 2; measured: a depth-1 worker spawned
 you, landing you at depth 2) or your session's capability set excludes `task` (measured:
-fast-tier worker sessions run with 'Allowed: none' even at depth 1; rules/agent_routing.md)
+fast-tier worker sessions run with 'Allowed: none' even at depth 1; .omp/rules/harness-agent_routing.md)
 — do NOT review at all:
 - Perform no pass and write no artifact — no `docs/reviews/` report, no sidecar, no partial
   notes. A partial artifact can be mistaken for review evidence.
 - Return immediately with: "no task tool: review NOT performed — re-dispatch with the
   correct topology", restating the entry-point priority for the caller
-  (rules/agent_routing.md): (1) a depth-0 session spawns the reviewer agent; (2) a depth-1
+  (.omp/rules/harness-agent_routing.md): (1) a depth-0 session spawns the reviewer agent; (2) a depth-1
   session that HAS the `task` tool performs this protocol itself — Pass 1 as its own
   self-analysis, Pass 2/3 as its own depth-2 batch spawns; (3) with no `task` tool at all,
   escalate to a fresh top-level `omp -p` run.
@@ -80,6 +80,10 @@ task({
   }]
 })
 ```
+
+Operating notes for Pass 2/3 (measured 2026-09-26, issue #50 cycle ②):
+- Instruct the children to run verification commands WITHOUT pipes or `;` chains — `.omp/harness-state/` is shared across sessions in the same worktree, so a child's `node --test … | grep` exiting 1 records a backpressure FAIL that blocks the PARENT's commit (the parent recovers by re-running the suite in the foreground right before committing).
+- Never yield before the Pass 2/3 results have arrived — an idle reminder is not a termination reason; block on `wait`. (Measured: children left `cancelled` when the parent yielded after pass 1 alone; the parent had to be resumed via `write agent://` and the passes re-spawned.)
 
 ### Cross-Validation
 After all three passes:

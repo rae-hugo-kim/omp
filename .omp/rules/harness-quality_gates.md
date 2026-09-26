@@ -1,3 +1,6 @@
+---
+description: "Six named gates across the development lifecycle and what each requires"
+---
 # Quality Gates
 
 <!-- Harness: quality-gate hook enforces FORMAT/LINT automatically after file edits when present -->
@@ -44,7 +47,7 @@ Discovery order:
 | Before PR | FORMAT, LINT, TYPECHECK, TEST, BUILD |
 | Before merge | FORMAT, LINT, TYPECHECK, TEST, BUILD, EVAL (if applicable) |
 
-"If applicable" for EVAL: required when the change affects a quality surface (LLM output, ranking, visual output, performance baseline). See [`verification_tests_and_evals.md`](verification_tests_and_evals.md).
+"If applicable" for EVAL: required when the change affects a quality surface (LLM output, ranking, visual output, performance baseline). See [`harness-verification_tests_and_evals.md`](harness-verification_tests_and_evals.md).
 
 ---
 
@@ -86,7 +89,7 @@ Whether hooks are active or not, the gate failure protocol above applies to fail
 
 ## Adversarial Verification Gates
 
-Plan-attack, test-attack, completion-attack 게이트는 [`rules/adversarial_review.md`](adversarial_review.md)에서 별도 정의.
+Plan-attack, test-attack, completion-attack 게이트는 [`.omp/rules/harness-adversarial_review.md`](harness-adversarial_review.md)에서 별도 정의.
 
 ## Self-Check
 

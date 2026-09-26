@@ -1,3 +1,6 @@
+---
+description: "Designing prompts for LLM pipeline workers: trust boundaries, determinism, evaluation"
+---
 # Prompt Engineering (LLM 파이프라인 프롬프트 설계)
 
 LLM을 결정적 파이프라인의 부품으로 쓸 때(요약·번역·판정·분류 워커) 프롬프트를
@@ -168,7 +171,7 @@ N개는 전수 판정 목록으로 만들어 하나도 빠짐없이 picked/decli
 
 관할 주의: 본 절은 파이프라인이 조립하는 프롬프트 내부의 비신뢰 데이터가 대상이다.
 에이전트 환경 자체의 방어(설정 주입·공급망·메모리 오염)는
-[`agent_security.md`](agent_security.md) 관할.
+[`harness-agent_security.md`](harness-agent_security.md) 관할.
 
 비신뢰 입력의 정의: "현재 사용자가 아닌 모든 출처" — 피드 본문, RAG 조각, 도구
 출력, 타 사용자 콘텐츠, 외부 값으로서의 닉네임·파일명·제목. 대화형에서 유저
@@ -329,13 +332,13 @@ LLM 출력을 심사하는 기계 게이트가 의심될 때의 절차 (원 프�
 - 원천: 프로덕션 LLM 파이프라인(AIwitness) 프롬프트 전수 투어 스터디 노트
   (2026-07-31 ~ 2026-08-21) — `sum-vault/aiwitness-study/study/prompt-tour.md`.
   sum-vault는 PRIVATE 저장소로 이 레포에는 없다 (provenance 용,
-  [`doc_standards.md`](doc_standards.md) §Local Archives 참조).
+  [`harness-doc_standards.md`](harness-doc_standards.md) §Local Archives 참조).
 - 대상 코드베이스의 파일 경로·이슈 번호·사고 식별자는 본 문서에서 의도적으로
   제거했다 — 결정 규칙만 남기는 델타 원칙과 public 레포 sanitize 정책에 따름.
 
 ## Related
 
-- [`agent_security.md`](agent_security.md) — 에이전트 환경의 주입·공급망·메모리 방어 (본 문서와 관할 분리)
-- [`../docs/prompt-writing-handbook.md`](../docs/prompt-writing-handbook.md) — 쓸 때의 순서·체크리스트 (원리는 본 문서가, 절차는 핸드북이 소유)
-- [`verification_tests_and_evals.md`](verification_tests_and_evals.md) — 프롬프트 골든/결합 테스트가 속하는 검증 체계
-- [`anti_hallucination.md`](anti_hallucination.md) — 에이전트 자신의 출력 근거 규율
+- [`harness-agent_security.md`](harness-agent_security.md) — 에이전트 환경의 주입·공급망·메모리 방어 (본 문서와 관할 분리)
+- [`../../docs/prompt-writing-handbook.md`](../../docs/prompt-writing-handbook.md) — 쓸 때의 순서·체크리스트 (원리는 본 문서가, 절차는 핸드북이 소유)
+- [`harness-verification_tests_and_evals.md`](harness-verification_tests_and_evals.md) — 프롬프트 골든/결합 테스트가 속하는 검증 체계
+- [`harness-anti_hallucination.md`](harness-anti_hallucination.md) — 에이전트 자신의 출력 근거 규율

@@ -10,7 +10,7 @@ docs SST(`docs/`)에 포함되지 않으며, gitignore 대상이다.
 - PR 리뷰용 인라인 diff·주석 HTML
 - 데이터 큐레이션·정렬용 일회성 편집기
 
-상세는 [`rules/doc_standards.md`](../rules/doc_standards.md) R4 참조.
+상세는 [`.omp/rules/harness-doc_standards.md`](../.omp/rules/harness-doc_standards.md) R4 참조.
 
 ## 정책
 

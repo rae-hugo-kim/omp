@@ -1,3 +1,6 @@
+---
+description: "No guessing: find evidence or ask; cite file paths and command output for claims"
+---
 # Anti-Hallucination & Evidence
 
 ## MUST: do not guess

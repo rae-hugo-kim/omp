@@ -285,14 +285,14 @@ flowchart TB
 #### G7. PreCompact 훅 — 의도적 미채택 (결정 2026-05-27)
 - **현황**: 컨텍스트 압축 전 상태 보존 훅을 두지 않음. **갭이 아니라 결정**임.
 - **근거**: 우리 사용 패턴에서 한 세션이 컨텍스트의 ~50%도 채우는 일이 드물어 압축이 거의 발생하지 않음 → 압축 트리거 훅은 사실상 안 돎. 유지비 대비 가치 낮음.
-- **참조**: `rules/session_persistence.md`의 "Decision: summarization stays manual" 섹션.
+- **참조**: `.omp/rules/harness-session_persistence.md`의 "Decision: summarization stays manual" 섹션.
 - **갱신(2026-06)**: "이벤트 부재" 전제는 정정됨 — OMP는 `session.compacting`을 노출한다. 단 `breadcrumb-tracker`가 `tool_result`로 디스크에 no-LLM append하므로 압축에 의존하지 않고, **AC2 "보존"은 file-based `session-log.jsonl`이 충족**(압축은 대화만 압축하고 파일은 불변 → 별도 flush/preserve 핸들러 불요). 자율화 Q1.
 
 #### G8. Stop 훅 (세션 요약 부분) — 의도적 미채택 (결정 2026-05-27)
 - **현황**: 세션 종료 시 **자동 요약**은 두지 않음. **갭이 아니라 결정**임.
 - **근거**: `Stop` 훅은 어시스턴트 턴 종료 시 발화하지, 사용자가 작업 스레드를 끝내는 시점이 아님. 세션 종료는 기계로 감지 불가(사용자만 판단) → Stop 기반 자동 요약은 오발화함. 요약은 `sum` 스킬로 수동 유지.
 - **여전히 열린 부분**: test-history 정리·미완료 AC 경고 같은 비-요약 Stop 훅 아이디어는 별개로 검토 가능.
-- **참조**: `rules/session_persistence.md`의 "Decision: summarization stays manual" 섹션.
+- **참조**: `.omp/rules/harness-session_persistence.md`의 "Decision: summarization stays manual" 섹션.
 - **갱신(2026-06)**: 자동 **LLM** 요약 미채택은 유효(Q1.4 — 작업 완료를 인코딩하는 이벤트 없음). 단 no-LLM breadcrumb(`breadcrumb-tracker`)은 신설됐고, `session_start`에서 `breadcrumb-surface`가 `docs/sum/`를 표면화한다. 수동 `sum`은 breadcrumb을 seed로 소비.
 
 ## 5. 이벤트별 게이트 연결 현황 (`.omp/extensions/harness/index.ts`)

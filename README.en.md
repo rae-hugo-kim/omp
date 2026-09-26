@@ -143,7 +143,7 @@ Commit enforcement happens at git's own boundary, so it holds for every spelling
 | `post-merge` (non-blocking) | backstop | Observes merge auto-commits — the one path where git fires neither pre-commit nor post-commit |
 | `pre-push` (blocking) | archive leak + docs drift | Block tracked `docs/sum`·`docs/reviews` and FAIL-severity drift |
 
-Integration paths (merge auto-commits, cherry-pick, revert, rebase) are **deliberately not blocked**: they move content that was already gated at its origin commit, and the backstop observes them. Residual surfaces (sparse-checkout, `stash`, `--no-verify`, out-of-jurisdiction repos) are enumerated in [`rules/harness_integration_contract.md`](rules/harness_integration_contract.md).
+Integration paths (merge auto-commits, cherry-pick, revert, rebase) are **deliberately not blocked**: they move content that was already gated at its origin commit, and the backstop observes them. Residual surfaces (sparse-checkout, `stash`, `--no-verify`, out-of-jurisdiction repos) are enumerated in [`.omp/rules/harness-harness_integration_contract.md`](.omp/rules/harness-harness_integration_contract.md).
 
 - **seed.yaml** — structured kickoff output (goals, constraints, AC, risks)
 - **rubric** — 4-dimension clarity gate (HIGH/MED/LOW)
@@ -187,7 +187,7 @@ vault (setup and entry point: [`docs/README.md`](docs/README.md)).
 - Mermaid syntax is validated on save by the harness gate using OMP's bundled
   parser (`.omp/extensions/harness/mermaid-check.ts`)
 - Link integrity: `node scripts/docs-drift`
-- Writing standard: [`rules/doc_standards.md`](rules/doc_standards.md)
+- Writing standard: [`.omp/rules/harness-doc_standards.md`](.omp/rules/harness-doc_standards.md)
 - One-off human-facing HTML goes to `artifacts/` (gitignored except READMEs)
 - `docs/brainstorming/`, `docs/sum/`, `docs/reviews/` are local-only archives
 

@@ -1,3 +1,6 @@
+---
+description: "Optional module for teams maintaining substantial docs: navigation and consistency rules"
+---
 # Documentation Policy (Optional Module)
 
 This module is for teams that maintain substantial documentation and want consistent AI navigation.

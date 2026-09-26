@@ -1,3 +1,6 @@
+---
+description: "Required verification artifacts: tests, evals, docs-only path, evidence format"
+---
 # Verification: Tests + Evals
 
 ## Global enforcement assumed (provided by oh-my-claudecode)
@@ -144,8 +147,8 @@ When a task involves a quality surface (LLM output, ranking, visual output, perf
 5. **Run evals during implementation**: after each significant change, not just at the end.
 6. **Generate eval report**: document results using `templates/eval_report.md`.
 
-Templates: [`templates/eval_definition.md`](../templates/eval_definition.md), [`templates/eval_report.md`](../templates/eval_report.md)
-Checklist: [`checklists/eval.md`](../checklists/eval.md)
+Templates: [`templates/eval_definition.md`](../../templates/eval_definition.md), [`templates/eval_report.md`](../../templates/eval_report.md)
+Checklist: [`checklists/eval.md`](../../checklists/eval.md)
 
 ### Eval Anti-Patterns (MUST NOT)
 

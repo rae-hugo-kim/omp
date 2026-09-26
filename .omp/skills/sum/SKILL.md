@@ -164,7 +164,7 @@ API·스키마·env 키·스케줄·인터페이스 등 "다른 코드/사람이
 
 ### 7. Vault backup + 워크트리 사본 (fail-open)
 
-등재 직후 sum 문서와 `INDEX.md`를 중앙 아카이브(sum-vault)로 백업한다 — 프로젝트 레포는 `docs/sum/`을 추적하지 않으므로(untracked 정책, omp `rules/doc_standards.md`) vault가 유일한 백업이다. 링크드 워크트리에서 실행된 세션은 추가로 메인 체크아웃 `docs/sum/`에 사본을 남긴다(①.5).
+등재 직후 sum 문서와 `INDEX.md`를 중앙 아카이브(sum-vault)로 백업한다 — 프로젝트 레포는 `docs/sum/`을 추적하지 않으므로(untracked 정책, omp `.omp/rules/harness-doc_standards.md`) vault가 유일한 백업이다. 링크드 워크트리에서 실행된 세션은 추가로 메인 체크아웃 `docs/sum/`에 사본을 남긴다(①.5).
 
 커밋 게이트는 이제 **대상 레포의 `.githooks/pre-commit`** 에서 집행된다(2026-07-30 재설계).
 sum-vault는 하네스를 보유하지 않으므로 **관할 밖**이고, `git -C <vault> commit`은 게이트를

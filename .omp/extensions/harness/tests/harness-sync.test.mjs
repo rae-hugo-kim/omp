@@ -49,7 +49,8 @@ const NEW_ENTRY_LINE = `  "${NEW_ENTRY}"\n)`;
 
 // Minimal harness tree copied from this repo: enough for the script's PATHS loop to
 // have real things to copy, without dragging the whole repo into every fixture.
-const SEED = ['scripts/harness-sync.sh', 'rules', '.githooks', '.omp/extensions/harness', '.omp/agents'];
+// .omp/rules carries the harness-*.md rulebooks (ADR 002) — the glob whitelist entry's real payload.
+const SEED = ['scripts/harness-sync.sh', 'rules', '.omp/rules', '.githooks', '.omp/extensions/harness', '.omp/agents'];
 
 function seedTree(dir, { withNewEntry }) {
   for (const p of SEED) {
@@ -105,6 +106,9 @@ function makeFixture({ consumerHasNewEntry = false } = {}) {
   rmSync(join(consumer, 'rules'), { recursive: true, force: true });
   mkdirSync(join(consumer, 'rules'));
   writeFileSync(join(consumer, 'rules', 'INDEX.md'), '# stale\n');
+  // A consumer from before ADR 002 has no .omp/rules at all: the first sync must CREATE the
+  // harness-*.md rulebooks (a real multi-file diff for the commit gates to exempt).
+  rmSync(join(consumer, '.omp', 'rules'), { recursive: true, force: true });
   writeFileSync(join(consumer, '.omp', 'extensions', 'harness', 'harness-meta.json'),
     JSON.stringify({ version: '2026.50', updated: '2026-01-01', description: 'consumer', source_remote: `file://${bare}`, commit_sha: 'deadbeef', bootstrapped_at: '2026-01-01T00:00:00Z' }, null, 2));
   git(consumer, ['add', '-A']);
@@ -449,9 +453,11 @@ test('L: a target tag whose script predates the hand-off protocol is not exec\'d
 // The sync must replace every harness-* rulebook (stale ones pruned), leave consumer-named
 // siblings untouched, and record the expanded files in the provenance tree + manifest.
 
-// Re-publish the fixture tag with the given .omp/rules files in the source tree.
+// Re-publish the fixture tag with EXACTLY the given .omp/rules files in the source tree
+// (the seeded harness-*.md rulebooks are replaced; an empty map publishes a source with none).
 function publishRulebooks(fx, files) {
   const work = join(fx.root, 'source-work');
+  rmSync(join(work, '.omp', 'rules'), { recursive: true, force: true });
   mkdirSync(join(work, '.omp', 'rules'), { recursive: true });
   for (const [name, body] of Object.entries(files)) writeFileSync(join(work, '.omp', 'rules', name), body);
   git(work, ['add', '-A']);
@@ -502,6 +508,7 @@ test('ADR002: glob entry replaces harness-*.md in .omp/rules and never touches c
 
 test('ADR002: a source with NO harness-*.md never prunes the consumer\'s (glob entry skipped like an absent directory)', () => {
   withFixture({}, (fx) => {
+    publishRulebooks(fx, {});
     const rules = join(fx.consumer, '.omp', 'rules');
     mkdirSync(rules, { recursive: true });
     writeFileSync(join(rules, 'harness-old.md'), '# from an older harness\n');

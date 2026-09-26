@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // estimate-report.mjs — read `estimate_vs_actual` events out of docs/harness/audit.jsonl and print
-// the two tables a human reads before touching rules/agent_routing.md (seed 20260918-023000-e5a1,
-// AC6; rules/cycle_definition.md "예상 레코드"):
+// the two tables a human reads before touching .omp/rules/harness-agent_routing.md (seed 20260918-023000-e5a1,
+// AC6; .omp/rules/harness-cycle_definition.md "예상 레코드"):
 //
 //   1. Bias table   — predicted risk × measured risk cross-tab, plus the median of
 //                     predicted_files / actual_files (how far off the file-count guesses run).

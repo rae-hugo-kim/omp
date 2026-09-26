@@ -1,3 +1,6 @@
+---
+description: "When to compact long sessions, what to preserve, how to protect session-critical facts"
+---
 # Context Management
 
 <!-- Inspired by ECC strategic-compact skill. Translates automated compaction triggers into agent policy. -->

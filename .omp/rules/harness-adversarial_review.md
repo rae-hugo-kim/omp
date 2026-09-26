@@ -1,3 +1,6 @@
+---
+description: "3-pass adversarial verification layer: reviewer + heterogeneous adversary + code-reviewer, evidence tuples"
+---
 # Adversarial Review Policy
 
 <!-- Harness: adversarial gates are automatic triggers, not opt-in -->
@@ -5,7 +8,7 @@
 이 문서는 하네스 시스템의 적대적 검증(adversarial verification) 계층을 정의한다.
 모든 게이트는 자동 트리거이며, CRITICAL 판정 시 다음 단계 진행을 블로킹한다.
 
-관련 문서: [`rules/quality_gates.md`](quality_gates.md), [`rules/harness_integration_contract.md`](harness_integration_contract.md)
+관련 문서: [`.omp/rules/harness-quality_gates.md`](harness-quality_gates.md), [`.omp/rules/harness-harness_integration_contract.md`](harness-harness_integration_contract.md)
 
 ---
 
@@ -21,7 +24,7 @@
 
 ## 3-pass 코드 리뷰 불변식 (실행 토폴로지 공통)
 
-3-pass 적대 리뷰(`.omp/agents/reviewer.md`)는 실행 토폴로지가 둘이다 — depth 0 세션이 reviewer 에이전트를 스폰하거나, task capability를 가진 depth 1 세션이 프로토콜을 직접 수행한다(진입점 우선순위와 디스패치 preflight: [`rules/agent_routing.md`](agent_routing.md)). 어느 토폴로지든 아래 3개 불변식이 동일하게 적용된다 — 수행 주체의 유연성(에이전트든 세션이든)은 게이트 우회가 아니다.
+3-pass 적대 리뷰(`.omp/agents/reviewer.md`)는 실행 토폴로지가 둘이다 — depth 0 세션이 reviewer 에이전트를 스폰하거나, task capability를 가진 depth 1 세션이 프로토콜을 직접 수행한다(진입점 우선순위와 디스패치 preflight: [`.omp/rules/harness-agent_routing.md`](harness-agent_routing.md)). 어느 토폴로지든 아래 3개 불변식이 동일하게 적용된다 — 수행 주체의 유연성(에이전트든 세션이든)은 게이트 우회가 아니다.
 
 1. **이종성 증거는 실측만**: 사이드카의 models 배열은 자식(adversary) 트랜스크립트의 `model_change` 레코드 실측으로만 기재한다. 자기 신고·thread id·세션 id는 증거가 아니다.
 2. **리뷰 수행 세션 ≠ 변경 작성 세션**: 세션이 프로토콜을 직접 수행하는 경로에서 Pass 1(셀프 분석)의 독립성 조건이다. 변경을 작성한 세션이 자기 변경을 Pass 1으로 심사하면 self-review bias 제거라는 프로토콜의 목적이 무너진다.

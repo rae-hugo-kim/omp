@@ -1,3 +1,6 @@
+---
+description: "What to review, severity classification and output format for code reviews"
+---
 # Code Review Policy
 
 <!-- Harness: code-reviewer agent enforces this automatically -->
@@ -84,7 +87,7 @@ Flag immediately — these can cause real damage:
 
 ### Silent failures (HIGH)
 
-Errors that fail without an observable signal cause hidden data loss and untraceable bugs. Flag every instance. Authoring guidance counterpart: [`coding_standards.md` §Explicit error handling](coding_standards.md#must-explicit-error-handling).
+Errors that fail without an observable signal cause hidden data loss and untraceable bugs. Flag every instance. Authoring guidance counterpart: [`harness-coding_standards.md` §Explicit error handling](harness-coding_standards.md#must-explicit-error-handling).
 
 | Pattern | Example | Why it matters |
 |---|---|---|

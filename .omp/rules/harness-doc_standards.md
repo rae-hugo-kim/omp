@@ -1,3 +1,6 @@
+---
+description: "Markdown as source of truth, docs/sum untracked policy, HTML as derived artifact only"
+---
 # Documentation Standards
 
 저작 매체는 마크다운(SST). HTML은 *파생* 산출물 또는 *1회성* 사람용 아티팩트에만
@@ -75,7 +78,7 @@
 - 본 표준의 원 출처는 docs-viewer 미션(2026-06) seed의 AC였다 — 이후 `seed.yaml`은
   미션별로 회전하므로 현행 원본은 본 문서다. (mdBook+mmdc 파이프라인은 2026-07
   Obsidian 전환으로 폐지, 검증은 하네스 게이트로 이관)
-- `rules/change_control.md` — 최소 변경 원칙 (본 표준의 over-prescription 방지)
+- `.omp/rules/harness-change_control.md` — 최소 변경 원칙 (본 표준의 over-prescription 방지)
 - `artifacts/` — 1회성 HTML 산출물 격리 위치 (R4에 정책 인라인; 디렉터리 README는 소비 리포 소유)
 - `docs/handoff/` — 세션 간 핸드오프 문서. 위치·커밋 시점·마감 후 처분은
   `docs/rules/artifact_roles_contract.md` §Handoff 가 정의한다(seed의 전신, 3-tier 밖 입력).

@@ -153,7 +153,7 @@ kickoff → startdev 흐름에서 자동으로 작동하는 장치들. 집행 �
 | `post-merge` (비차단) | 백스톱 | merge 자동커밋 관측 — git이 pre-commit/post-commit을 발화하지 않는 유일 경로 |
 | `pre-push` (차단) | 아카이브 유출·docs drift | `docs/sum`·`docs/reviews` 추적 상태 및 FAIL 드리프트 차단 |
 
-통합 경로(merge 자동커밋·cherry-pick·revert·rebase)는 **의도적으로 차단하지 않습니다** — 원 커밋 시점에 이미 게이트를 통과한 콘텐츠의 이동이고, 백스톱이 관측합니다. 잔여면(sparse-checkout·stash·`--no-verify`·관할 밖 레포)은 [`rules/harness_integration_contract.md`](rules/harness_integration_contract.md)에 열거돼 있습니다.
+통합 경로(merge 자동커밋·cherry-pick·revert·rebase)는 **의도적으로 차단하지 않습니다** — 원 커밋 시점에 이미 게이트를 통과한 콘텐츠의 이동이고, 백스톱이 관측합니다. 잔여면(sparse-checkout·stash·`--no-verify`·관할 밖 레포)은 [`.omp/rules/harness-harness_integration_contract.md`](.omp/rules/harness-harness_integration_contract.md)에 열거돼 있습니다.
 
 - **seed.yaml** — 킥오프 결과를 구조화 (목표, 제약, 수락 기준, 리스크)
 - **rubric** — 4차원 명확도 게이트 (HIGH/MED/LOW)
@@ -199,7 +199,7 @@ git push --follow-tags
 - Mermaid syntax는 저장 시점에 하네스 게이트가 OMP 내장 파서로 검증
   (`.omp/extensions/harness/mermaid-check.ts`)
 - 링크 무결성: `node scripts/docs-drift`
-- 작성 표준: [`rules/doc_standards.md`](rules/doc_standards.md)
+- 작성 표준: [`.omp/rules/harness-doc_standards.md`](.omp/rules/harness-doc_standards.md)
 - 1회성 사람용 HTML은 `artifacts/`로 (gitignored, README 제외)
 - `docs/brainstorming/`, `docs/sum/`, `docs/reviews/`는 로컬 전용 아카이브
 

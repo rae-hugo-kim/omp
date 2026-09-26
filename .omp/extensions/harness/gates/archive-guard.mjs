@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // archive-guard.mjs - commit-time guard for LOCAL ARCHIVE paths (docs/sum, docs/reviews,
 // docs/brainstorming). Policy: session narratives never live in project repos — they stay
-// untracked locally and are backed up to the private sum-vault (rules/doc_standards.md).
+// untracked locally and are backed up to the private sum-vault (.omp/rules/harness-doc_standards.md).
 //
 // Dispatched by commit-gates.mjs on a real `git commit` (4th child). Independently runnable.
 //   - STAGED archive file -> BLOCK (exit 2): the commit would ingest a narrative.

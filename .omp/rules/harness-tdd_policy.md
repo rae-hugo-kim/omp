@@ -1,3 +1,6 @@
+---
+description: "RED -> GREEN -> TIDY cycle for all implementation work"
+---
 # TDD Policy
 
 ## MUST: Test-Driven Development for implementation

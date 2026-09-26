@@ -1,3 +1,6 @@
+---
+description: "Escalate model/effort tier only when the lower tier demonstrably cannot handle the task"
+---
 # Cost Awareness
 
 <!-- Inspired by ECC cost-tracker hook, which logs per-session token counts and

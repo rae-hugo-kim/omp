@@ -15,7 +15,7 @@
 - **Internal Rules / Checklists** — `docs/rules`, `docs/checklists` 모듈
 - **Session Summaries** — `docs/sum/` 회고 기록 (로컬 전용)
 - **Templates** — 문서 템플릿 모음
-- **Guides** — [프롬프트 작성 핸드북](prompt-writing-handbook.md) (실전 절차·체크리스트; 원리는 `rules/prompt_engineering.md`)
+- **Guides** — [프롬프트 작성 핸드북](prompt-writing-handbook.md) (실전 절차·체크리스트; 원리는 `.omp/rules/harness-prompt_engineering.md`)
 
 "로컬 전용" 섹션은 gitignore 대상이라 원격에는 없지만 vault에서는 열람·검색된다.
 
@@ -31,11 +31,11 @@
 3. `.obsidian/`(뷰어 설정)은 gitignore — 커밋하지 않는다.
 
 Mermaid는 Obsidian이 네이티브 렌더한다. 다이어그램 syntax는 저장 시점에
-하네스 게이트가 OMP 내장 파서로 검증한다 (`rules/doc_standards.md` R1).
+하네스 게이트가 OMP 내장 파서로 검증한다 (`.omp/rules/harness-doc_standards.md` R1).
 
 ## 정책
 
-- 저작은 마크다운으로 (`rules/doc_standards.md`)
+- 저작은 마크다운으로 (`.omp/rules/harness-doc_standards.md`)
 - 1회성 사람용 HTML 산출물은 `artifacts/`로 (SST 미포함)
 - 다이어그램은 Mermaid 기본 — 지원 타입은 doc_standards R1 참조
 - 링크 무결성 검사: `node scripts/docs-drift`

@@ -1,6 +1,9 @@
+---
+description: "Language-agnostic code shape constraints that prevent quality drift"
+---
 # Coding Standards
 
-<!-- Inspired by ECC coding-style and patterns rules. Covers code shape constraints complementing change_control.md (process/scope). -->
+<!-- Inspired by ECC coding-style and patterns rules. Covers code shape constraints complementing harness-change_control.md (process/scope). -->
 
 ## Purpose
 

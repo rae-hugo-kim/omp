@@ -1,6 +1,9 @@
+---
+description: "Defenses against prompt injection, supply-chain and memory poisoning in agent workflows"
+---
 # Agent Security (Adversarial Threat Defense)
 
-<!-- Inspired by ECC security guide. Complements safety_security.md (operational safety) with adversarial agent-specific threats. -->
+<!-- Inspired by ECC security guide. Complements harness-safety_security.md (operational safety) with adversarial agent-specific threats. -->
 
 ## Purpose
 

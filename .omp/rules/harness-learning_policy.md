@@ -1,3 +1,6 @@
+---
+description: "How lessons from sessions are captured and promoted into durable rules"
+---
 # Learning Policy
 
 <!-- Inspired by ECC continuous-learning-v2, which captures atomic "instincts"

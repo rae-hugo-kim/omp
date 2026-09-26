@@ -1,3 +1,6 @@
+---
+description: "Never guess build/test/lint commands: discover them from the repo (multi-repo safe default)"
+---
 # Repo Command Discovery (Multi-Repo Safe Default)
 
 ## MUST: never guess commands

@@ -6,7 +6,7 @@ task_id: "20260926-041251-0aa9"
 # 본문이 결정·근거·기각 대안·완료 기준을 담고 있어 kickoff 인터뷰는 생략(2026-09-18
 # estimate-vs-actual, 2026-09-24 omp1830-friction seed 선례). 직전 seed(omp1830-friction, done)는
 # docs/harness/archive/20260924-omp1830-friction/seed.yaml로 보관.
-# 사이클 인테이크(rules/cycle_definition.md) 판정: 분할 제안 → 8사이클, 2026-09-26 사용자 승인.
+# 사이클 인테이크(.omp/rules/harness-cycle_definition.md) 판정: 분할 제안 → 8사이클, 2026-09-26 사용자 승인.
 goal: >
   하네스 정책 문서 29편(rules/*.md)을 omp 규율 위계로 재배치한다 — 28편은
   .omp/rules/harness-<name>.md(규칙집, description frontmatter), 상시 요건은

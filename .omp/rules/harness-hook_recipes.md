@@ -1,10 +1,13 @@
+---
+description: "Ready-to-use OMP extension recipes for automatic quality enforcement"
+---
 # Hook Recipes
 
-<!-- Inspired by ECC hooks system. Complements harness_integration_contract.md (verification gates) with creation guidance and ready-to-use recipes. -->
+<!-- Inspired by ECC hooks system. Complements harness-harness_integration_contract.md (verification gates) with creation guidance and ready-to-use recipes. -->
 
 ## Purpose
 
-Concrete, ready-to-use OMP extension recipes for enforcing code quality automatically. Adapt commands to your project's actual toolchain (see `repo_command_discovery.md`).
+Concrete, ready-to-use OMP extension recipes for enforcing code quality automatically. Adapt commands to your project's actual toolchain (see `harness-repo_command_discovery.md`).
 
 An OMP extension is a TypeScript module under `.omp/extensions/` that exports a default function receiving the extension API (`pi`) and subscribes to events with `pi.on(...)`.
 
@@ -38,7 +41,7 @@ Handlers also receive a context object (`ctx`) with `ctx.cwd` and optional UI ac
 
 ## Recipe 1: Block large file creation (tool_call)
 
-Prevents creating files over 800 lines. Enforces the file size limit from `coding_standards.md`.
+Prevents creating files over 800 lines. Enforces the file size limit from `harness-coding_standards.md`.
 
 ```ts
 export default function (pi) {
@@ -135,4 +138,4 @@ export default function (pi) {
 
 **Gate-style stdin CLIs remain an option**: instead of inlining logic in the extension, keep each check as a standalone stdin-JSON script (exit 0 = allow, exit 2 = block) and spawn it from a thin adapter — the pattern used by this repo's harness (`.omp/extensions/harness/index.ts` spawning `gates/*.mjs` via `runGate(...)`). This keeps gates independently testable from the CLI.
 
-See `harness_integration_contract.md` for the project's existing verification gates.
+See `harness-harness_integration_contract.md` for the project's existing verification gates.

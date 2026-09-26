@@ -1,3 +1,6 @@
+---
+description: "In-repo design/DESIGN.md and tokens are the only UI truth; how agents consume them"
+---
 # Design Contract (저장소 안 디자인 계약)
 
 UI 디자인의 진실의 원천을 외부 툴이 아니라 **저장소 안 파일**에 둔다. 에이전트가
@@ -40,7 +43,7 @@ UI 디자인의 진실의 원천을 외부 툴이 아니라 **저장소 안 파�
 ### R3. 계약 변경은 화면 작업과 별도 사이클이다
 
 - 색·폰트·간격·컴포넌트 규칙을 바꾸는 작업은 `design/` 3파일만 건드리는 **독립
-  사이클**로 연다(`cycle_definition.md`). 화면 사이클 안에서 계약을 슬쩍 고치지
+  사이클**로 연다(`harness-cycle_definition.md`). 화면 사이클 안에서 계약을 슬쩍 고치지
   않는다.
 - 계약 변경의 확인 문장은 "`tokens.css` 변경분 + 영향 화면 목록 + 사용자 승인"이다.
 
@@ -56,7 +59,7 @@ UI 디자인의 진실의 원천을 외부 툴이 아니라 **저장소 안 파�
 - `design/DESIGN.md`가 없는 리포에 UI 작업 지시가 오면, 화면을 만들기 전에 **계약
   작성 사이클**을 역제안한다: 기존 코드에서 실제 사용 중인 색·폰트·간격을 추출해
   `design/` 3파일을 만드는 작업이 먼저다.
-- 사용자가 "그냥 진행"을 택하면 그 결정은 최종이다(`cycle_definition.md`의 역제안
+- 사용자가 "그냥 진행"을 택하면 그 결정은 최종이다(`harness-cycle_definition.md`의 역제안
   규칙과 같다). 이때도 새로 넣는 값은 최소한 `tokens.css`에 먼저 선언한다.
 
 ## Self-Check
@@ -79,6 +82,6 @@ UI 디자인의 진실의 원천을 외부 툴이 아니라 **저장소 안 파�
 
 ## Related
 
-- `../templates/DESIGN.md` — `design/DESIGN.md` 시작 템플릿(각 섹션에 "무엇을/왜" + 예시 값)
-- `cycle_definition.md` — 계약 변경 사이클·역제안 규칙의 근거
-- `change_control.md` — 화면 사이클에서 계약을 건드리지 않는 최소 변경 원칙
+- `../../templates/DESIGN.md` — `design/DESIGN.md` 시작 템플릿(각 섹션에 "무엇을/왜" + 예시 값)
+- `harness-cycle_definition.md` — 계약 변경 사이클·역제안 규칙의 근거
+- `harness-change_control.md` — 화면 사이클에서 계약을 건드리지 않는 최소 변경 원칙

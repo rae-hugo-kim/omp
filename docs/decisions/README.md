@@ -22,5 +22,5 @@
 
 ## Related
 
-- [`rules/assetization.md`](../../rules/assetization.md) — 결정 기록 SHOULD의 원 규칙
-- [`rules/prompt_engineering.md`](../../rules/prompt_engineering.md) §게이트 철거 — 대안 기각 기록·재발 트리거의 실전 원리
+- [`.omp/rules/harness-assetization.md`](../../.omp/rules/harness-assetization.md) — 결정 기록 SHOULD의 원 규칙
+- [`.omp/rules/harness-prompt_engineering.md`](../../.omp/rules/harness-prompt_engineering.md) §게이트 철거 — 대안 기각 기록·재발 트리거의 실전 원리

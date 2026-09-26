@@ -57,7 +57,7 @@ source_commit_hash: b379ed5a64db3eea14433d41706b5d385782e203
 
 **이 파일이 추가하는 것**: 프로젝트별 제약 사항, 증거 기준, 문서 요건.
 
-Harness 검증 계약 세부 사항: [`rules/harness_integration_contract.md`](../rules/harness_integration_contract.md)
+Harness 검증 계약 세부 사항: [`.omp/rules/harness-harness_integration_contract.md`](../.omp/rules/harness-harness_integration_contract.md)
 
 ## 용어 (RFC 2119)
 
@@ -79,37 +79,37 @@ Harness 검증 계약 세부 사항: [`rules/harness_integration_contract.md`](.
 - 가정을 명시적으로 밝힙니다. 불확실하면 질문합니다.
 - 여러 해석이 가능하면 모두 제시합니다 — 조용히 하나를 선택하지 않습니다.
 - 더 단순한 접근법이 있으면 말합니다. 필요하면 반론을 제기합니다.
-- → 세부 사항: [`rules/anti_hallucination.md`](../rules/anti_hallucination.md)
+- → 세부 사항: [`.omp/rules/harness-anti_hallucination.md`](../.omp/rules/harness-anti_hallucination.md)
 
 ### 2. 단순함 우선
 - 요청된 것 이상의 기능을 추가하지 않습니다. 단일 사용 코드에는 추상화를 쓰지 않습니다.
 - 200줄을 50줄로 쓸 수 있다면 다시 씁니다.
 - 자가 점검: "시니어 엔지니어가 이게 과도하게 복잡하다고 할까?"
-- → 세부 사항: [`rules/change_control.md`](../rules/change_control.md)
+- → 세부 사항: [`.omp/rules/harness-change_control.md`](../.omp/rules/harness-change_control.md)
 
 ### 3. 외과적 변경
 - 사용자의 요청에 직접 연결되는 줄만 수정합니다.
 - 기존 스타일을 맞춥니다. 인접 코드를 "개선"하지 않습니다.
 - 관련 없는 문제를 발견하면 언급하되 — 수정하지 않습니다.
-- → 세부 사항: [`rules/change_control.md`](../rules/change_control.md)
+- → 세부 사항: [`.omp/rules/harness-change_control.md`](../.omp/rules/harness-change_control.md)
 
 ### 4. 목표 기반 실행
 - 모호한 작업을 성공 기준이 있는 검증 가능한 목표로 변환합니다.
 - "버그를 고쳐" → "버그를 재현하는 테스트를 작성하고, 통과시킨다"
 - 각 단계는 다음 형태여야 합니다: [행동] → 검증: [확인]
-- → 세부 사항: [`rules/verification_tests_and_evals.md`](../rules/verification_tests_and_evals.md), [`rules/tdd_policy.md`](../rules/tdd_policy.md)
+- → 세부 사항: [`.omp/rules/harness-verification_tests_and_evals.md`](../.omp/rules/harness-verification_tests_and_evals.md), [`.omp/rules/harness-tdd_policy.md`](../.omp/rules/harness-tdd_policy.md)
 
 ## 양보 불가 항목 (MUST)
 
-- **추측 금지**: 버전, 커맨드, API, 파일을 발명하지 않습니다. 또한 한 군데만 좁게 확인하고 산출물이 "없다"고 단정하지 않습니다 — 경로가 불확실하면 먼저 넓게 검색합니다 ([`rules/information_discovery.md`](../rules/information_discovery.md)).
+- **추측 금지**: 버전, 커맨드, API, 파일을 발명하지 않습니다. 또한 한 군데만 좁게 확인하고 산출물이 "없다"고 단정하지 않습니다 — 경로가 불확실하면 먼저 넓게 검색합니다 ([`.omp/rules/harness-information_discovery.md`](../.omp/rules/harness-information_discovery.md)).
 - **레포 커맨드**: build/test/lint/typecheck/e2e/eval 커맨드를 추측하지 않습니다. 레포에서 찾아 사용합니다.
 - **위험 작업**: 위험한 변경을 제안/실행하기 전에 명시적 승인을 받습니다.
 - **검증**: 사용자 영향 변경은 최소 1개의 재현 가능한 검증 아티팩트가 있어야 합니다.
-- **문서/정책 전용 모드**: 순수 마크다운/정책/템플릿 편집의 경우, `rules/verification_tests_and_evals.md`의 docs-only 검증 경로를 따르고 필요한 증거 형식을 포함합니다.
+- **문서/정책 전용 모드**: 순수 마크다운/정책/템플릿 편집의 경우, `.omp/rules/harness-verification_tests_and_evals.md`의 docs-only 검증 경로를 따르고 필요한 증거 형식을 포함합니다.
 - **근거 제시**: 핵심 결정은 구체적 근거(파일 경로 + 발췌 또는 커맨드 출력)를 함께 제공합니다.
 - **Reference doc sync (소스 리포 전용)**: omp 소스 리포에서는 동일한 PR에서 `claudedocs/CLAUDEKR.md`(이 파일의 한국어 미러)를 업데이트하거나 명시적으로 stale로 표시합니다. 소비 리포에는 이 미러가 없습니다(`claudedocs/`는 동기화되지 않음; 구버전 `init`이 남긴 사본이 있다면 관리되지 않는 것이므로 삭제합니다).
 - **스코프 자가감지 (L1)**: 세션 중 scope-add / fix / 새 요구가 등장하면 AC를 제안하고, 테스트가능·명확하면 silent-append, material gap이면 질문(push→pull) — 추적 AC 없이 코드 변경이 진행되지 않게 합니다 ([`docs/rules/scope_self_detect_policy.md`](../docs/rules/scope_self_detect_policy.md); 기계적 backstop = `acceptance-gate`).
-- **사이클 인테이크 (L1)**: 새 지시를 받으면 1사이클 정의(한 줄 완료 확인 문장·단수 산출물·1세션 규모)로 판정하고, 미충족이면 구현 전에 사이클별 확인 문장이 포함된 분할안을 역제안합니다 — 제안은 1회, 사용자가 "그냥 진행"을 선택하면 재론하지 않습니다 ([`rules/cycle_definition.md`](../rules/cycle_definition.md)).
+- **사이클 인테이크 (L1)**: 새 지시를 받으면 1사이클 정의(한 줄 완료 확인 문장·단수 산출물·1세션 규모)로 판정하고, 미충족이면 구현 전에 사이클별 확인 문장이 포함된 분할안을 역제안합니다 — 제안은 1회, 사용자가 "그냥 진행"을 선택하면 재론하지 않습니다 ([`.omp/rules/harness-cycle_definition.md`](../.omp/rules/harness-cycle_definition.md)).
 
 ## 완료 보고 계약 (MUST)
 
@@ -131,50 +131,50 @@ Harness 검증 계약 세부 사항: [`rules/harness_integration_contract.md`](.
 
 ## MCP 서버 정책 (트리거 기반)
 
-- 전체 정책은 [`rules/mcp_policy.md`](../rules/mcp_policy.md)를 참조합니다.
-- **외부 라이브러리/API 검증**: `librarian` 에이전트(소스 직독) 또는 공식 문서 직독을 사용합니다. (Context7 정책은 2026-08-26 폐기 — `rules/mcp_policy.md` 참조.)
+- 전체 정책은 [`.omp/rules/harness-mcp_policy.md`](../.omp/rules/harness-mcp_policy.md)를 참조합니다.
+- **외부 라이브러리/API 검증**: `librarian` 에이전트(소스 직독) 또는 공식 문서 직독을 사용합니다. (Context7 정책은 2026-08-26 폐기 — `.omp/rules/harness-mcp_policy.md` 참조.)
 - **Supabase**: DDL에는 MUST 마이그레이션 사용; 쿼리에는 MAY 직접 SQL 사용.
 - **Web Search**: 최신 이벤트, 오류, 최신 문서에 SHOULD 사용.
 
 ## 에이전트 라우팅 정책 (트리거 기반)
 
-- 전체 라우팅 규칙은 [`rules/agent_routing.md`](../rules/agent_routing.md)를 참조합니다
+- 전체 라우팅 규칙은 [`.omp/rules/harness-agent_routing.md`](../.omp/rules/harness-agent_routing.md)를 참조합니다
   (2026-06 미사용 MCP 위임 매트릭스 폐기 기록 포함).
-- **reviewer**: `risk-assess` 기준 **high/critical** 위험 변경(보안/인증/마이그레이션 파일 접촉 또는 코드 100줄 초과)에 SHOULD 위임. low/medium 위험 변경은 셀프 리뷰(추가 스폰 없음)로 충분합니다. 3-패스 적대 리뷰(self + 이종 모델 adversary + code-reviewer — 셋 다 `.omp/agents/` 프로젝트 정의, 외부 플러그인 불요; reviewer가 frontmatter `spawns:`로 Pass 2/3를 중첩 스폰) — `review-gate`가 실제로 강제하는 수준과 일치합니다: 기계 증거는 strict JSON tuple 사이드카(`docs/reviews/review-<ts>.json`의 `["omp-review-evidence/v1", <hash>, <verdict>, <models|null>, <human|null>, <reviewer>]` — 게이트는 마크다운을 파싱하지 않음)이며, 2차 관점 증거(실측 ≥2 계열 models 배열 또는 human 신원)는 high/critical 커밋에만 요구됩니다. 유일한 우회는 감사된 override(`docs/harness/review-skip`에 `["omp-review-override/v1", <reason>, <approved_by>, <hash>]`, `docs/harness/audit.jsonl`에 기록·소비)입니다. **디스패치 preflight (MUST)**: reviewer를 스폰하기 전에 자신의 depth와 `task` 툴 가용성을 확인합니다 — reviewer는 Pass 2/3에 `task` 툴이 필요하므로(재귀 캡: depth 1 이하) `task` 툴이 없는 세션은 그 세션에서 리뷰를 진행하지 않습니다(진입점 우선순위: `rules/agent_routing.md`).
+- **reviewer**: `risk-assess` 기준 **high/critical** 위험 변경(보안/인증/마이그레이션 파일 접촉 또는 코드 100줄 초과)에 SHOULD 위임. low/medium 위험 변경은 셀프 리뷰(추가 스폰 없음)로 충분합니다. 3-패스 적대 리뷰(self + 이종 모델 adversary + code-reviewer — 셋 다 `.omp/agents/` 프로젝트 정의, 외부 플러그인 불요; reviewer가 frontmatter `spawns:`로 Pass 2/3를 중첩 스폰) — `review-gate`가 실제로 강제하는 수준과 일치합니다: 기계 증거는 strict JSON tuple 사이드카(`docs/reviews/review-<ts>.json`의 `["omp-review-evidence/v1", <hash>, <verdict>, <models|null>, <human|null>, <reviewer>]` — 게이트는 마크다운을 파싱하지 않음)이며, 2차 관점 증거(실측 ≥2 계열 models 배열 또는 human 신원)는 high/critical 커밋에만 요구됩니다. 유일한 우회는 감사된 override(`docs/harness/review-skip`에 `["omp-review-override/v1", <reason>, <approved_by>, <hash>]`, `docs/harness/audit.jsonl`에 기록·소비)입니다. **디스패치 preflight (MUST)**: reviewer를 스폰하기 전에 자신의 depth와 `task` 툴 가용성을 확인합니다 — reviewer는 Pass 2/3에 `task` 툴이 필요하므로(재귀 캡: depth 1 이하) `task` 툴이 없는 세션은 그 세션에서 리뷰를 진행하지 않습니다(진입점 우선순위: `.omp/rules/harness-agent_routing.md`).
 - **verifier**: AC가 존재할 때 작업 완료 주장 전에 MUST 위임.
 
 ## 연결된 모듈
 
-- Safety & security: [`rules/safety_security.md`](../rules/safety_security.md)
-- Anti-hallucination & evidence: [`rules/anti_hallucination.md`](../rules/anti_hallucination.md)
-- Repo command discovery: [`rules/repo_command_discovery.md`](../rules/repo_command_discovery.md)
-- Information discovery (breadth-first): [`rules/information_discovery.md`](../rules/information_discovery.md)
-- MCP server policies: [`rules/mcp_policy.md`](../rules/mcp_policy.md)
-- Verification (tests + evals): [`rules/verification_tests_and_evals.md`](../rules/verification_tests_and_evals.md)
-- Change control (minimal change, scope, tidy): [`rules/change_control.md`](../rules/change_control.md)
-- Documentation policy (optional): [`rules/documentation_policy.md`](../rules/documentation_policy.md)
-- Assetization (spec/decision/retro): [`rules/assetization.md`](../rules/assetization.md)
-- Commit/PR discipline: [`rules/commit_and_pr.md`](../rules/commit_and_pr.md)
-- TDD policy: [`rules/tdd_policy.md`](../rules/tdd_policy.md)
-- Harness integration contract: [`rules/harness_integration_contract.md`](../rules/harness_integration_contract.md)
-- Code review policy: [`rules/code_review_policy.md`](../rules/code_review_policy.md)
-- Quality gates: [`rules/quality_gates.md`](../rules/quality_gates.md)
-- Context management: [`rules/context_management.md`](../rules/context_management.md)
-- Cost awareness: [`rules/cost_awareness.md`](../rules/cost_awareness.md)
-- Learning policy: [`rules/learning_policy.md`](../rules/learning_policy.md)
-- Coding standards: [`rules/coding_standards.md`](../rules/coding_standards.md)
-- Prompt engineering (LLM 파이프라인 프롬프트 설계·신뢰 경계): [`rules/prompt_engineering.md`](../rules/prompt_engineering.md)
-- Documentation standards: [`rules/doc_standards.md`](../rules/doc_standards.md)
-- Writing style (human-facing tone): [`rules/writing_style.md`](../rules/writing_style.md)
-- Agent security: [`rules/agent_security.md`](../rules/agent_security.md)
-- Hook recipes: [`rules/hook_recipes.md`](../rules/hook_recipes.md)
-- Session persistence: [`rules/session_persistence.md`](../rules/session_persistence.md)
-- Adversarial review: [`rules/adversarial_review.md`](../rules/adversarial_review.md)
-- Agent routing: [`rules/agent_routing.md`](../rules/agent_routing.md)
+- Safety & security: [`.omp/rules/harness-safety_security.md`](../.omp/rules/harness-safety_security.md)
+- Anti-hallucination & evidence: [`.omp/rules/harness-anti_hallucination.md`](../.omp/rules/harness-anti_hallucination.md)
+- Repo command discovery: [`.omp/rules/harness-repo_command_discovery.md`](../.omp/rules/harness-repo_command_discovery.md)
+- Information discovery (breadth-first): [`.omp/rules/harness-information_discovery.md`](../.omp/rules/harness-information_discovery.md)
+- MCP server policies: [`.omp/rules/harness-mcp_policy.md`](../.omp/rules/harness-mcp_policy.md)
+- Verification (tests + evals): [`.omp/rules/harness-verification_tests_and_evals.md`](../.omp/rules/harness-verification_tests_and_evals.md)
+- Change control (minimal change, scope, tidy): [`.omp/rules/harness-change_control.md`](../.omp/rules/harness-change_control.md)
+- Documentation policy (optional): [`.omp/rules/harness-documentation_policy.md`](../.omp/rules/harness-documentation_policy.md)
+- Assetization (spec/decision/retro): [`.omp/rules/harness-assetization.md`](../.omp/rules/harness-assetization.md)
+- Commit/PR discipline: [`.omp/rules/harness-commit_and_pr.md`](../.omp/rules/harness-commit_and_pr.md)
+- TDD policy: [`.omp/rules/harness-tdd_policy.md`](../.omp/rules/harness-tdd_policy.md)
+- Harness integration contract: [`.omp/rules/harness-harness_integration_contract.md`](../.omp/rules/harness-harness_integration_contract.md)
+- Code review policy: [`.omp/rules/harness-code_review_policy.md`](../.omp/rules/harness-code_review_policy.md)
+- Quality gates: [`.omp/rules/harness-quality_gates.md`](../.omp/rules/harness-quality_gates.md)
+- Context management: [`.omp/rules/harness-context_management.md`](../.omp/rules/harness-context_management.md)
+- Cost awareness: [`.omp/rules/harness-cost_awareness.md`](../.omp/rules/harness-cost_awareness.md)
+- Learning policy: [`.omp/rules/harness-learning_policy.md`](../.omp/rules/harness-learning_policy.md)
+- Coding standards: [`.omp/rules/harness-coding_standards.md`](../.omp/rules/harness-coding_standards.md)
+- Prompt engineering (LLM 파이프라인 프롬프트 설계·신뢰 경계): [`.omp/rules/harness-prompt_engineering.md`](../.omp/rules/harness-prompt_engineering.md)
+- Documentation standards: [`.omp/rules/harness-doc_standards.md`](../.omp/rules/harness-doc_standards.md)
+- Writing style (human-facing tone): [`.omp/rules/harness-writing_style.md`](../.omp/rules/harness-writing_style.md)
+- Agent security: [`.omp/rules/harness-agent_security.md`](../.omp/rules/harness-agent_security.md)
+- Hook recipes: [`.omp/rules/harness-hook_recipes.md`](../.omp/rules/harness-hook_recipes.md)
+- Session persistence: [`.omp/rules/harness-session_persistence.md`](../.omp/rules/harness-session_persistence.md)
+- Adversarial review: [`.omp/rules/harness-adversarial_review.md`](../.omp/rules/harness-adversarial_review.md)
+- Agent routing: [`.omp/rules/harness-agent_routing.md`](../.omp/rules/harness-agent_routing.md)
 - Artifact roles (seed/scope/audit 3-tier): [`docs/rules/artifact_roles_contract.md`](../docs/rules/artifact_roles_contract.md)
 - Scope self-detect policy (L1): [`docs/rules/scope_self_detect_policy.md`](../docs/rules/scope_self_detect_policy.md)
-- Cycle definition (1사이클 정의 — 인테이크 판정·분할 역제안): [`rules/cycle_definition.md`](../rules/cycle_definition.md)
-- Design contract (저장소 안 `design/DESIGN.md` + 토큰만 UI 진실원): [`rules/design_contract.md`](../rules/design_contract.md)
+- Cycle definition (1사이클 정의 — 인테이크 판정·분할 역제안): [`.omp/rules/harness-cycle_definition.md`](../.omp/rules/harness-cycle_definition.md)
+- Design contract (저장소 안 `design/DESIGN.md` + 토큰만 UI 진실원): [`.omp/rules/harness-design_contract.md`](../.omp/rules/harness-design_contract.md)
 
 ## 체크리스트 (필요 시 사용)
 

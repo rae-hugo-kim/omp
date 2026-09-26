@@ -1,3 +1,6 @@
+---
+description: "Minimal scoped diffs, no drive-by refactors, how to report unrelated issues"
+---
 # Change Control (Scope, Minimal Change, Tidy)
 
 <!-- Harness: context-gate (read-before-edit); scope is via Surgical Changes + PR review -->

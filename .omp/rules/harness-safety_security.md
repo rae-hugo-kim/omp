@@ -1,3 +1,6 @@
+---
+description: "Hard rails: actions that always need explicit user approval (secrets, destructive ops, prod)"
+---
 # Safety & Security (Hard Rails)
 
 ## MUST: explicit approval before risky/irreversible actions

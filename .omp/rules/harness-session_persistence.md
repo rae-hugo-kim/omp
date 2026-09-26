@@ -1,10 +1,13 @@
+---
+description: "Mechanisms for saving and restoring session state across compaction and session boundaries"
+---
 # Session Persistence
 
-<!-- Inspired by ECC longform guide session storage patterns. Complements context_management.md (WHEN/WHAT to compact) with HOW/WHERE to persist and restore. -->
+<!-- Inspired by ECC longform guide session storage patterns. Complements harness-context_management.md (WHEN/WHAT to compact) with HOW/WHERE to persist and restore. -->
 
 ## Purpose
 
-Concrete mechanisms for saving and restoring session state across compaction events and session boundaries. `context_management.md` governs when to compact and what to preserve; this file governs how to persist and where to store it.
+Concrete mechanisms for saving and restoring session state across compaction events and session boundaries. `harness-context_management.md` governs when to compact and what to preserve; this file governs how to persist and where to store it.
 
 ---
 
@@ -13,7 +16,7 @@ Concrete mechanisms for saving and restoring session state across compaction eve
 Session state in this harness persists through three channels. Do **not** hand-author ad-hoc session-state files — that practice was never operationalized and the paths it named are owned by the runtime.
 
 - **Durable narrative → `sum` skill → `docs/sum/`.** The intentional, human-judged session summary: decisions, fixes/troubleshooting, what worked, what failed, what remains. Manual (see Decision below). This is the primary "resume context" artifact.
-- **Runtime state → OMP-owned session storage.** OMP persists full session history (messages, tool calls, resume state) under `~/.omp/agent/sessions/` automatically. That is OMP's namespace — do not write into it. Our harness's own state lives under `.omp/harness-state/` (see `harness_integration_contract.md`).
+- **Runtime state → OMP-owned session storage.** OMP persists full session history (messages, tool calls, resume state) under `~/.omp/agent/sessions/` automatically. That is OMP's namespace — do not write into it. Our harness's own state lives under `.omp/harness-state/` (see `harness-harness_integration_contract.md`).
 - **Cross-session facts → auto-memory.** Durable user/project/feedback knowledge lives in the memory system, not in transient session files.
 
 When capturing a phase boundary, fold the worked/failed/remaining detail into the `sum` summary — not a separate file.
@@ -71,9 +74,9 @@ Maintain named context profiles for common workflows:
 
 ## Relationship to Other Rules
 
-- **`context_management.md`**: Governs WHEN to compact and WHAT to preserve. This file governs HOW and WHERE.
-- **`learning_policy.md`**: Governs capturing reusable learnings. Session persistence covers the transient narrative (`sum` → `docs/sum/`); durable cross-session facts go to auto-memory.
-- **`hook_recipes.md`**: Provides the extension/gate mechanism; this file describes what to persist from those handlers.
+- **`harness-context_management.md`**: Governs WHEN to compact and WHAT to preserve. This file governs HOW and WHERE.
+- **`harness-learning_policy.md`**: Governs capturing reusable learnings. Session persistence covers the transient narrative (`sum` → `docs/sum/`); durable cross-session facts go to auto-memory.
+- **`harness-hook_recipes.md`**: Provides the extension/gate mechanism; this file describes what to persist from those handlers.
 
 ---
 
