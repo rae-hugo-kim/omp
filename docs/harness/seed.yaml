@@ -1,5 +1,6 @@
 name: policy-retiering
-status: approved
+status: done
+completed: 2026-09-26
 version: 1
 task_id: "20260926-041251-0aa9"
 # 사후 작성 seed: ADR docs/decisions/002-policy-layer-retiering.md(확정 2026-09-26)와 이슈 #50

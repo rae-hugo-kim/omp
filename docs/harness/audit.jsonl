@@ -147,3 +147,6 @@
 {"ts":"2026-09-26T10:53:08.503Z","event":"acceptance_wip","actor":"rae","meta":{"mechanism":"flag","reason":"unchecked:3"}}
 {"ts":"2026-09-26T11:39:25.855Z","event":"acceptance_wip","actor":"rae","meta":{"mechanism":"flag","reason":"unchecked:2"}}
 {"ts":"2026-09-26T11:39:25.934Z","event":"estimate_vs_actual","actor":"rae","meta":{"predicted":{"risk":"medium","files":6,"depth":"high","model":"claude-fable-5-1","effort":"medium","ts":"2026-09-26T10:56:34Z"},"actual":{"risk":"high","diffSize":176,"files":7,"reason":"176+ lines of code changed"},"fails_since_estimate":0}}
+{"ts":"2026-09-26T11:40:06.728Z","event":"acceptance_wip","actor":"rae","meta":{"mechanism":"flag","reason":"unchecked:1"}}
+{"ts":"2026-09-26T11:40:06.803Z","event":"estimate_vs_actual","actor":"rae","meta":{"predicted":{"risk":"low","files":4,"depth":"low","model":"claude-fable-5-1","effort":"medium","ts":"2026-09-26T11:40:06Z"},"actual":{"risk":"low","diffSize":56,"files":7,"reason":"documentation only"},"fails_since_estimate":0}}
+{"ts": "2026-09-26T11:51:42.000Z", "event": "task_closed", "actor": "assistant", "meta": {"task_id": "20260926-041251-0aa9", "name": "policy-retiering"}}
