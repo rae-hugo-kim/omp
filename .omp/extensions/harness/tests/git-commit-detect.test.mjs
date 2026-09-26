@@ -15,7 +15,10 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isGitCommit, parseCommitForm, isWipCommit } from '../gates/git-commit-detect.mjs';
+import { mkdtempSync, mkdirSync, symlinkSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { isGitCommit, parseCommitForm, isWipCommit, commitTargetDir } from '../gates/git-commit-detect.mjs';
 
 // --- Should DETECT (true): a real `git commit` invocation in some segment ---
 const DETECT = [
@@ -371,3 +374,61 @@ test('isWipCommit: scoped to the commit segment — no whole-line false-positive
   assert.equal(isWipCommit('git commit -m "wip: a" && git commit -m "wip: b"'), true);
 });
 
+
+// --- commitTargetDir (index.ts HEAD snapshot; #22 / #48-6) -------------------------
+// The repo whose HEAD a commit moves: plain -> base, -C -> resolved (chained like git),
+// bash -c recursed; null whenever the target cannot be trusted (cwd shift, substitution,
+// --git-dir/--work-tree/GIT_DIR=, two repos in one line) — the caller then falls back to
+// the exit code instead of snapshotting the wrong HEAD.
+
+test('commitTargetDir: plain commit -> base dir; -C resolves relative to base and chains', () => {
+  assert.equal(commitTargetDir('git commit -m x', '/base'), '/base');
+  assert.equal(commitTargetDir('git add . && git commit -m x', '/base'), '/base');
+  assert.equal(commitTargetDir('git commit -m "fix: cd into dir"', '/base'), '/base', 'a quoted message is one token — no over-match');
+  assert.equal(commitTargetDir('git -C ../other commit -m x', '/base/repo'), '/base/other');
+  assert.equal(commitTargetDir('git -C /abs commit', '/base'), '/abs');
+  assert.equal(commitTargetDir('git -C a -C b commit', '/base'), '/base/a/b');
+  assert.equal(commitTargetDir('git -C "/with space" commit', '/base'), '/with space');
+  assert.equal(commitTargetDir("bash -c 'git -C /r commit -m x'", '/base'), '/r');
+  assert.equal(commitTargetDir('git -C /a commit -m a && git -C /a commit --amend', '/base'), '/a');
+});
+
+test('commitTargetDir: null when the target repo cannot be trusted or there is no commit', () => {
+  for (const cmd of ['cd other && git commit -m x', 'pushd x && git commit', 'git -C $(pwd) commit',
+                     'git --git-dir=/x commit', 'git --work-tree /x commit', 'GIT_DIR=/x git commit',
+                     'git -c core.worktree=/x commit', 'git -C /a commit && git -C /b commit',
+                     // review round 1 (#48 cycle ①): values the shell would still expand, and cwd
+                     // shifters hidden behind wrappers / builtins / exported retargeting.
+                     'git -C ~/repo commit', 'git -C $REPO commit', 'git -C "$REPO" commit', 'git -C "$(pwd)" commit',
+                     'git -C /tmp/r* commit', 'for d in a b; do git -C $d commit; done',
+                     'command cd x && git commit', 'builtin cd x; git commit', 'eval "cd x" && git commit',
+                     'source env.sh && git commit', '. env.sh && git commit', 'env -C /x git commit', 'env --chdir=/x git commit',
+                     'export GIT_DIR=/x && git commit',
+                     // review round 2: builtin runners around source/., attached/abbreviated env chdir,
+                     // wrapper chdir behind an earlier candidate, brace expansion.
+                     'command source e.sh && git commit', 'builtin . e.sh && git commit', 'command . e.sh; git commit',
+                     'env -C/x git commit', 'env --chd=/x git commit', 'sudo -u git env -C /o git commit', 'git -C /tmp/r{1..1} commit',
+                     'sudo -D /x git commit', 'sudo -D/x git commit',
+                     'ls -la', 'git status', '']) {
+    assert.equal(commitTargetDir(cmd, '/base'), null, cmd);
+  }
+  assert.equal(commitTargetDir('git commit', ''), null);
+  assert.equal(commitTargetDir(undefined, '/base'), null);
+});
+
+test('commitTargetDir: -C chaining follows symlinks like git chdir (physical, not lexical)', () => {
+  const root = mkdtempSync(join(tmpdir(), 'ctd-'));
+  try {
+    mkdirSync(join(root, 'A'));
+    mkdirSync(join(root, 'B'));
+    symlinkSync(join(root, 'B'), join(root, 'A', 'link'));
+    // git -C A/link -C .. lands in B's parent (root), not A (the lexical parent of A/link).
+    assert.equal(commitTargetDir('git -C A/link -C .. commit', root), realpathSync(root));
+    assert.equal(commitTargetDir('git -C A/link commit', root), realpathSync(join(root, 'B')));
+    // Same within ONE value: `link/..` is the parent of the link TARGET (round 2, C2) — a lexical
+    // resolve() would collapse it to A before any symlink is seen.
+    assert.equal(commitTargetDir('git -C A/link/.. commit', root), realpathSync(root));
+    // And a symlinked BASE: from A/link (=B) `-C ..` is root, not A.
+    assert.equal(commitTargetDir('git -C .. commit', join(root, 'A', 'link')), realpathSync(root));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

@@ -61,7 +61,7 @@ test('bash tool_result: the pending branch records a breadcrumb with pending: tr
 
 test('bash tool_result: the commit-success guard (drift recheck + cycle note) sits behind the pending guard', () => {
   const { bash, ret } = pendingBranch();
-  const commit = bash.search(/isGitCommit\(command\)\s*&&\s*!bashRunFailed\(event\)/);
+  const commit = bash.search(/if \(landed\) \{/);
   assert.notEqual(commit, -1, 'the commit-success guard must still exist');
   assert.ok(commit > ret, 'a backgrounded `git commit` is not a commit yet — no drift recheck, no cycle-boundary note');
 });

@@ -58,6 +58,9 @@
 //     and `xargs echo git commit` are lookups/echoes, not commits, but report true.
 //   - Past MAX_DEPTH of nested `bash -c`, detection FAILS CLOSED (treats it as a commit).
 
+import { realpathSync } from 'fs';
+import { dirname, join } from 'path';
+
 const MAX_DEPTH = 5;
 
 const RESERVED = new Set(['if', 'then', 'elif', 'else', 'fi', 'while', 'until', 'for',
@@ -786,5 +789,104 @@ export function isWipCommit(command) {
     if (!commitArgsHaveWip(info.args)) return false;       // a non-WIP commit present -> don't bypass
   }
   return sawCommit;
+}
+
+// --- commit target repo (index.ts HEAD snapshot; #22 / #48-6) ------------------
+// The directory whose HEAD a `git commit` in `command` would move — so the extension can
+// snapshot HEAD before the call and tell a landed commit from a gate-blocked one (HEAD
+// unchanged), in the repo the commit actually targets (`git -C other commit` moved the
+// OTHER repo's HEAD, not the session's — issue #22). Static and best-effort:
+//   `git -C <dir> commit`    -> <dir>, chained -C resolved relative to the previous (like git)
+//   plain `git commit`       -> baseDir (the bash tool's cwd input, else the session cwd)
+//   `bash -c "git … commit"` -> recursed with the same base
+// Returns null when the target cannot be trusted — a `cd`/`pushd`/`eval` token anywhere, a -C
+// value the shell would still expand (`~`, `$VAR`, `$(…)`, glob), `env -C`/`--chdir`,
+// --git-dir/--work-tree/GIT_DIR= retargeting, or two commit segments naming different repos.
+// Callers treat null as "unknown" and fall back to the exit code rather than guessing a HEAD.
+// A token that moves the cwd or re-executes text makes the commit's target unknowable
+// statically. `cd`/`pushd`/`popd`/`eval`/`source` are matched as ANY token so `command cd x`,
+// `builtin source e.sh`, `eval "cd x"` are caught; `.` (the source builtin) only at the program
+// position or right after `command`/`builtin` — it is also the everyday pathspec in `git add .`.
+// A quoted message stays ONE token, so `-m "cd x"` does not over-match; an unquoted over-match
+// only costs the exit-code fallback, never a wrong repo.
+const CWD_SHIFTERS = new Set(['cd', 'pushd', 'popd', 'eval', 'source']);
+const BUILTIN_RUNNERS = new Set(['command', 'builtin']);
+// A wrapper's own chdir option — GNU env `-C dir` / `-Cdir` / `--chdir=dir` and its unambiguous
+// abbreviations (`--ch`, `--chd`, …), sudo `-D dir` — moves the program's cwd.
+const WRAPPER_CHDIR = /^(-C|-D|--ch)/;
+// A -C value the shell would still expand — `~`, `$VAR`, `$(…)`/backticks (quoted forms survive
+// tokenize() with their `$`), globs, brace expansion — is not the literal directory git will see.
+const UNEXPANDED = /[$`*?[{]|^~/;
+// Change directory the way git's chdir does: component by component, following symlinks at
+// each step, so `-C link/..` is the PARENT OF THE LINK TARGET (lexical `resolve()` would
+// collapse `link/..` to the link's own parent first — and so does Node's JS `realpathSync`,
+// which normalizes before walking; only the libc-backed `.native` follows the link first). A
+// component that does not exist stays lexical — readHead fails there anyway.
+function physical(p) {
+  try { return realpathSync.native(p); } catch { return p; }
+}
+function chdir(from, v) {
+  let cur = v.startsWith('/') ? '/' : physical(from);
+  for (const part of v.split('/')) {
+    if (part === '' || part === '.') continue;
+    cur = part === '..' ? dirname(cur) : physical(join(cur, part));
+  }
+  return cur;
+}
+
+function scanCommitTarget(command, baseDir, depth) {
+  if (depth > MAX_DEPTH) return { unknown: true };
+  let dir = null;
+  const merge = (d) => { if (dir !== null && dir !== d) return false; dir = d; return true; };
+  for (const seg of lexSegments(command)) {
+    const toks = tokenize(seg);
+    if (toks.length === 0) continue;
+    if (toks.some((t, i) => CWD_SHIFTERS.has(basename(t)) || GIT_REPO_REDIRECT_ENV.test(t)
+      || (t === '.' && i > 0 && BUILTIN_RUNNERS.has(toks[i - 1])))) return { unknown: true };
+    const cands = programCandidates(toks);
+    if (cands.length === 0) continue;
+    if (toks[cands[0]] === '.') return { unknown: true };
+    for (const pi of cands) {
+      // Anything before THIS program position is wrapper territory (`sudo -u git env -C /o git …`).
+      if (toks.slice(0, pi).some((t) => WRAPPER_CHDIR.test(t))) return { unknown: true };
+      const rest = toks.slice(pi);
+      const b = basename(rest[0]);
+      if (b === 'bash' || b === 'sh') {
+        const inner = bashDashCPayload(rest);
+        if (inner === null) continue;
+        const r = scanCommitTarget(inner, baseDir, depth + 1);
+        if (r === null) continue;
+        if (r.unknown || !merge(r.dir)) return { unknown: true };
+        continue;
+      }
+      if (b !== 'git') continue;
+      let i = 1, target = physical(baseDir), terminal = false;
+      while (i < rest.length) {
+        const t = rest[i];
+        if (!t.startsWith('-')) break;
+        if (GIT_TERMINAL_OPT.has(t) || t.startsWith('--list-cmds')) { terminal = true; break; }
+        const nameOnly = t.includes('=') ? t.slice(0, t.indexOf('=')) : t;
+        if (t === '-C') {
+          const v = rest[i + 1];
+          if (v === undefined || UNEXPANDED.test(v)) return { unknown: true };
+          target = chdir(target, v);
+          i += 2; continue;
+        }
+        if (GIT_REPO_REDIRECT_OPT.has(nameOnly) || nameOnly === '--config-env') return { unknown: true };
+        if (t === '-c' && GIT_REPO_REDIRECT_CONFIG.test(rest[i + 1] || '')) return { unknown: true };
+        if (GIT_OPT_WITH_ARG.has(t)) { if (substShredValue(rest[i + 1] ?? '')) return { unknown: true }; i += 2; continue; }
+        i += 1;
+      }
+      if (terminal || rest[i] !== 'commit') continue;
+      if (!merge(target)) return { unknown: true };
+    }
+  }
+  return dir === null ? null : { dir };
+}
+
+export function commitTargetDir(command, baseDir) {
+  if (!command || typeof command !== 'string' || !baseDir) return null;
+  const r = scanCommitTarget(command, baseDir, 0);
+  return r && !r.unknown ? r.dir : null;
 }
 

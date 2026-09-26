@@ -55,9 +55,9 @@ test('before_agent_start rechecks drift with the 1h window and returns a harness
 
 test('bash tool_result: recheck is gated on a successful git commit', () => {
   const bash = bashBranch();
-  const guard = bash.search(/isGitCommit\(command\)\s*&&\s*!bashRunFailed\(event\)/);
+  const guard = bash.search(/if \(landed\) \{/);
   assert.notEqual(guard, -1,
-    'recheck must gate on isGitCommit(command) && !bashRunFailed(event) — failed commits stay quiet');
+    'recheck must gate on the landed predicate (HEAD moved in the target repo, exit code only as fallback) — blocked/failed commits stay quiet');
   const call = bash.search(RECHECK_CALL);
   assert.notEqual(call, -1,
     'post-commit path must reuse the SAME 1h-window gate call as turn start');

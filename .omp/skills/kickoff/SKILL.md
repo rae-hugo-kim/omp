@@ -200,7 +200,7 @@ No coding. Only information gathering + state file saving to `docs/harness/`.
 2. 엣지 케이스는 무엇인가?
 3. 실패 시나리오는 어떻게 처리해야 하는가?
 
-**Gate**: 최소 3개의 구체적인 수락 기준이 정의될 때까지
+**Gate**: 최소 3개의 구체적인 수락 기준이 정의될 때까지. **각 기준은 커밋 시점에 판정 가능해야 한다** — "PR을 연다", "태그를 푸시한다", "머지한다"처럼 그 커밋 *뒤에* 참이 되는 항목은 AC가 아니라 후속 절차로 적는다(`.omp/rules/harness-cycle_definition.md`; acceptance-gate와 순환해 거짓 체크나 WIP 우회를 유도한다).
 
 **Output**:
 ```markdown

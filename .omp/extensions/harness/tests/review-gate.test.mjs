@@ -183,7 +183,27 @@ test('high risk + today sidecar exists but none covers the current diff -> BLOCK
   });
 });
 
-test('yesterday-named sidecar with the right hash -> BLOCK (today-only scan)', () => {
+// #48-2: the scan window is today + yesterday (local). A review written at 23:5x binds the
+// same diff hash as the commit that lands after midnight; the date only bounds the scan.
+const _y = new Date(_now.getFullYear(), _now.getMonth(), _now.getDate() - 1);
+const YESTERDAY = `${_y.getFullYear()}-${String(_y.getMonth() + 1).padStart(2, '0')}-${String(_y.getDate()).padStart(2, '0')}`;
+
+test('yesterday-named sidecar with the right hash -> allow (two-day window, hash-bound)', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${YESTERDAY}-235900.json`, evidence(stagedHash(dir)));
+    assert.equal(runGate(dir).status, 0);
+  });
+});
+
+test('yesterday-named covering FAIL still vetoes (the window widens both axes)', () => {
+  withRepo(HIGH, (dir) => {
+    writeReview(dir, `review-${YESTERDAY}-235900.json`, evidence(stagedHash(dir), { verdict: 'FAIL' }));
+    writeReview(dir, `review-${TODAY}-000100.json`, evidence(stagedHash(dir)));
+    assert.equal(runGate(dir).status, 2);
+  });
+});
+
+test('older-than-yesterday sidecar with the right hash -> BLOCK (outside the window)', () => {
   withRepo(HIGH, (dir) => {
     writeReview(dir, 'review-2001-01-01-120000.json', evidence(stagedHash(dir)));
     assert.equal(runGate(dir).status, 2);
