@@ -396,12 +396,12 @@ interface HarnessExtensionApi {
 const DRIFT_RECHECK_MAX_AGE_MS = 60 * 60 * 1000;
 
 /** Agent-facing cycle-boundary nudge appended to every successful non-WIP `git commit` result.
- *  A successful commit is the cycle-end marker (rules/cycle_definition.md); the nudge re-arms
+ *  A successful commit is the cycle-end marker (.omp/rules/harness-cycle_definition.md); the nudge re-arms
  *  the intake discipline mid-session even after compaction has evicted the always-on rule.
  *  `wip:` checkpoints stay quiet — they are mid-implementation, the exact moment
  *  context_management.md says NOT to break. */
 const CYCLE_BOUNDARY_NOTE =
-	"HARNESS NOTE: commit succeeded — cycle boundary (rules/cycle_definition.md). " +
+	"HARNESS NOTE: commit succeeded — cycle boundary (.omp/rules/harness-cycle_definition.md). " +
 	"If this completes the current cycle: update the instruction doc / cycle queue " +
 	"(check the box, record deferrals), then suggest the user run /clear and resume with the next cycle.";
 

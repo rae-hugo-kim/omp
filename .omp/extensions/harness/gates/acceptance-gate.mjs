@@ -331,10 +331,10 @@ if (isHookMode) {
   console.error('     (a `wip:` message prefix cannot work here — pre-commit runs before the message exists)');
 }
 // An AC that can only be true AFTER this commit ("PR opened", "tag pushed", "merged") is not an
-// AC by rules/cycle_definition.md — it circles with this gate (true only once the commit it gates
+// AC by .omp/rules/harness-cycle_definition.md — it circles with this gate (true only once the commit it gates
 // has landed) and pushes people to check it falsely or reach for the WIP lane (#48-4). Name the
 // fix here rather than inventing a marker syntax for it.
 console.error('  If an item is true only AFTER this commit (open PR, tag, merge, deploy): it is not an acceptance');
-console.error('  criterion — move it out of the checkboxes into a follow-up step (rules/cycle_definition.md: "AC는 커밋 시점에 판정 가능해야 한다").');
+console.error('  criterion — move it out of the checkboxes into a follow-up step (.omp/rules/harness-cycle_definition.md: "AC는 커밋 시점에 판정 가능해야 한다").');
 
 process.exit(2);

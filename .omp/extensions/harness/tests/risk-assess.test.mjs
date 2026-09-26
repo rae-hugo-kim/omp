@@ -48,12 +48,12 @@ test('isHighRiskFile: prose docs are exempt from TOPIC substrings (the footgun f
     // the 9 real files in THIS repo that previously misclassified as CRITICAL
     'docs/rules/glossary_policy.md',
     'docs/rules/seed_evolution_policy.md',
-    'rules/code_review_policy.md',
+    '.omp/rules/harness-code_review_policy.md',
     'rules/context7_policy.md',
-    'rules/documentation_policy.md',
-    'rules/learning_policy.md',
-    'rules/mcp_policy.md',
-    'rules/tdd_policy.md',
+    '.omp/rules/harness-documentation_policy.md',
+    '.omp/rules/harness-learning_policy.md',
+    '.omp/rules/harness-mcp_policy.md',
+    '.omp/rules/harness-tdd_policy.md',
     'templates/policy_sync_checklist.md',
     // other prose docs named for a topic
     'docs/author-guide.md',
@@ -116,7 +116,7 @@ function withRepo(files, fn) {
 }
 
 test('assessRisk: editing only a policy DOC is low risk (was falsely CRITICAL)', () => {
-  withRepo({ 'rules/tdd_policy.md': '# TDD policy\nsome prose change\n' }, (dir) => {
+  withRepo({ '.omp/rules/harness-tdd_policy.md': '# TDD policy\nsome prose change\n' }, (dir) => {
     assert.equal(assessRisk(dir).level, 'low');
   });
 });
@@ -130,7 +130,7 @@ test('assessRisk: editing real auth CODE is still critical', () => {
 test('assessRisk: benign code + a policy doc is medium, not critical', () => {
   withRepo({
     'src/util.ts': 'export const add = (a, b) => a + b;\n',
-    'rules/mcp_policy.md': '# MCP policy\nprose\n',
+    '.omp/rules/harness-mcp_policy.md': '# MCP policy\nprose\n',
   }, (dir) => {
     assert.equal(assessRisk(dir).level, 'medium');
   });
@@ -235,7 +235,7 @@ const TEMPLATE = {
   [META]: '{"version":"2026.77"}\n',
   '.omp/extensions/harness/index.ts': 'export default function harness() {}\n',
   '.githooks/pre-commit': '#!/usr/bin/env bash\nexit 0\n',
-  'rules/tdd_policy.md': '# tdd\n',
+  '.omp/rules/harness-tdd_policy.md': '# tdd\n',
   'claudedocs/CLAUDEKR.md': '# mirror\n',
   'docs/plans/agent-browser-credentials-plan.md': '# plan\n',
   'scripts/docs-drift': '#!/usr/bin/env node\n',
@@ -415,13 +415,13 @@ test('bootstrap: any ref under refs/harness/ closes the window, version-shaped o
 test('bootstrap: deleting harness assets inside the window is scored, cleanup deletions stay exempt', () => {
   withTemplateClone(0, ({ dir, git, cleanup }) => {
     cleanup();
-    for (const f of ['.omp/extensions/harness/index.ts', '.githooks/pre-commit', 'rules/tdd_policy.md']) rmSync(join(dir, f));
+    for (const f of ['.omp/extensions/harness/index.ts', '.githooks/pre-commit', '.omp/rules/harness-tdd_policy.md']) rmSync(join(dir, f));
     git(['add', '-A']);
     const r = assessRisk(dir, parseCommitForm('git commit -m x'));
     assert.notEqual(r.level, 'low', `harness-asset deletions must be scored: ${r.reason}`);
-    assert.deepEqual(r.files.sort(), ['.githooks/pre-commit', '.omp/extensions/harness/index.ts', 'rules/tdd_policy.md'], 'exactly the harness-asset deletions are scored');
+    assert.deepEqual(r.files.sort(), ['.githooks/pre-commit', '.omp/extensions/harness/index.ts', '.omp/rules/harness-tdd_policy.md'], 'exactly the harness-asset deletions are scored');
     assert.ok(r.bootstrap.includes('claudedocs/CLAUDEKR.md') && r.bootstrap.includes('scripts/docs-drift') && r.bootstrap.includes('docs/plans/agent-browser-credentials-plan.md'), 'source-only cleanup deletions remain exempt');
-    assert.ok(!r.bootstrap.some((f) => f.startsWith('.omp/extensions/harness/index') || f.startsWith('.githooks/') || f.startsWith('rules/')), 'no harness asset may appear in the exempt set');
+    assert.ok(!r.bootstrap.some((f) => f.startsWith('.omp/extensions/harness/index') || f.startsWith('.githooks/') || f.startsWith('.omp/rules/harness-')), 'no harness asset may appear in the exempt set');
   });
 });
 

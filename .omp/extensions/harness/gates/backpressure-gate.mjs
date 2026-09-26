@@ -92,7 +92,7 @@ if (!existsSync(statusFile)) {
   if (risk.level === 'critical' || risk.level === 'high') {
     log('No status file + high risk, blocking');
     console.error('HARNESS BLOCK: No build/test verification for high-risk changes.');
-    console.error('Run tests first (a project-specific runner can be registered in docs/harness/verify-commands.json — see rules/harness_integration_contract.md §3), or create docs/harness/backpressure-skip to override.');
+    console.error('Run tests first (a project-specific runner can be registered in docs/harness/verify-commands.json — see .omp/rules/harness-harness_integration_contract.md §3), or create docs/harness/backpressure-skip to override.');
     process.exit(2);
   }
   log('No status file + medium risk, warning');

@@ -2,7 +2,7 @@
 
 <!-- 이 파일을 design/DESIGN.md로 복사해 채운다. 각 섹션의 첫 줄(무엇을/왜)은 그대로
      두고, 예시 값을 실제 값으로 바꾼다. 값은 design/tokens.css에 선언하고 여기서는
-     토큰 이름으로 가리킨다. 규칙: rules/design_contract.md -->
+     토큰 이름으로 가리킨다. 규칙: .omp/rules/harness-design_contract.md -->
 
 - 상태: 초안 (YYYY-MM-DD) / 승인 (YYYY-MM-DD, 승인자)
 - 값 원천: `design/tokens.css`

@@ -65,14 +65,7 @@ MCP 서버(OMP 설정에 등록)를 설치합니다. docs는 빌드 도구 없�
 ```
 .
 ├── AGENTS.md              에이전트 정책 진입점 (OMP가 자동 로드)
-├── rules/                 행동 규칙
-│   ├── safety_security    안전/보안
-│   ├── anti_hallucination 증거 기반 동작
-│   ├── change_control     최소 변경 원칙
-│   ├── tdd_policy         RED → GREEN → TIDY
-│   ├── doc_standards      마크다운 SST + Mermaid 표준
-│   ├── ...                각 파일에 한 줄 설명 포함
-│   └── INDEX.md           전체 목록
+├── .omp/rules/harness-*.md  행동 규칙(omp 규칙집 — 매 프롬프트에 이름+설명, 본문은 rule://harness-<name>; harness-core는 상시)
 ├── checklists/            작업별 체크리스트
 ├── templates/             재사용 템플릿
 ├── .omp/
@@ -153,7 +146,7 @@ kickoff → startdev 흐름에서 자동으로 작동하는 장치들. 집행 �
 | `post-merge` (비차단) | 백스톱 | merge 자동커밋 관측 — git이 pre-commit/post-commit을 발화하지 않는 유일 경로 |
 | `pre-push` (차단) | 아카이브 유출·docs drift | `docs/sum`·`docs/reviews` 추적 상태 및 FAIL 드리프트 차단 |
 
-통합 경로(merge 자동커밋·cherry-pick·revert·rebase)는 **의도적으로 차단하지 않습니다** — 원 커밋 시점에 이미 게이트를 통과한 콘텐츠의 이동이고, 백스톱이 관측합니다. 잔여면(sparse-checkout·stash·`--no-verify`·관할 밖 레포)은 [`rules/harness_integration_contract.md`](rules/harness_integration_contract.md)에 열거돼 있습니다.
+통합 경로(merge 자동커밋·cherry-pick·revert·rebase)는 **의도적으로 차단하지 않습니다** — 원 커밋 시점에 이미 게이트를 통과한 콘텐츠의 이동이고, 백스톱이 관측합니다. 잔여면(sparse-checkout·stash·`--no-verify`·관할 밖 레포)은 [`.omp/rules/harness-harness_integration_contract.md`](.omp/rules/harness-harness_integration_contract.md)에 열거돼 있습니다.
 
 - **seed.yaml** — 킥오프 결과를 구조화 (목표, 제약, 수락 기준, 리스크)
 - **rubric** — 4차원 명확도 게이트 (HIGH/MED/LOW)
@@ -171,7 +164,7 @@ Claude Code 원본과 달리, 실패한 bash 검증도 기록됩니다 — 어�
 
 ### 이 저장소 (source) — 버전 bump (의도적 1회)
 
-`rules/`, `checklists/`, `.omp/`, `AGENTS.md`, `scripts/harness-*.sh`, `templates/` 등 하네스 자산 변경이 main에 머지되면, **머지 후 한 번** 버전을 올립니다:
+`.omp/rules/harness-*.md`, `checklists/`, `.omp/`, `AGENTS.md`, `scripts/harness-*.sh`, `templates/` 등 하네스 자산 변경이 main에 머지되면, **머지 후 한 번** 버전을 올립니다:
 
 ```bash
 bash scripts/harness-version-bump.sh --dry-run   # 무엇이 .N+1로 올라갈지 미리 보기
@@ -199,7 +192,7 @@ git push --follow-tags
 - Mermaid syntax는 저장 시점에 하네스 게이트가 OMP 내장 파서로 검증
   (`.omp/extensions/harness/mermaid-check.ts`)
 - 링크 무결성: `node scripts/docs-drift`
-- 작성 표준: [`rules/doc_standards.md`](rules/doc_standards.md)
+- 작성 표준: [`.omp/rules/harness-doc_standards.md`](.omp/rules/harness-doc_standards.md)
 - 1회성 사람용 HTML은 `artifacts/`로 (gitignored, README 제외)
 - `docs/brainstorming/`, `docs/sum/`, `docs/reviews/`는 로컬 전용 아카이브
 
@@ -208,7 +201,7 @@ git push --follow-tags
 | 레이어 | 메커니즘 |
 |--------|----------|
 | `AGENTS.md` | OMP가 컨텍스트 파일로 자동 로드 (cwd가 이 레포일 때) |
-| `rules/` 등 | AGENTS.md에서 링크 — 에이전트가 필요 시 `read`로 열람 |
+| `.omp/rules/harness-*.md` 등 | 매 프롬프트에 규칙집(이름+설명)으로 실리고, 본문은 `rule://harness-<name>`으로 열람; `harness-core`는 상시 주입 |
 | `.omp/skills/` | OMP 네이티브 스킬 발견 (우선순위 100 — 동명 OMC 스킬보다 우선) |
 | `.omp/agents/` | task 도구의 위임 대상으로 발견 |
 | `.omp/extensions/harness/` | 시작 시 자동 로드되는 확장 — 게이트 배선 |
@@ -218,7 +211,7 @@ Claude Code의 `settings.json` 훅 등록은 OMP에서 해석되지 않으므로
 
 ## 규칙 커스터마이징
 
-`rules/` 아래 각 파일이 독립된 규칙입니다.
+`.omp/rules/harness-*.md` 각 파일이 독립된 규칙입니다.
 필요 없는 파일은 삭제하세요 — 나머지는 그대로 동작합니다.
 
 | 분류 | 포함 규칙 |

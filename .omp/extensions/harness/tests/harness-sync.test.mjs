@@ -19,7 +19,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, readdirSync, existsSync, cpSync, chmodSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, readdirSync, existsSync, cpSync, chmodSync, symlinkSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -49,7 +49,8 @@ const NEW_ENTRY_LINE = `  "${NEW_ENTRY}"\n)`;
 
 // Minimal harness tree copied from this repo: enough for the script's PATHS loop to
 // have real things to copy, without dragging the whole repo into every fixture.
-const SEED = ['scripts/harness-sync.sh', 'rules', '.githooks', '.omp/extensions/harness', '.omp/agents'];
+// .omp/rules carries the harness-*.md rulebooks (ADR 002) — the glob whitelist entry's real payload.
+const SEED = ['scripts/harness-sync.sh', '.omp/rules', '.githooks', '.omp/extensions/harness', '.omp/agents'];
 
 function seedTree(dir, { withNewEntry }) {
   for (const p of SEED) {
@@ -102,9 +103,9 @@ function makeFixture({ consumerHasNewEntry = false } = {}) {
     const p = join(consumer, '.omp', 'extensions', 'harness', f);
     writeFileSync(p, `// stale consumer copy\n${readFileSync(p, 'utf-8')}`);
   }
-  rmSync(join(consumer, 'rules'), { recursive: true, force: true });
-  mkdirSync(join(consumer, 'rules'));
-  writeFileSync(join(consumer, 'rules', 'INDEX.md'), '# stale\n');
+  // A consumer from before ADR 002 has no .omp/rules at all: the first sync must CREATE the
+  // harness-*.md rulebooks (a real multi-file diff for the commit gates to exempt).
+  rmSync(join(consumer, '.omp', 'rules'), { recursive: true, force: true });
   writeFileSync(join(consumer, '.omp', 'extensions', 'harness', 'harness-meta.json'),
     JSON.stringify({ version: '2026.50', updated: '2026-01-01', description: 'consumer', source_remote: `file://${bare}`, commit_sha: 'deadbeef', bootstrapped_at: '2026-01-01T00:00:00Z' }, null, 2));
   git(consumer, ['add', '-A']);
@@ -442,5 +443,283 @@ test('L: a target tag whose script predates the hand-off protocol is not exec\'d
     assert.doesNotMatch(r.stdout, /own sync script/, 'no hand-off to a script that cannot honour it');
     assert.deepEqual(readdirSync(priv), [], 'the shallow clone and self-copy must be cleaned up (nothing left in TMPDIR)');
     rmSync(priv, { recursive: true, force: true });
+  });
+});
+
+// ADR 002 §1: `.omp/rules/harness-*.md` is a FILE-GLOB whitelist entry in consumer space.
+// The sync must replace every harness-* rulebook (stale ones pruned), leave consumer-named
+// siblings untouched, and record the expanded files in the provenance tree + manifest.
+
+// Re-publish the fixture tag with EXACTLY the given .omp/rules files in the source tree
+// (the seeded harness-*.md rulebooks are replaced; an empty map publishes a source with none).
+function publishRulebooks(fx, files) {
+  const work = join(fx.root, 'source-work');
+  rmSync(join(work, '.omp', 'rules'), { recursive: true, force: true });
+  mkdirSync(join(work, '.omp', 'rules'), { recursive: true });
+  for (const [name, body] of Object.entries(files)) writeFileSync(join(work, '.omp', 'rules', name), body);
+  git(work, ['add', '-A']);
+  git(work, ['commit', '-q', '-m', 'rulebooks']);
+  git(work, ['tag', '-a', '-f', '-m', 'rulebooks', 'harness/2026.99']);
+  git(work, ['push', '-q', '-f', fx.bare, 'HEAD:refs/heads/main', 'refs/tags/harness/2026.99']);
+}
+
+test('ADR002: glob entry replaces harness-*.md in .omp/rules and never touches consumer files', () => {
+  withFixture({}, (fx) => {
+    publishRulebooks(fx, {
+      'harness-core.md': '---\nalwaysApply: true\n---\n# core v2\n',
+      'harness-writing_style.md': '---\ndescription: style\n---\n# style\n',
+    });
+
+    const rules = join(fx.consumer, '.omp', 'rules');
+    mkdirSync(rules, { recursive: true });
+    writeFileSync(join(rules, 'consumer-x.md'), '# mine\n');
+    writeFileSync(join(rules, 'harness-old.md'), '# removed upstream\n');
+    writeFileSync(join(rules, 'harness-core.md'), '# core v1\n');
+    mkdirSync(join(rules, 'harness-nested'), { recursive: true });
+    writeFileSync(join(rules, 'harness-nested', 'x.md'), '# not a file match\n');
+
+    const dry = runSync(fx.consumer, ['--dry-run']);
+    assert.equal(dry.status, 0, dry.stderr);
+    assert.match(dry.stdout, /WRITE\s+\.omp\/rules\/harness-core\.md/);
+    assert.match(dry.stdout, /WRITE\s+\.omp\/rules\/harness-writing_style\.md/);
+    assert.match(dry.stdout, /PRUNE\s+\.omp\/rules\/harness-old\.md/);
+    assert.doesNotMatch(dry.stdout, /consumer-x/);
+    assert.ok(existsSync(join(rules, 'harness-old.md')), 'dry-run must not prune');
+
+    const r = runSync(fx.consumer);
+    assert.equal(r.status, 0, `sync failed:\n${r.stdout}\n${r.stderr}`);
+    assert.equal(readFileSync(join(rules, 'consumer-x.md'), 'utf-8'), '# mine\n', 'consumer rule must survive untouched');
+    assert.ok(!existsSync(join(rules, 'harness-old.md')), 'a harness-* file removed upstream must be pruned');
+    assert.match(readFileSync(join(rules, 'harness-core.md'), 'utf-8'), /core v2/, 'harness-* must be replaced by the source copy');
+    assert.ok(existsSync(join(rules, 'harness-writing_style.md')), 'new harness-* files must arrive');
+    assert.ok(existsSync(join(rules, 'harness-nested', 'x.md')), 'a glob never crosses "/" — subdirectories are consumer space');
+
+    const manifest = JSON.parse(readFileSync(join(fx.consumer, '.omp', 'extensions', 'harness', 'harness-manifest.json'), 'utf-8'));
+    assert.ok(manifest.files['.omp/rules/harness-core.md'], 'manifest must index the expanded glob files');
+    assert.ok(!manifest.files['.omp/rules/consumer-x.md']);
+    const tree = git(fx.consumer, ['ls-tree', '-r', '--name-only', 'refs/harness/2026.99']);
+    assert.match(tree, /^\.omp\/rules\/harness-writing_style\.md$/m, 'provenance tree must contain the expanded glob files');
+    assert.doesNotMatch(tree, /consumer-x/);
+  });
+});
+
+test('ADR002: a source with NO harness-*.md never prunes the consumer\'s (glob entry skipped like an absent directory)', () => {
+  withFixture({}, (fx) => {
+    publishRulebooks(fx, {});
+    const rules = join(fx.consumer, '.omp', 'rules');
+    mkdirSync(rules, { recursive: true });
+    writeFileSync(join(rules, 'harness-old.md'), '# from an older harness\n');
+    writeFileSync(join(rules, 'consumer-x.md'), '# mine\n');
+    const r = runSync(fx.consumer);
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(existsSync(join(rules, 'harness-old.md')), 'no match in source -> no prune');
+    assert.ok(existsSync(join(rules, 'consumer-x.md')));
+  });
+});
+
+// 3-pass review 2026-09-26 (high): with newline-framed expansion a consumer file NAMED
+// "harness-\npackage.json\nx.md" made the prune loop rm -f package.json at the repo root.
+test('ADR002: a harness-* file whose name contains a newline cannot make the prune delete another path', () => {
+  withFixture({}, (fx) => {
+    publishRulebooks(fx, { 'harness-core.md': '# core\n' });
+    const rules = join(fx.consumer, '.omp', 'rules');
+    mkdirSync(rules, { recursive: true });
+    const evil = 'harness-\npackage.json\nx.md';
+    writeFileSync(join(rules, evil), '# hostile name\n');
+    writeFileSync(join(fx.consumer, 'package.json'), '{}\n');
+    const r = runSync(fx.consumer);
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(existsSync(join(fx.consumer, 'package.json')), 'a newline in a matched name must not turn into a second rm target');
+    assert.ok(!existsSync(join(rules, evil)), 'the hostile harness-* file itself is a stale match and is pruned');
+    assert.ok(existsSync(join(rules, 'harness-core.md')));
+  });
+});
+
+// Round-2 review: containment must hold through ANY symlink on the path (leaf or ancestor),
+// and a matched name that is itself a symlink or a directory must never be written through.
+for (const where of ['.omp/rules', '.omp']) {
+  test(`ADR002: a symlinked ${where} is not followed — the glob entry is skipped, nothing under it is pruned or written`, () => {
+    withFixture({}, (fx) => {
+      publishRulebooks(fx, { 'harness-core.md': '# core\n' });
+      const outside = mkdtempSync(join(tmpdir(), 'hsync-outside-'));
+      let target;
+      if (where === '.omp') {
+        // Ancestor case: the consumer's whole .omp/ (meta + extension, which the sync needs to
+        // find its source) moves outside and a link takes its place; .omp/rules lives under it.
+        renameSync(join(fx.consumer, '.omp'), join(outside, 'omp'));
+        target = join(outside, 'omp', 'rules');
+        mkdirSync(target, { recursive: true });
+        symlinkSync(join(outside, 'omp'), join(fx.consumer, '.omp'));
+      } else {
+        target = outside;
+        mkdirSync(join(fx.consumer, '.omp'), { recursive: true });
+        symlinkSync(target, join(fx.consumer, where));
+      }
+      writeFileSync(join(target, 'harness-old.md'), '# outside the repo\n');
+      const r = runSync(fx.consumer);
+      assert.equal(r.status, 0, r.stderr);
+      assert.match(r.stderr, /does not resolve to a plain directory inside this repo/);
+      assert.ok(existsSync(join(target, 'harness-old.md')), 'must not prune through the symlink');
+      assert.ok(!existsSync(join(target, 'harness-core.md')), 'must not write through the symlink');
+      rmSync(outside, { recursive: true, force: true });
+    });
+  });
+}
+
+test('ADR002: a matched name that is a symlink is unlinked (target kept); a matched name that is a directory is left alone', () => {
+  withFixture({}, (fx) => {
+    publishRulebooks(fx, { 'harness-core.md': '# core v2\n', 'harness-old.md': '# old v2\n' });
+    const rules = join(fx.consumer, '.omp', 'rules');
+    mkdirSync(rules, { recursive: true });
+    const outside = mkdtempSync(join(tmpdir(), 'hsync-outside-'));
+    writeFileSync(join(outside, 'target.md'), '# precious\n');
+    symlinkSync(join(outside, 'target.md'), join(rules, 'harness-old.md'));     // link -> file outside
+    symlinkSync(outside, join(rules, 'harness-gone.md'));                       // stale link -> dir outside
+    mkdirSync(join(rules, 'harness-core.md'));                                   // a DIRECTORY with the rule's name
+    writeFileSync(join(rules, 'harness-core.md', 'inner.md'), '# inside\n');
+    const r = runSync(fx.consumer);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(readFileSync(join(outside, 'target.md'), 'utf-8'), '# precious\n', 'unlinking must not touch the link target');
+    assert.ok(existsSync(join(outside, 'target.md')) && readdirSync(outside).length === 1, 'nothing written or removed outside');
+    assert.equal(readFileSync(join(rules, 'harness-old.md'), 'utf-8'), '# old v2\n', 'the link is replaced by the source file');
+    assert.ok(!existsSync(join(rules, 'harness-gone.md')), 'a stale link (even to a directory) is pruned as a link');
+    assert.ok(existsSync(join(rules, 'harness-core.md', 'inner.md')), 'a directory bearing the name is never written into');
+    assert.match(r.stderr, /harness-core\.md is a directory/);
+    rmSync(outside, { recursive: true, force: true });
+  });
+});
+
+test('ADR002: a source rulebook whose name is not plain [A-Za-z0-9._/-] is refused with a warning, others still sync', () => {
+  withFixture({}, (fx) => {
+    publishRulebooks(fx, { 'harness-core.md': '# core\n', 'harness-with space.md': '# odd\n' });
+    const r = runSync(fx.consumer);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stderr, /harness-with space\.md — name is not plain/);
+    const rules = join(fx.consumer, '.omp', 'rules');
+    assert.ok(existsSync(join(rules, 'harness-core.md')));
+    assert.ok(!existsSync(join(rules, 'harness-with space.md')));
+    const manifest = JSON.parse(readFileSync(join(fx.consumer, '.omp', 'extensions', 'harness', 'harness-manifest.json'), 'utf-8'));
+    assert.ok(manifest.files['.omp/rules/harness-core.md']);
+    assert.ok(!Object.keys(manifest.files).some((k) => k.includes('with')), 'the refused name never reaches the manifest (awk-serialised)');
+  });
+});
+
+// Rounds 3-4 review: `:(literal)` magic is itself taken literally under an ambient
+// GIT_LITERAL_PATHSPECS=1, and `--literal-pathspecs` is refused next to an ambient
+// GIT_GLOB_PATHSPECS / GIT_ICASE_PATHSPECS — either way the provenance tree silently vanished.
+// The sync clears all four on its two pathspec calls; pin that for each, since cleanEnv()
+// strips GIT_* and no other fixture can see them.
+for (const v of ['GIT_LITERAL_PATHSPECS', 'GIT_GLOB_PATHSPECS', 'GIT_NOGLOB_PATHSPECS', 'GIT_ICASE_PATHSPECS']) {
+  test(`ADR002: provenance tree and manifest survive an ambient ${v}=1`, () => {
+    withFixture({}, (fx) => {
+      publishRulebooks(fx, { 'harness-core.md': '# core\n' });
+      const r = spawnSync('bash', [join(fx.consumer, 'scripts', 'harness-sync.sh')], {
+        cwd: fx.consumer, encoding: 'utf-8', env: cleanEnv({ [v]: '1' }),
+      });
+      assert.equal(r.status, 0, r.stderr);
+      assert.doesNotMatch(r.stderr, /could not record the synced tree/);
+      const tree = git(fx.consumer, ['ls-tree', '-r', '--name-only', 'refs/harness/2026.99']);
+      assert.match(tree, /^\.omp\/rules\/harness-core\.md$/m);
+      assert.match(tree, /^\.omp\/extensions\/harness\//m, 'directory entries still expand under literal pathspecs');
+      const manifest = JSON.parse(readFileSync(join(fx.consumer, '.omp', 'extensions', 'harness', 'harness-manifest.json'), 'utf-8'));
+      assert.ok(manifest.files['.omp/rules/harness-core.md']);
+      assert.ok(Object.keys(manifest.files).some((k) => k.startsWith('.omp/extensions/harness/')), 'directory entries are indexed in the manifest too');
+    });
+  });
+}
+
+// ADR 002 §6: `rules/` left the whitelist (its rules now sync as .omp/rules/harness-*.md), so a
+// consumer keeps an orphan copy. The sync retires it using the PREVIOUS synced tree as proof of
+// ownership: only files whose blob matches that tree are removed; consumer edits/additions stay
+// with an advisory; without a previous tree nothing is removed (advisory only).
+function publishLegacyRulesTag(fx) {
+  // Tag 2026.99 as an OLD harness: ships rules/ and its script still lists "rules".
+  const work = join(fx.root, 'source-work');
+  mkdirSync(join(work, 'rules'), { recursive: true });
+  writeFileSync(join(work, 'rules', 'a.md'), '# a (harness)\n');
+  writeFileSync(join(work, 'rules', 'b.md'), '# b (harness)\n');
+  mkdirSync(join(work, 'rules', 'sub'), { recursive: true });
+  writeFileSync(join(work, 'rules', 'sub', 'c.md'), '# c (harness, nested)\n');
+  const s = join(work, 'scripts', 'harness-sync.sh');
+  const text = readFileSync(s, 'utf-8').replace(/\nPATHS=\(\n/, '\nPATHS=(\n  "rules"\n');
+  assert.ok(text.includes('"rules"'), 'fixture: failed to inject the legacy rules entry');
+  writeFileSync(s, text);
+  git(work, ['add', '-A']);
+  git(work, ['commit', '-q', '-m', 'legacy rules']);
+  git(work, ['tag', '-a', '-f', '-m', 'legacy', 'harness/2026.99']);
+  git(work, ['push', '-q', '-f', fx.bare, 'HEAD:refs/heads/main', 'refs/tags/harness/2026.99']);
+}
+function publishRetiredRulesTag(fx) {
+  // Tag 2026.100: rules/ gone, script back to this repo's PATHS (no "rules").
+  const work = join(fx.root, 'source-work');
+  rmSync(join(work, 'rules'), { recursive: true, force: true });
+  const s = join(work, 'scripts', 'harness-sync.sh');
+  writeFileSync(s, readFileSync(s, 'utf-8').replace('\nPATHS=(\n  "rules"\n', '\nPATHS=(\n'));
+  git(work, ['add', '-A']);
+  git(work, ['commit', '-q', '-m', 'retire rules']);
+  git(work, ['tag', '-a', '-m', 'retired', 'harness/2026.100']);
+  git(work, ['push', '-q', '-f', fx.bare, 'HEAD:refs/heads/main', 'refs/tags/harness/2026.100']);
+}
+
+test('ADR002 retire: pristine harness rules/ is removed on the sync that drops it; consumer-owned files survive with an advisory', () => {
+  withFixture({}, (fx) => {
+    publishLegacyRulesTag(fx);
+    const first = runSync(fx.consumer);
+    assert.equal(first.status, 0, first.stderr);
+    assert.ok(existsSync(join(fx.consumer, 'rules', 'a.md')), 'precondition: the legacy tag shipped rules/');
+    git(fx.consumer, ['add', '-A']);
+    git(fx.consumer, ['commit', '-q', '-m', 'sync 2026.99']);
+
+    // Consumer edits one shipped file and adds one of its own before the next version lands;
+    // rules/sub becomes a symlink to a directory OUTSIDE the repo holding a blob-identical c.md
+    // (round-1 review: an intermediate symlink must never let the retire step delete outside).
+    writeFileSync(join(fx.consumer, 'rules', 'b.md'), '# b (edited by the consumer)\n');
+    writeFileSync(join(fx.consumer, 'rules', 'mine.md'), '# mine\n');
+    const outside = mkdtempSync(join(tmpdir(), 'hsync-outside-'));
+    writeFileSync(join(outside, 'c.md'), '# c (harness, nested)\n');
+    rmSync(join(fx.consumer, 'rules', 'sub'), { recursive: true, force: true });
+    symlinkSync(outside, join(fx.consumer, 'rules', 'sub'));
+
+    publishRetiredRulesTag(fx);
+    const dry = runSync(fx.consumer, ['--dry-run']);
+    assert.match(dry.stdout, /RETIRE\s+rules\//);
+    assert.ok(existsSync(join(fx.consumer, 'rules', 'a.md')), 'dry-run removes nothing');
+
+    const second = runSync(fx.consumer);
+    assert.equal(second.status, 0, second.stderr);
+    assert.ok(!existsSync(join(fx.consumer, 'rules', 'a.md')), 'pristine harness file removed');
+    assert.equal(readFileSync(join(fx.consumer, 'rules', 'b.md'), 'utf-8'), '# b (edited by the consumer)\n', 'edited file kept');
+    assert.ok(existsSync(join(fx.consumer, 'rules', 'mine.md')), 'consumer-added file kept');
+    assert.match(second.stdout, /advisory: rules\/ is no longer a harness directory .*1 harness file\(s\) removed/);
+    assert.match(second.stdout, /\.omp\/rules\/harness-<name>\.md/);
+    assert.ok(existsSync(join(outside, 'c.md')), 'a blob-identical file behind an intermediate symlink is never removed');
+    assert.ok(existsSync(join(fx.consumer, 'rules', 'sub')), 'the symlink itself is left alone');
+    rmSync(outside, { recursive: true, force: true });
+  });
+});
+
+test('ADR002 retire: an all-pristine rules/ disappears entirely; without a previous synced tree nothing is removed', () => {
+  withFixture({}, (fx) => {
+    publishLegacyRulesTag(fx);
+    assert.equal(runSync(fx.consumer).status, 0);
+    git(fx.consumer, ['add', '-A']);
+    git(fx.consumer, ['commit', '-q', '-m', 'sync 2026.99']);
+    publishRetiredRulesTag(fx);
+    const r = runSync(fx.consumer);
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(!existsSync(join(fx.consumer, 'rules')), 'directory removed once empty');
+    assert.match(r.stdout, /retired rules\/: 3 harness file\(s\) removed/);
+
+    // No provenance at all (a consumer from before refs/harness existed): advisory only.
+    const rules = join(fx.consumer, 'rules');
+    mkdirSync(rules);
+    writeFileSync(join(rules, 'a.md'), '# a (harness)\n');
+    for (const ref of git(fx.consumer, ['for-each-ref', '--format=%(refname)', 'refs/harness/']).trim().split('\n').filter(Boolean)) {
+      git(fx.consumer, ['update-ref', '-d', ref]);
+    }
+    const again = runSync(fx.consumer);
+    assert.equal(again.status, 0, again.stderr);
+    assert.ok(existsSync(join(rules, 'a.md')), 'unattributable files are never removed');
+    assert.match(again.stdout, /advisory: rules\/ is not a harness directory any more .*no earlier synced harness tree attributes/);
   });
 });

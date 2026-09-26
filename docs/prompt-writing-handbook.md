@@ -2,7 +2,7 @@
 
 LLM 호출을 설계·작성할 때 순서대로 묻는 질문과 검증된 패턴 모음. 프로덕션
 LLM 파이프라인 프롬프트 12종 전수 투어에서 증류했다. 원리의 결정 규칙과 경구
-색인은 [`rules/prompt_engineering.md`](../rules/prompt_engineering.md)가
+색인은 [`.omp/rules/harness-prompt_engineering.md`](../.omp/rules/harness-prompt_engineering.md)가
 소유한다 — 이 문서는 "쓸 때의 순서와 체크리스트"만 담는다.
 
 ## 요약
@@ -185,5 +185,5 @@ LLM 파이프라인 프롬프트 12종 전수 투어에서 증류했다. 원리�
 프로덕션 LLM 파이프라인(AIwitness) 프롬프트 전수 투어(2026-07-31 ~
 2026-08-21, 요약·번역·판정 9종 + 위클리 3부작) 스터디 노트에서 증류 —
 `sum-vault/aiwitness-study/study/prompt-tour.md` (PRIVATE vault, provenance 용).
-내부 식별자는 [`rules/prompt_engineering.md`](../rules/prompt_engineering.md)와
+내부 식별자는 [`.omp/rules/harness-prompt_engineering.md`](../.omp/rules/harness-prompt_engineering.md)와
 같은 sanitize 정책으로 제거했다.

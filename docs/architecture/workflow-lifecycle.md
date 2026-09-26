@@ -126,7 +126,7 @@ flowchart TD
 MCP 필요 시:
   → DB 작업 → Supabase MCP 직접 호출 (DDL은 migration)
   → 리팩터링 → edit + OMC LSP로 참조 선확인
-  (구 MCP 위임 매트릭스는 2026-06 폐기 — rules/agent_routing.md 참조)
+  (구 MCP 위임 매트릭스는 2026-06 폐기 — .omp/rules/harness-agent_routing.md 참조)
 ```
 
 ### 2.5 검증
@@ -249,7 +249,7 @@ flowchart LR
 ## 4. 서브에이전트 호출 타이밍
 
 (2026-06: researcher/db-worker/refactorer/full-context 위임 매트릭스 폐기 —
-외부 정보·DB는 메인 에이전트가 직접 수행. `rules/agent_routing.md`의 폐기 기록 참조.)
+외부 정보·DB는 메인 에이전트가 직접 수행. `.omp/rules/harness-agent_routing.md`의 폐기 기록 참조.)
 
 ```mermaid
 sequenceDiagram

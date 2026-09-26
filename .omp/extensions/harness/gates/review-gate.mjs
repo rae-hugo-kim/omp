@@ -468,7 +468,7 @@ function readTailBounded(path, tailBytes) {
   }
 }
 
-// Estimate-vs-actual (seed 20260918-023000-e5a1, rules/cycle_definition.md "예상 레코드"): pair the
+// Estimate-vs-actual (seed 20260918-023000-e5a1, .omp/rules/harness-cycle_definition.md "예상 레코드"): pair the
 // intake's prediction with the measured risk. Observation ONLY — placed before the low-risk exit so
 // every landed commit is compared, wrapped so no failure here can reach the verdict, and deferred
 // through pending-consume so the record is recorded and consumed iff the commit lands. A malformed
@@ -557,7 +557,7 @@ if (form.verifiable) {
 // Audited override (path 3). The flag file is the single write surface; the gate itself appends
 // the audit event so the record cannot be forgotten. A valid override is consumed (unlink) and
 // bypasses the remaining checks — including a covering FAIL — because it is the APPROVAL axis:
-// the named approver accepts the risk on the record (cf. rules/adversarial_review.md override).
+// the named approver accepts the risk on the record (cf. .omp/rules/harness-adversarial_review.md override).
 // An INVALID flag fails closed on high/critical (it is kept in place so it can be fixed, not
 // retyped); on medium it is ignored with a warning since medium never required review anyway.
 //

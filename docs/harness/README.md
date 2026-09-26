@@ -22,7 +22,7 @@
 
 ### `verify-commands.json` (선택)
 - 프로젝트 고유 검증 명령 등록 — `{"test": ["bash bpy/bench/run.sh"], "lint": [], "build": []}` 리터럴 접두사
-- backpressure 트래커가 내장 표(`npm test`, `node --test`, `pytest`…)보다 먼저 대조한다 (`rules/harness_integration_contract.md` §3)
+- backpressure 트래커가 내장 표(`npm test`, `node --test`, `pytest`…)보다 먼저 대조한다 (`.omp/rules/harness-harness_integration_contract.md` §3)
 
 ## Operating Rules
 

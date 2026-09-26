@@ -376,7 +376,7 @@ test('closeout landing: a draft -> done edit is NOT a closeout (approved -> done
 });
 
 // --- #48-4: a post-commit AC ("open PR", "tag") circles with this gate. No marker syntax —
-// rules/cycle_definition.md says such items are not AC; the block message must say so. ---
+// .omp/rules/harness-cycle_definition.md says such items are not AC; the block message must say so. ---
 
 test('block message points post-commit items at cycle_definition.md (not a marker syntax)', () => {
   withDir({ 'seed.yaml': `status: approved\n${AC_BLOCK}`, 'current-scope.md': '# S\n\n## Acceptance Criteria\n\n- [ ] commit and open the PR\n' }, (dir) => {

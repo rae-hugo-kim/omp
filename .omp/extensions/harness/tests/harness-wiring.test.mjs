@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, cpSync, existsSync, chmodSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join, dirname, relative } from 'node:path';
+import { join, dirname, basename, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -41,6 +41,18 @@ function syncPaths() {
   return [...block[1].matchAll(/^\s*"([^"]+)"/gm)].map((m) => m[1]);
 }
 
+// A glob entry (ADR 002 §1) is a per-FILE listing of a shared directory: the sync expands it
+// with the shell (no "/" crossing) and prunes stale matches before copying. Mirror that here.
+const isGlob = (p) => /[*?[]/.test(p);
+const globToRe = (g) => new RegExp(`^${g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]')}$`);
+function expandGlob(p) {
+  const dir = dirname(p);
+  const abs = join(repoRoot, dir);
+  if (!existsSync(abs)) return [];
+  const re = globToRe(p);
+  return readdirSync(abs).map((n) => join(dir, n)).filter((f) => re.test(f) && spawnSync('test', ['-f', join(repoRoot, f)]).status === 0);
+}
+
 // W3: the sync whitelist must never sweep a consumer extension point. A directory entry is
 // `rm -rf` + copy, so only harness-OWNED directories may be listed as directories; anything
 // in a shared directory (.omp/agents, .omp/skills, docs) is listed file by file. Consumers
@@ -48,10 +60,20 @@ function syncPaths() {
 // .omp/skills/<custom> — all of which must survive a sync (never .omp/AGENTS.md: it shadows the policy).
 test('W3: whitelist directory entries are harness-owned; shared dirs are listed per file', () => {
   const paths = syncPaths();
-  const HARNESS_OWNED_DIRS = new Set(['rules', 'checklists', 'templates', '.omp/extensions/harness']);
+  const HARNESS_OWNED_DIRS = new Set(['checklists', 'templates', '.omp/extensions/harness']);
   const CONSUMER_SPACE = ['.omp/agents', '.omp/skills', '.omp/rules', '.omp', 'docs', 'docs/rules', 'scripts', '.githooks'];
   for (const p of paths) {
     assert.ok(!CONSUMER_SPACE.includes(p), `"${p}" is a shared/consumer directory — list its harness files individually, never the directory`);
+    if (isGlob(p)) {
+      // A glob counts as a per-file listing ONLY when its directory part is literal and its
+      // basename carries a literal `harness-` prefix — `.omp/rules/*.md` would sweep consumer rules.
+      // The sync expands the entry unquoted, so whitespace or bracket classes would word-split
+      // or widen it: only `*` is allowed as a wildcard, and only in the basename.
+      assert.match(p, /^[\w./*-]+$/, `glob entry "${p}" may only contain [A-Za-z0-9_./*-] (no whitespace, ?, or [])`);
+      assert.ok(!isGlob(dirname(p)), `glob entry "${p}" must not have a wildcard in its directory part`);
+      assert.match(basename(p), /^harness-[^/]*\*[^/]*\.md$/, `glob entry "${p}" must be a harness-*.md file pattern`);
+      continue;
+    }
     const isDir = existsSync(join(repoRoot, p)) && spawnSync('test', ['-d', join(repoRoot, p)]).status === 0;
     if (!isDir) continue;
     const ok = HARNESS_OWNED_DIRS.has(p) || /^\.omp\/skills\/[^/]+$/.test(p);
@@ -60,6 +82,18 @@ test('W3: whitelist directory entries are harness-owned; shared dirs are listed 
   // Every harness agent that exists in the source repo must be listed, or it silently stops syncing.
   for (const f of readdirSync(join(repoRoot, '.omp', 'agents')).filter((n) => n.endsWith('.md'))) {
     assert.ok(paths.includes(`.omp/agents/${f}`), `.omp/agents/${f} exists in the source repo but is not on the whitelist`);
+  }
+  // Same for harness rulebook files in consumer-space .omp/rules: a harness-* file must be
+  // covered by a glob entry, and a consumer-shaped name must be covered by nothing.
+  const globs = paths.filter(isGlob).map(globToRe);
+  const rulesDir = join(repoRoot, '.omp', 'rules');
+  if (existsSync(rulesDir)) {
+    for (const n of readdirSync(rulesDir).filter((n) => n.startsWith('harness-') && n.endsWith('.md'))) {
+      assert.ok(globs.some((re) => re.test(`.omp/rules/${n}`)), `.omp/rules/${n} exists in the source repo but no whitelist glob covers it`);
+    }
+  }
+  for (const consumer of ['.omp/rules/consumer-x.md', '.omp/rules/harness/x.md', '.omp/rules/xharness-core.md']) {
+    assert.ok(!globs.some((re) => re.test(consumer)), `whitelist glob would sweep consumer file ${consumer}`);
   }
 });
 
@@ -79,19 +113,21 @@ test('W3b: kickoff/init contract templates and checklist are whitelisted as indi
   }
 });
 
-// W4 (#27): a synced document must not link to a path that does not sync. rules/ arrives in
+// W4 (#27): a synced document must not link to a path that does not sync. .omp/rules/harness-*.md arrives in
 // every consumer; a relative link from it to an unlisted docs/ file is dead there from day
 // one, and docs-drift (source-only) never sees the consumer tree.
 test('W4: whitelisted markdown never links outside the whitelist', () => {
   const paths = syncPaths();
-  const covered = (rel) => paths.some((p) => rel === p || rel.startsWith(`${p}/`));
+  const covered = (rel) => paths.some((p) => (isGlob(p) ? globToRe(p).test(rel) : rel === p || rel.startsWith(`${p}/`)));
   const offenders = [];
-  for (const root of paths.filter((p) => ['rules', 'checklists', 'templates'].includes(p) || p.endsWith('.md'))) {
+  for (const root of paths.filter((p) => ['checklists', 'templates'].includes(p) || p.endsWith('.md'))) {
     const abs = join(repoRoot, root);
-    if (!existsSync(abs)) continue;
-    const files = spawnSync('test', ['-d', abs]).status === 0
-      ? readdirSync(abs).filter((n) => n.endsWith('.md')).map((n) => join(root, n))
-      : [root];
+    if (!isGlob(root) && !existsSync(abs)) continue;
+    const files = isGlob(root)
+      ? expandGlob(root)
+      : spawnSync('test', ['-d', abs]).status === 0
+        ? readdirSync(abs).filter((n) => n.endsWith('.md')).map((n) => join(root, n))
+        : [root];
     for (const file of files) {
       const text = readFileSync(join(repoRoot, file), 'utf8');
       for (const m of text.matchAll(/\]\(([^)#\s]+)(?:#[^)]*)?\)/g)) {

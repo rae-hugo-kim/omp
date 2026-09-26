@@ -62,7 +62,7 @@ const GATES = ['acceptance-gate.mjs', 'backpressure-gate.mjs', 'review-gate.mjs'
 // 3-pass review round 2), while still missing an amend that stages a delta and an amend of a
 // root commit. The contract is therefore simple and uniform: the gates judge what THIS commit
 // adds relative to HEAD (the staged index). Content already in HEAD is out of scope, including
-// under --amend — an enumerated residual in rules/harness_integration_contract.md.
+// under --amend — an enumerated residual in .omp/rules/harness-harness_integration_contract.md.
 const childPayload = raw;
 
 // Per-child budget. The hook adds an outer `timeout` belt where available, but the
