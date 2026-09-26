@@ -627,3 +627,99 @@ for (const v of ['GIT_LITERAL_PATHSPECS', 'GIT_GLOB_PATHSPECS', 'GIT_NOGLOB_PATH
     });
   });
 }
+
+// ADR 002 §6: `rules/` left the whitelist (its rules now sync as .omp/rules/harness-*.md), so a
+// consumer keeps an orphan copy. The sync retires it using the PREVIOUS synced tree as proof of
+// ownership: only files whose blob matches that tree are removed; consumer edits/additions stay
+// with an advisory; without a previous tree nothing is removed (advisory only).
+function publishLegacyRulesTag(fx) {
+  // Tag 2026.99 as an OLD harness: ships rules/ and its script still lists "rules".
+  const work = join(fx.root, 'source-work');
+  mkdirSync(join(work, 'rules'), { recursive: true });
+  writeFileSync(join(work, 'rules', 'a.md'), '# a (harness)\n');
+  writeFileSync(join(work, 'rules', 'b.md'), '# b (harness)\n');
+  mkdirSync(join(work, 'rules', 'sub'), { recursive: true });
+  writeFileSync(join(work, 'rules', 'sub', 'c.md'), '# c (harness, nested)\n');
+  const s = join(work, 'scripts', 'harness-sync.sh');
+  const text = readFileSync(s, 'utf-8').replace(/\nPATHS=\(\n/, '\nPATHS=(\n  "rules"\n');
+  assert.ok(text.includes('"rules"'), 'fixture: failed to inject the legacy rules entry');
+  writeFileSync(s, text);
+  git(work, ['add', '-A']);
+  git(work, ['commit', '-q', '-m', 'legacy rules']);
+  git(work, ['tag', '-a', '-f', '-m', 'legacy', 'harness/2026.99']);
+  git(work, ['push', '-q', '-f', fx.bare, 'HEAD:refs/heads/main', 'refs/tags/harness/2026.99']);
+}
+function publishRetiredRulesTag(fx) {
+  // Tag 2026.100: rules/ gone, script back to this repo's PATHS (no "rules").
+  const work = join(fx.root, 'source-work');
+  rmSync(join(work, 'rules'), { recursive: true, force: true });
+  const s = join(work, 'scripts', 'harness-sync.sh');
+  writeFileSync(s, readFileSync(s, 'utf-8').replace('\nPATHS=(\n  "rules"\n', '\nPATHS=(\n'));
+  git(work, ['add', '-A']);
+  git(work, ['commit', '-q', '-m', 'retire rules']);
+  git(work, ['tag', '-a', '-m', 'retired', 'harness/2026.100']);
+  git(work, ['push', '-q', '-f', fx.bare, 'HEAD:refs/heads/main', 'refs/tags/harness/2026.100']);
+}
+
+test('ADR002 retire: pristine harness rules/ is removed on the sync that drops it; consumer-owned files survive with an advisory', () => {
+  withFixture({}, (fx) => {
+    publishLegacyRulesTag(fx);
+    const first = runSync(fx.consumer);
+    assert.equal(first.status, 0, first.stderr);
+    assert.ok(existsSync(join(fx.consumer, 'rules', 'a.md')), 'precondition: the legacy tag shipped rules/');
+    git(fx.consumer, ['add', '-A']);
+    git(fx.consumer, ['commit', '-q', '-m', 'sync 2026.99']);
+
+    // Consumer edits one shipped file and adds one of its own before the next version lands;
+    // rules/sub becomes a symlink to a directory OUTSIDE the repo holding a blob-identical c.md
+    // (round-1 review: an intermediate symlink must never let the retire step delete outside).
+    writeFileSync(join(fx.consumer, 'rules', 'b.md'), '# b (edited by the consumer)\n');
+    writeFileSync(join(fx.consumer, 'rules', 'mine.md'), '# mine\n');
+    const outside = mkdtempSync(join(tmpdir(), 'hsync-outside-'));
+    writeFileSync(join(outside, 'c.md'), '# c (harness, nested)\n');
+    rmSync(join(fx.consumer, 'rules', 'sub'), { recursive: true, force: true });
+    symlinkSync(outside, join(fx.consumer, 'rules', 'sub'));
+
+    publishRetiredRulesTag(fx);
+    const dry = runSync(fx.consumer, ['--dry-run']);
+    assert.match(dry.stdout, /RETIRE\s+rules\//);
+    assert.ok(existsSync(join(fx.consumer, 'rules', 'a.md')), 'dry-run removes nothing');
+
+    const second = runSync(fx.consumer);
+    assert.equal(second.status, 0, second.stderr);
+    assert.ok(!existsSync(join(fx.consumer, 'rules', 'a.md')), 'pristine harness file removed');
+    assert.equal(readFileSync(join(fx.consumer, 'rules', 'b.md'), 'utf-8'), '# b (edited by the consumer)\n', 'edited file kept');
+    assert.ok(existsSync(join(fx.consumer, 'rules', 'mine.md')), 'consumer-added file kept');
+    assert.match(second.stdout, /advisory: rules\/ is no longer a harness directory .*1 harness file\(s\) removed/);
+    assert.match(second.stdout, /\.omp\/rules\/harness-<name>\.md/);
+    assert.ok(existsSync(join(outside, 'c.md')), 'a blob-identical file behind an intermediate symlink is never removed');
+    assert.ok(existsSync(join(fx.consumer, 'rules', 'sub')), 'the symlink itself is left alone');
+    rmSync(outside, { recursive: true, force: true });
+  });
+});
+
+test('ADR002 retire: an all-pristine rules/ disappears entirely; without a previous synced tree nothing is removed', () => {
+  withFixture({}, (fx) => {
+    publishLegacyRulesTag(fx);
+    assert.equal(runSync(fx.consumer).status, 0);
+    git(fx.consumer, ['add', '-A']);
+    git(fx.consumer, ['commit', '-q', '-m', 'sync 2026.99']);
+    publishRetiredRulesTag(fx);
+    const r = runSync(fx.consumer);
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(!existsSync(join(fx.consumer, 'rules')), 'directory removed once empty');
+    assert.match(r.stdout, /retired rules\/: 3 harness file\(s\) removed/);
+
+    // No provenance at all (a consumer from before refs/harness existed): advisory only.
+    const rules = join(fx.consumer, 'rules');
+    mkdirSync(rules);
+    writeFileSync(join(rules, 'a.md'), '# a (harness)\n');
+    for (const ref of git(fx.consumer, ['for-each-ref', '--format=%(refname)', 'refs/harness/']).trim().split('\n').filter(Boolean)) {
+      git(fx.consumer, ['update-ref', '-d', ref]);
+    }
+    const again = runSync(fx.consumer);
+    assert.equal(again.status, 0, again.stderr);
+    assert.ok(existsSync(join(rules, 'a.md')), 'unattributable files are never removed');
+    assert.match(again.stdout, /advisory: rules\/ is not a harness directory any more .*no earlier synced harness tree attributes/);
+  });
+});

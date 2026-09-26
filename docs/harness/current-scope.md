@@ -10,7 +10,7 @@
 - [x] AC3-rules-moved — rules/*.md 28편이 .omp/rules/harness-<name>.md로 이동하고 규칙집으로 노출된다
 - [x] AC4-harness-core — .omp/rules/harness-core.md(alwaysApply)가 매 요청에 실린다
 - [x] AC5-agents-md-slim — AGENTS.md가 색인·집행 표로 축약되고 rules/가 제거된다
-- [ ] AC6-consumer-migration — harness-check/migrate가 소비 리포의 rules/ 고아를 제거하고 링크 치환을 안내한다
+- [x] AC6-consumer-migration — harness-check/migrate가 소비 리포의 rules/ 고아를 제거하고 링크 치환을 안내한다
 - [ ] AC7-personality — templates/PERSONALITY.md가 bootstrap으로 ~/.omp/agent/에 복사된다
 - [ ] AC8-closeout-probe — 이슈 #50 완료 기준 1–5가 종합 프로브로 확인되고 PR이 열린다
 

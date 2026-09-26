@@ -144,3 +144,4 @@
 {"ts":"2026-09-26T10:35:39.066Z","event":"estimate_vs_actual","actor":"rae","meta":{"predicted":{"risk":"low","files":4,"depth":"high","model":"claude-fable-5-1","effort":"medium","ts":"2026-09-26T10:35:38Z"},"actual":{"risk":"low","diffSize":17,"files":4,"reason":"documentation only"},"fails_since_estimate":0}}
 {"ts":"2026-09-26T10:52:06.426Z","event":"acceptance_wip","actor":"rae","meta":{"mechanism":"flag","reason":"unchecked:3"}}
 {"ts":"2026-09-26T10:52:06.517Z","event":"estimate_vs_actual","actor":"rae","meta":{"predicted":{"risk":"medium","files":19,"depth":"high","model":"claude-fable-5-1","effort":"medium","ts":"2026-09-26T10:42:31Z"},"actual":{"risk":"high","diffSize":511,"files":19,"reason":"511+ lines of code changed"},"fails_since_estimate":0}}
+{"ts":"2026-09-26T10:53:08.503Z","event":"acceptance_wip","actor":"rae","meta":{"mechanism":"flag","reason":"unchecked:3"}}

@@ -235,6 +235,9 @@ PATHS=(
   "docs/templates/glossary.template.yaml"
   "docs/checklists/kickoff_rubric_checklist.md"
 )
+# Directories the harness used to ship as a whole and no longer does (ADR 002: rules/ became
+# .omp/rules/harness-*.md). Step 7c retires a consumer's copy — only files provably ours.
+RETIRED_DIRS=(rules)
 
 # A glob entry is expanded against a tree root (nullglob). Output is NUL-framed: a consumer
 # file whose NAME contains a newline would otherwise split into extra lines and the prune
@@ -313,6 +316,10 @@ if [[ $DRY_RUN -eq 1 ]]; then
     else
       echo "  SKIP   $p (not in source)"
     fi
+  done
+  for d in "${RETIRED_DIRS[@]}"; do
+    [[ -d "$REPO_ROOT/$d" && ! -L "$REPO_ROOT/$d" && ! -e "$tmp/$d" ]] || continue
+    echo "  RETIRE $d/ (files matching the previous synced harness tree, if one is recorded, are removed; others are kept with an advisory)"
   done
   exit 0
 fi
@@ -440,6 +447,42 @@ for stale in scripts/docs-drift claudedocs/CLAUDEKR.md claudedocs/CLAUDE_origina
              claudedocs/bootstrap_oh_my_claudecode.md claudedocs/agreements.md tests/harness-wiring.test.mjs; do
   [[ -e "$REPO_ROOT/$stale" ]] || continue
   echo "advisory: $stale exists — source-repo-only file copied by an older init; remove it (see .omp/skills/init Phase 2, step 5)"
+done
+
+# --- 7c. Retire directories the whitelist dropped (ADR 002: rules/ -> .omp/rules/harness-*.md) ---
+# A directory the harness USED to ship is not swept any more once its entry leaves PATHS, so
+# a consumer keeps an orphan copy. Remove only what the PREVIOUS synced tree proves was ours —
+# files whose blob (hashed WITHOUT clean filters: a filter could make an edited file hash-equal;
+# an autocrlf checkout therefore keeps its files and gets the advisory, never a wrong delete)
+# equals that tree's blob — never a consumer-edited or consumer-added file, never through a
+# symlink anywhere on the path, and never without that proof (advisory instead).
+prev_ref=""
+if [[ -n "$synced_tree" ]]; then
+  prev_ref="$(git -C "$REPO_ROOT" for-each-ref --format='%(refname)' 'refs/harness/' \
+    | sed 's|^refs/harness/||' | { grep -E '^[0-9]{4}\.[0-9]+$' || true; } | { grep -Fvx "$latest_tag" || true; } \
+    | sort -t. -k1,1n -k2,2n | tail -n1)"
+fi
+for d in "${RETIRED_DIRS[@]}"; do
+  [[ -d "$REPO_ROOT/$d" && ! -L "$REPO_ROOT/$d" ]] || continue
+  [[ -e "$tmp/$d" ]] && continue   # still shipped by this tag: not retired
+  removed=0
+  if [[ -n "$prev_ref" ]] && git -C "$REPO_ROOT" rev-parse -q --verify "refs/harness/$prev_ref:$d" >/dev/null 2>&1; then
+    # ls-tree -z entry: "<mode> <type> <sha>\t<path>" NUL-terminated (no C-quoting of odd names).
+    while IFS=$'\t' read -r -d '' meta path; do
+      sha="${meta##* }"; f="$REPO_ROOT/$path"
+      [[ -f "$f" && ! -L "$f" ]] || continue
+      [[ "$(_realfile "$f")" == "$REPO_ROOT/$path" ]] || continue   # an intermediate symlink: not ours to touch
+      if [[ "$(git -C "$REPO_ROOT" hash-object --no-filters -- "$f")" == "$sha" ]]; then rm -f -- "$f"; removed=$((removed + 1)); fi
+    done < <(git_literal -C "$REPO_ROOT" ls-tree -r -z "refs/harness/$prev_ref" -- "$d")
+    find "$REPO_ROOT/$d" -depth -type d -empty -delete 2>/dev/null || true
+    if [[ -d "$REPO_ROOT/$d" ]]; then
+      echo "advisory: $d/ is no longer a harness directory (its rules now sync as .omp/rules/harness-*.md); $removed harness file(s) removed, the remaining files are not from a synced harness tree — review and remove them by hand. Project docs linking $d/<name>.md should point at .omp/rules/harness-<name>.md (see .omp/skills/migrate)."
+    else
+      echo "retired $d/: $removed harness file(s) removed (now .omp/rules/harness-*.md)"
+    fi
+  else
+    echo "advisory: $d/ is not a harness directory any more (its rules sync as .omp/rules/harness-*.md) and no earlier synced harness tree attributes its files — if it is the harness copy from before that move, remove it by hand; if it is your own, ignore this. Project docs linking $d/<name>.md should point at .omp/rules/harness-<name>.md (see .omp/skills/migrate)."
+  fi
 done
 
 # --- 8. Activate the synced hooks (#26) ---
