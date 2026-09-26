@@ -8,7 +8,7 @@
 - [x] AC1-adr-landed — ADR 002와 영속 사이클 큐(seed + current-scope)가 첫 커밋으로 착지한다
 - [x] AC2-sync-prefix-glob — harness-sync.sh가 .omp/rules/harness-*.md 접두사 글롭 항목을 소비자 파일 비접촉으로 동기화한다
 - [x] AC3-rules-moved — rules/*.md 28편이 .omp/rules/harness-<name>.md로 이동하고 규칙집으로 노출된다
-- [ ] AC4-harness-core — .omp/rules/harness-core.md(alwaysApply)가 매 요청에 실린다
+- [x] AC4-harness-core — .omp/rules/harness-core.md(alwaysApply)가 매 요청에 실린다
 - [ ] AC5-agents-md-slim — AGENTS.md가 색인·집행 표로 축약되고 rules/가 제거된다
 - [ ] AC6-consumer-migration — harness-check/migrate가 소비 리포의 rules/ 고아를 제거하고 링크 치환을 안내한다
 - [ ] AC7-personality — templates/PERSONALITY.md가 bootstrap으로 ~/.omp/agent/에 복사된다
@@ -27,3 +27,4 @@
 ## Held (의도적 보류)
 - TTSR `condition` 도입 — ADR 부속 5, 별도 사이클
 - 이슈 #50 완료 기준 6(blender 재측정) — 머지 뒤 절차
+- `risk-assess.test.mjs:424` 불활성 술어(`rules/` 접두)에 `.omp/rules/harness-` 추가 — ⑤에서 정리(리뷰 2026-09-26-084404 low)
