@@ -89,6 +89,10 @@ Use constants, configuration, or environment variables instead of magic numbers 
 
 ---
 
+## SHOULD: Shell scripts that ship to consumers
+
+(2026-09-26, harness-sync 3-pass review ×9 rounds) Target bash 3.2 (macOS): no `mapfile`/`readarray`/associative arrays. Frame file-name streams with NUL (`printf '%s\0'` + `read -r -d ''`) — a newline in a matched name otherwise becomes a second `rm` target. Under `set -euo pipefail`, wrap any grep that may legitimately match nothing in `{ grep … || true; }` — an empty result silently aborts the script. Reuse the script's existing containment/wrapper helpers (`_realdir`, `git_literal`) for every new file or git call instead of re-deriving them.
+
 ## Self-Check
 
 Before marking code complete:

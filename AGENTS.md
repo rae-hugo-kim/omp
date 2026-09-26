@@ -117,7 +117,7 @@ The behavioral MUSTs that must survive long sessions — no guessing, risky-acti
 - **Repo commands**: do not guess build/test/lint/typecheck/e2e/eval commands. Discover them (`rule://harness-repo_command_discovery`).
 - **Verification**: every user-impacting change must include at least one reproducible verification artifact (`rule://harness-verification_tests_and_evals`).
 - **Docs/policy-only mode**: for pure markdown/policy/template edits, follow the docs-only verification path in `rule://harness-verification_tests_and_evals` and include its required evidence format.
-- **Reference doc sync (source repo only)**: in the omp source repo, update `claudedocs/CLAUDEKR.md` (Korean mirror of this file) in the same PR or explicitly mark it as stale. Consumer repos have no such mirror (`claudedocs/` is not synced; an older `init` may have left a stale copy — delete it, it is not maintained).
+- **Reference doc sync (source repo only)**: in the omp source repo, update `claudedocs/CLAUDEKR.md` (Korean mirror of this file) in the same PR or explicitly mark it as stale. `source_commit_hash` is the last commit that touched AGENTS.md, so re-stamp the mirror to `status: synced` in a follow-up commit that does not touch AGENTS.md (the same commit can never match). Consumer repos have no such mirror (`claudedocs/` is not synced; an older `init` may have left a stale copy — delete it, it is not maintained).
 - **Scope self-detection (L1)** and **Cycle intake (L1)**: see `rule://harness-core`; contracts in [`docs/rules/scope_self_detect_policy.md`](docs/rules/scope_self_detect_policy.md) and `rule://harness-cycle_definition` (mechanical backstop = `acceptance-gate`).
 
 ## Completion Contract (MUST)
