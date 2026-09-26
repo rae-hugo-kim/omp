@@ -174,11 +174,15 @@ fi  # end of local-script preamble (skipped on the fetched fast path)
 # directory (rules/, checklists/, templates/, .omp/extensions/harness, the harness skill
 # dirs). Consumer extension points — .omp/rules/, .omp/RULES.md, custom .omp/agents/*.md,
 # custom .omp/skills/<name>, docs/ — must never be swept, so anything living in a shared
-# directory is listed file by file. Guarded by harness-wiring W3.
+# directory is listed file by file, or as a FILE GLOB with a literal harness- prefix
+# (ADR 002 §1): every file matching the pattern is replaced (stale matches pruned first),
+# siblings that do not match are never touched. Guarded by harness-wiring W3.
 PATHS=(
   "rules"
   "checklists"
   "templates"
+  # .omp/rules is consumer space (ADR 001 §3): harness rulebook files sync by prefix only.
+  ".omp/rules/harness-*.md"
   "AGENTS.md"
   "INDEX.md"
   "EXAMPLES.md"
@@ -233,10 +237,79 @@ PATHS=(
   "docs/checklists/kickoff_rubric_checklist.md"
 )
 
+# A glob entry is expanded against a tree root (nullglob). Output is NUL-framed: a consumer
+# file whose NAME contains a newline would otherwise split into extra lines and the prune
+# loop would rm -f whatever those lines spell (3-pass review 2026-09-26, high).
+# Source side (default): regular files only, and the name must be plain [A-Za-z0-9._/-] —
+# the manifest is serialised by awk on whitespace and the names are harness-authored, so a
+# stray one is refused loudly rather than indexed wrongly.
+# Prune side (mode "prune"): regular files AND symlinks of any kind (dangling, to a file, to
+# a directory) — `rm -f` removes the link itself, never what it points at. A real directory
+# is never emitted; the copy loop refuses to write into one.
+# bash 3.2-safe on purpose (macOS consumers): no mapfile; `read -r -d ''` is 3.2 syntax.
+is_glob() { [[ "$1" == *[\*\?\[]* ]]; }
+plain_name() { [[ "$1" != *[!A-Za-z0-9._/-]* ]]; }
+glob_expand() {  # glob_expand <root> <pattern> [prune|warn]  ->  NUL-separated relative paths
+  ( cd "$1" 2>/dev/null || exit 0; shopt -s nullglob
+    for f in $2; do
+      if [[ "${3:-}" == prune ]]; then
+        [[ -L "$f" || -f "$f" ]] && printf '%s\0' "$f"
+      elif [[ -f "$f" && ! -L "$f" ]]; then
+        if plain_name "$f"; then printf '%s\0' "$f"
+        elif [[ "${3:-}" == warn ]]; then echo "warning: $f — name is not plain [A-Za-z0-9._/-]; not synced" >&2
+        fi
+      fi
+    done; exit 0 )
+}
+# The consumer-side directory a glob entry lives in must resolve INSIDE the repo through
+# real directories only (the leaf, every ancestor, and — when it does not exist yet — the
+# nearest existing ancestor mkdir -p would build under). Through any symlink the prune/copy
+# would act outside the checkout; a dangling link would abort the sync half way (set -e).
+glob_dir_ok() {  # glob_dir_ok <root> <pattern>
+  local root="$1" d="$1/${2%/*}" root_real
+  root_real="$(_realdir "$root")" || return 1
+  while [[ ! -e "$d" && ! -L "$d" && "$d" != "$root" && "$d" != "/" ]]; do d="$(dirname -- "$d")"; done
+  [[ -d "$d" && ! -L "$d" ]] || return 1
+  local d_real; d_real="$(_realdir "$d")" || return 1
+  [[ "$d_real" == "$root_real" || "$d_real" == "$root_real"/* ]]
+}
+
+# Expanded whitelist (glob entries resolved against the source tree) — the single list the
+# provenance tree AND the manifest are built from, so both always agree file for file.
+# The two git calls that consume it run with `--literal-pathspecs`: an expanded name is a
+# path, never a pattern (a literal "*" in a name must not re-glob inside git). The global
+# option, not `:(literal)` magic — an ambient GIT_LITERAL_PATHSPECS=1 would take the magic
+# prefix itself literally and record nothing — and the four GIT_*_PATHSPECS variables are
+# cleared on those calls, since git refuses `--literal-pathspecs` next to an ambient
+# GIT_GLOB_PATHSPECS / GIT_ICASE_PATHSPECS (rounds 3-4 review, measured).
+git_literal() { GIT_LITERAL_PATHSPECS= GIT_GLOB_PATHSPECS= GIT_NOGLOB_PATHSPECS= GIT_ICASE_PATHSPECS= git --literal-pathspecs "$@"; }
+present=()
+for p in "${PATHS[@]}"; do
+  if is_glob "$p"; then
+    # `warn` here only: this is the one expansion pass that reports refused source names.
+    while IFS= read -r -d '' f; do present+=("$f"); done < <(glob_expand "$tmp" "$p" warn)
+  else
+    [[ -e "$tmp/$p" ]] && present+=("$p")
+  fi
+done
+
 if [[ $DRY_RUN -eq 1 ]]; then
   echo "--- Dry run: paths that would be overwritten ---"
   for p in "${PATHS[@]}"; do
-    if [[ -e "$tmp/$p" ]]; then
+    if is_glob "$p"; then
+      if [[ -z "$(glob_expand "$tmp" "$p" | tr -d '\0')" ]]; then
+        echo "  SKIP   $p (not in source)"
+      elif ! glob_dir_ok "$REPO_ROOT" "$p"; then
+        echo "  SKIP   $p (${p%/*} does not resolve to a plain directory inside this repo — not followed)"
+      else
+        while IFS= read -r -d '' f; do echo "  WRITE  $f"; done < <(glob_expand "$tmp" "$p")
+        # PRUNE = present in the consumer but not among the ACCEPTED source matches (a refused
+        # source name is pruned by the real run too).
+        while IFS= read -r -d '' f; do
+          [[ -f "$tmp/$f" && ! -L "$tmp/$f" ]] && plain_name "$f" || echo "  PRUNE  $f (no longer in source)"
+        done < <(glob_expand "$REPO_ROOT" "$p" prune)
+      fi
+    elif [[ -e "$tmp/$p" ]]; then
       echo "  WRITE  $p"
     else
       echo "  SKIP   $p (not in source)"
@@ -259,6 +332,26 @@ fi
 
 # --- 6. Copy (remote wins) ---
 for p in "${PATHS[@]}"; do
+  if is_glob "$p"; then
+    # Glob entry: skipped entirely when the source has no match (same as an absent directory
+    # entry — never prune on an empty source); otherwise stale matches in the consumer go
+    # first so a rule renamed or removed upstream does not linger as an orphan rulebook.
+    [[ -n "$(glob_expand "$tmp" "$p" | tr -d '\0')" ]] || continue
+    if ! glob_dir_ok "$REPO_ROOT" "$p"; then
+      echo "warning: ${p%/*} does not resolve to a plain directory inside this repo (symlink or dangling link on the path) — skipping $p" >&2
+      continue
+    fi
+    while IFS= read -r -d '' f; do rm -f "$REPO_ROOT/$f"; done < <(glob_expand "$REPO_ROOT" "$p" prune)
+    while IFS= read -r -d '' f; do
+      if [[ -d "$REPO_ROOT/$f" ]]; then
+        echo "warning: $f is a directory in this repo — not replaced" >&2
+        continue
+      fi
+      mkdir -p "$(dirname "$REPO_ROOT/$f")"
+      cp "$tmp/$f" "$REPO_ROOT/$f"
+    done < <(glob_expand "$tmp" "$p")
+    continue
+  fi
   [[ -e "$tmp/$p" ]] || continue
   mkdir -p "$(dirname "$REPO_ROOT/$p")"
   if [[ -d "$tmp/$p" ]]; then
@@ -310,12 +403,11 @@ EOF
 synced_tree=""
 if gitdir="$(git -C "$REPO_ROOT" rev-parse --absolute-git-dir 2>/dev/null)"; then
   idx="$(mktemp)"; rm -f -- "$idx"
-  present=()
-  for p in "${PATHS[@]}"; do [[ -e "$tmp/$p" ]] && present+=("$p"); done
+  # present[] was expanded above (step 5): glob entries are already concrete files.
   # GIT_WORK_TREE is pinned to the checkout: a consumer `core.worktree` must not
   # redirect what gets hashed (review 2026-09-05).
   if [[ ${#present[@]} -gt 0 ]] \
-     && GIT_DIR="$gitdir" GIT_WORK_TREE="$tmp" GIT_INDEX_FILE="$idx" git -C "$tmp" add -f -- "${present[@]}" 2>/dev/null \
+     && GIT_DIR="$gitdir" GIT_WORK_TREE="$tmp" GIT_INDEX_FILE="$idx" git_literal -C "$tmp" add -f -- "${present[@]}" 2>/dev/null \
      && synced_tree="$(GIT_DIR="$gitdir" GIT_WORK_TREE="$tmp" GIT_INDEX_FILE="$idx" git -C "$tmp" write-tree 2>/dev/null)" \
      && git -C "$REPO_ROOT" update-ref "refs/harness/$latest_tag" "$synced_tree" 2>/dev/null; then
     # Keep only the newest two versions (this one + the previous), drop the rest.
@@ -334,7 +426,9 @@ MANIFEST_FILE="$REPO_ROOT/.omp/extensions/harness/harness-manifest.json"
 {
   printf '{\n  "version": "%s",\n  "commit_sha": "%s",\n  "ref": "refs/harness/%s",\n  "tree_sha": "%s",\n  "files": {\n' \
     "$latest_tag" "$target_sha" "$latest_tag" "$synced_tree"
-  git -C "$tmp" ls-files -s -- "${PATHS[@]}" 2>/dev/null \
+  # Same expanded list as the provenance tree — a raw pathspec would let "*" cross "/" and
+  # index files the tree does not carry (review 2026-09-26, medium).
+  { [[ ${#present[@]} -gt 0 ]] && git_literal -C "$tmp" ls-files -s -- "${present[@]}" 2>/dev/null || true; } \
     | awk 'BEGIN { n = 0 } { printf "%s    \"%s\": \"%s\"", (n++ ? ",\n" : ""), $4, $2 }'
   printf '\n  }\n}\n'
 } > "$MANIFEST_FILE"

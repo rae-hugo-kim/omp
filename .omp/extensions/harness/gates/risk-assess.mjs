@@ -29,15 +29,18 @@ import { join } from 'path';
 const MANIFEST_REL = '.omp/extensions/harness/harness-manifest.json';
 
 // Mirrors scripts/harness-version-bump.sh HARNESS_PATHS (the shape of the sync whitelist).
-// "dir/" entries are prefixes; others exact. Kept static on purpose: the gate must not read
-// the whitelist from a worktree file it is trying not to trust.
+// "dir/" entries are prefixes; glob entries match the basename only (never across "/");
+// others exact. Kept static on purpose: the gate must not read the whitelist from a
+// worktree file it is trying not to trust.
 const HARNESS_ASSET_PATHS = [
-  'rules/', 'checklists/', 'templates/', 'AGENTS.md', 'INDEX.md', 'EXAMPLES.md',
+  'rules/', 'checklists/', 'templates/', '.omp/rules/harness-*.md', 'AGENTS.md', 'INDEX.md', 'EXAMPLES.md',
   '.omp/extensions/harness/', '.githooks/', 'scripts/harness-version-bump.sh', 'scripts/harness-sync.sh',
   'scripts/harness-audit.sh', 'scripts/test-harness-audit.sh', '.omp/skills/', '.omp/agents/',
   'docs/rules/', 'docs/prompt-writing-handbook.md', 'docs/templates/', 'docs/checklists/',
 ];
-const isHarnessAssetPath = (f) => HARNESS_ASSET_PATHS.some((p) => (p.endsWith('/') ? f.startsWith(p) : f === p));
+const globToRe = (g) => new RegExp(`^${g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]')}$`);
+const isHarnessAssetPath = (f) => HARNESS_ASSET_PATHS.some((p) =>
+  (p.includes('*') || p.includes('?')) ? globToRe(p).test(f) : p.endsWith('/') ? f.startsWith(p) : f === p);
 
 function readManifest(cwd) {
   const p = join(cwd, MANIFEST_REL);
