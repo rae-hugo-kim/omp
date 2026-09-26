@@ -1,7 +1,7 @@
 # docs/decisions/ — 결정 기록 (ADR)
 
 자명하지 않은 결정의 "왜"를 남기는 판례 보관소. 현행 규칙(무엇을 따르나)은
-`rules/`가, 세션 서사(그날 무슨 일이)는 로컬 아카이브가 담당하고, 여기는
+`.omp/rules/harness-*.md`가, 세션 서사(그날 무슨 일이)는 로컬 아카이브가 담당하고, 여기는
 "왜 이렇게 됐나"만 담는다 — 불변 본문 + 날짜 박힌 Amendment로 운영한다.
 
 ## 언제 쓰나
@@ -22,5 +22,5 @@
 
 ## Related
 
-- [`rules/assetization.md`](../../rules/assetization.md) — 결정 기록 SHOULD의 원 규칙
-- [`rules/prompt_engineering.md`](../../rules/prompt_engineering.md) §게이트 철거 — 대안 기각 기록·재발 트리거의 실전 원리
+- [`.omp/rules/harness-assetization.md`](../../.omp/rules/harness-assetization.md) — 결정 기록 SHOULD의 원 규칙
+- [`.omp/rules/harness-prompt_engineering.md`](../../.omp/rules/harness-prompt_engineering.md) §게이트 철거 — 대안 기각 기록·재발 트리거의 실전 원리

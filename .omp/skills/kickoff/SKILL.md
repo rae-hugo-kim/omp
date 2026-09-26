@@ -260,7 +260,7 @@ echo "$(date -Iseconds)" > docs/harness/kickoff-done
 - `assumptions`: Phase 1 Context 중 증거 없이 전제한 항목
 - `risks`: Phase 1 Risks + Phase 3 Edge Cases
 - `references`: kickoff-summary.md + 관련 파일 경로 + (doc-ingest 시 원본 상위 문서 경로) + (Phase -1에서 채택한 brainstorm 캡처 경로, 있을 때만)
-- `estimate` (선택, `rules/cycle_definition.md` "예상 레코드"): 인터뷰가 끝난 시점의 **예측** — `risk` (low|medium|high|critical, risk-assess taxonomy), `files` (정수), `depth` (low|high, 추론 깊이 — risk와 독립 축), `model`, `effort`. Step 6에서 `.omp/harness-state/cycle-estimate`로 파생되어 커밋 착지 시 실측과 대조된다. 판정에 관여하지 않는다.
+- `estimate` (선택, `.omp/rules/harness-cycle_definition.md` "예상 레코드"): 인터뷰가 끝난 시점의 **예측** — `risk` (low|medium|high|critical, risk-assess taxonomy), `files` (정수), `depth` (low|high, 추론 깊이 — risk와 독립 축), `model`, `effort`. Step 6에서 `.omp/harness-state/cycle-estimate`로 파생되어 커밋 착지 시 실측과 대조된다. 판정에 관여하지 않는다.
 
 **per-AC `source:` 컨벤션** (AC3 — 출처추적 / coverage 역매핑의 기계적 근거):
 
@@ -288,7 +288,7 @@ echo "$(date -Iseconds)" > docs/harness/kickoff-done
 
 #### Step 3.5: Plan Attack Gate (적대적 검증)
 
-seed.yaml 생성 후 자동 실행. 정책: [`rules/adversarial_review.md`](../../../rules/adversarial_review.md)
+seed.yaml 생성 후 자동 실행. 정책: [`.omp/rules/harness-adversarial_review.md`](../../../.omp/rules/harness-adversarial_review.md)
 
 ```
 1. audit.jsonl에서 현재 task_id의 adversarial_plan_attack 이벤트 수를 세어 run_count 결정

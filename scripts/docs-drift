@@ -77,7 +77,7 @@ function shouldInspectMarkdown(relativePath) {
   }
 
   const allowedPrefixes = [
-    'rules/',
+    '.omp/rules/',
     'checklists/',
     'templates/',
     'docs/rules/',
@@ -528,8 +528,8 @@ function checkReadmeAndIndexRefs() {
   );
   const structureCountClaims = [
     {
-      label: 'rules/',
-      dirPath: path.join(repoRoot, 'rules'),
+      label: '.omp/rules/',
+      dirPath: path.join(repoRoot, '.omp/rules'),
       extension: '.md',
     },
     {

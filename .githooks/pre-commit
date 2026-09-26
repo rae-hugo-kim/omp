@@ -9,7 +9,7 @@
 # non-blocking post-commit/post-merge backstop observes them. One honest caveat:
 # conflict resolution during `git rebase --continue` can introduce genuinely new
 # content on a path this hook does not see — that residual is enumerated in
-# rules/harness_integration_contract.md rather than defended here.
+# .omp/rules/harness-harness_integration_contract.md rather than defended here.
 #
 # Environment contract (measured, git 2.43.0): git runs this hook from the repo
 # toplevel with GIT_INDEX_FILE exported (GIT_DIR is NOT set for this hook) — for

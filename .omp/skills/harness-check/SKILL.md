@@ -52,7 +52,8 @@ The script:
 - Falls back to `git@github.com:rae-hugo-kim/omp.git` if no `source_remote` (unregistered case)
 - Fetches the latest `harness/*` tag from remote
 - Shallow-clones that tag into a temp dir, then **hands execution to that tag's own `scripts/harness-sync.sh`** (#24) so the whitelist applied is the target version's, not the consumer's stale copy — a new whitelist entry lands on the first sync
-- Overwrites whitelist paths (`rules/`, `checklists/`, `templates/`, `AGENTS.md`, `.omp/extensions/harness/`, the four harness agents in `.omp/agents/` (per file — consumer agents next to them are kept), `.githooks/*`, `scripts/harness-*.sh`, harness skill dirs)
+- Overwrites whitelist paths (`.omp/rules/harness-*.md` (file glob — stale `harness-*` files pruned, other `.omp/rules/` files kept), `checklists/`, `templates/`, `AGENTS.md`, `.omp/extensions/harness/`, the four harness agents in `.omp/agents/` (per file — consumer agents next to them are kept), `.githooks/*`, `scripts/harness-*.sh`, harness skill dirs)
+- Retires the legacy `rules/` directory (ADR 002): removes only files whose blob matches the previous synced tree (`refs/harness/<prev>`), keeps consumer-edited/added files with an advisory, and removes nothing when no previous tree is recorded — the advisory tells you to fix project docs that link `rules/<name>.md` (→ `.omp/rules/harness-<name>.md`, see the migrate skill)
 - Rewrites `harness-meta.json` with new version/SHA + preserved `bootstrapped_at`
 - Sets `core.hooksPath=.githooks` when `.githooks/` exists and git is not already pointing at it (idempotent). This is local git config that no file sync can carry, so a repo registered before `bootstrap` gained the step is otherwise disarmed forever (#26) — the `HARNESS HOOKS INACTIVE` session/turn notice from `harness-version-check.mjs` routes here.
 - Clears the `harness-version-check` and `harness-hooks-check` caches
@@ -65,7 +66,7 @@ The script:
 | Unregistered → synced | "Retrofitted to harness/<version> from default source" |
 | Registered, up to date | "Harness was already at latest (harness/<version>) — files re-synced anyway" |
 | Registered, drift → synced | "Synced local <old> → remote <new>" |
-| `--dry-run` | List of paths that would be overwritten |
+| `--dry-run` | List of paths that would be overwritten (+ `RETIRE rules/` when a legacy copy would be retired) |
 | Network failure | "Could not reach remote. Check `source_remote` URL and network" |
 
 ## Verification

@@ -1,4 +1,4 @@
-// estimate.mjs — estimate-vs-actual helpers (seed 20260918-023000-e5a1, rules/cycle_definition.md
+// estimate.mjs — estimate-vs-actual helpers (seed 20260918-023000-e5a1, .omp/rules/harness-cycle_definition.md
 // "예상 레코드"). Pure functions, imported by review-gate.mjs; never spawned.
 //
 // The intake writes .omp/harness-state/cycle-estimate as ONE strict positional tuple:
@@ -17,7 +17,7 @@ export const SESSION_LOG_TAIL_BYTES = 256 * 1024;
 
 const nonEmpty = (v) => typeof v === 'string' && v.trim() !== '';
 // ISO 8601 date-time with a zone designator — Date.parse alone accepts "2026", "0", or a prose date,
-// none of which the intake rule (rules/cycle_definition.md) allows for the record's ts.
+// none of which the intake rule (.omp/rules/harness-cycle_definition.md) allows for the record's ts.
 const ISO_TS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:?\d{2})$/;
 // Shape alone lets a calendar overflow through (2026-02-30 parses as Mar 2 and shifts the FAIL
 // window); the UTC round-trip must reproduce the same calendar day.

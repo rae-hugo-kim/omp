@@ -25,10 +25,10 @@ Run policy sync whenever `AGENTS.md` changes (same PR) and refresh both referenc
 
 ## Navigation
 
-- Rules: [`rules/INDEX.md`](rules/INDEX.md)
+- Rules: `.omp/rules/harness-*.md` (rulebook `rule://harness-<name>`; always-on core `rule://harness-core`)
 - Checklists: [`checklists/INDEX.md`](checklists/INDEX.md)
 - Templates: [`templates/INDEX.md`](templates/INDEX.md)
-- Consumer extension points (survive `harness-check` sync): `.omp/rules/*.md` (native rule files, `alwaysApply`/`globs`), `.omp/RULES.md` (sticky; loads alongside the user-level one), `.omp/agents/<custom>.md`, `.omp/skills/<custom>/` — see AGENTS.md "Consumer extension points". Never `.omp/AGENTS.md` (any non-empty file replaces the root policy at the same depth).
+- Consumer extension points (survive `harness-check` sync): `.omp/rules/<name>.md` not named `harness-*` (native rule files, `alwaysApply`/`globs`), `.omp/RULES.md` (sticky; shadowed by a user-level `~/.omp/agent/RULES.md` — prefer an `alwaysApply` rule file), `.omp/agents/<custom>.md`, `.omp/skills/<custom>/` — see AGENTS.md "Consumer extension points". Never `.omp/AGENTS.md` (any non-empty file replaces the root policy at the same depth).
 - Source repo only: project-specific examples `claudedocs/INDEX.md`, agreements / notes `claudedocs/agreements.md`
 
 

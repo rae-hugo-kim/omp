@@ -27,7 +27,7 @@ if (newWorkPatterns.test(prompt)) {
 
   if (!existsSync(kickoffFile)) {
     console.log(
-      'HARNESS REMINDER: New work detected. Apply cycle intake (rules/cycle_definition.md): ' +
+      'HARNESS REMINDER: New work detected. Apply cycle intake (.omp/rules/harness-cycle_definition.md): ' +
       'write the one-line completion check FIRST; if the request spans multiple cycles, propose a ' +
       'numbered decomposition (each cycle with its own check sentence) before implementing. ' +
       'For project/feature-scale scope, recommend /kickoff (scope MUST/SHOULD/NOT + acceptance criteria).'
