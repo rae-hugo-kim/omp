@@ -103,11 +103,13 @@ bash scripts/harness-sync.sh        # 최신 태그 재클론 → 화이트리�
 **레거시 `rules/` 정리 (ADR 002)**: 하네스 규칙은 `.omp/rules/harness-<name>.md`로 옮겨졌고 `rules/`는 더 이상 화이트리스트 디렉터리가 아니다. sync 스크립트 7c 단계가 직전 동기화 트리(`refs/harness/<prev>`)와 blob이 같은 파일만 지우고, 소비자가 고치거나 추가한 파일은 남긴 채 advisory를 낸다. 직전 트리가 없는 레포(`refs/harness/*` 부재)는 아무것도 지우지 않으므로 Phase 2 diff 결과대로 손으로 정리한다. 프로젝트 문서가 `rules/<name>.md`를 링크하고 있으면 치환한다:
 
 ```bash
-# perl -pi: BSD/macOS sed has no portable in-place -E; the loop survives spaces in file names.
-# Boundary: a path char before `rules/` (docs/rules/, .omp/rules/, lint-rules/) is left alone.
-while IFS= read -r f; do
-  perl -pi -e 's#(^|[^A-Za-z0-9_./-])((?:\.\./)*)rules/([a-z_]+)\.md#$1$2.omp/rules/harness-$3.md#g' "$f"
-done < <(grep -rlE '(^|[^A-Za-z0-9_./-])(\.\./)*rules/[a-z_]+\.md' --include='*.md' . | grep -v '^./docs/rules/')
+# perl -pi: BSD/macOS sed has no portable in-place -E. `git grep -z` scopes to TRACKED files
+# (node_modules etc. excluded) and NUL-delimits names; `--` keeps an odd name from being read
+# as a perl option. Boundary: a path char before `rules/` (docs/rules/, .omp/rules/, lint-rules/)
+# is left alone; a leading `./` is accepted.
+while IFS= read -r -d '' f; do
+  perl -pi -e 's#(^|[^A-Za-z0-9_./-])((?:\./)?(?:\.\./)*)rules/([a-z_]+)\.md#$1$2.omp/rules/harness-$3.md#g' -- "$f"
+done < <(git grep -lzE '(^|[^A-Za-z0-9_./-])(\./)?(\.\./)*rules/[a-z_]+\.md' -- '*.md' ':!docs/rules/*')
 ```
 
 ### Phase 4: Claude Code 레이어 제거
