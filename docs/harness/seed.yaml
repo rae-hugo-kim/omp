@@ -1,5 +1,6 @@
 name: gate-friction-48
-status: approved
+status: done
+completed: 2026-09-26
 version: 1
 task_id: "20260925-130157-a48f"
 # 사후 작성 seed: 이슈 #48 본문(blender bench 브랜치에서 실측한 게이트·계약 마찰 6건)이
