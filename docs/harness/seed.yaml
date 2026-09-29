@@ -1,5 +1,6 @@
 name: closeout-ac-record-56
-status: approved
+status: done
+completed: 2026-09-29
 version: 1
 task_id: "20260929-085219-06dc"
 # 사후 작성 seed: 이슈 #56 본문(#54 Pass 1 M1·LOW — closeout 경로의 미체크 AC 무시, task_closed 행의
