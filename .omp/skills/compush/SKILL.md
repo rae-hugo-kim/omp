@@ -52,7 +52,7 @@ If remote differs from provided URL → ask user for action.
 
 ### 2.5 Closeout check (스테이징 직전)
 
-추적 중인 작업이 완료됐으면 마감한다 — `docs/rules/closeout_contract.md` 절차를 따른다(compr와 동일): seed `status: approved` + `docs/harness/current-scope.md`의 AC 전부 `[x]`이면 → seed `status: done` + `completed: <date>`, `current-scope.md` 삭제, `docs/harness/audit.jsonl`에 `task_closed` append(아래 커밋에 포함). AC 미충족/비추적이면 advisory 후 skip(no-op). `.omp/skills/` 수정 시 전역 미러 동기화. *(compush는 중간 푸시일 수 있으니 git 액션이 아니라 완료 상태에만 키잉됨에 유의.)*
+추적 중인 작업이 완료됐으면 마감한다 — `docs/rules/closeout_contract.md` 절차를 따른다(compr와 동일): seed `status: approved` + `docs/harness/current-scope.md`의 AC 전부 `[x]`이면 → **먼저** `git status --porcelain -- docs/harness/current-scope.md`가 비어 있지 않은지(미커밋 체크 변경·untracked scope) 보고, 있으면 그 파일만 `docs(harness): AC 체크` 커밋으로 HEAD에 올린다(acceptance-gate는 은퇴되는 scope의 **HEAD 본**으로 완료를 판정한다 — 체크가 워크트리에만 있으면 삭제와 함께 사라져 거짓 마감으로 BLOCK, #56) → seed `status: done` + `completed: <date>`, `current-scope.md` 삭제, `docs/harness/audit.jsonl`에 `task_closed` append(아래 커밋에 포함). AC 미충족/비추적이면 advisory 후 skip(no-op). `.omp/skills/` 수정 시 전역 미러 동기화. *(compush는 중간 푸시일 수 있으니 git 액션이 아니라 완료 상태에만 키잉됨에 유의.)*
 
 **Sum nudge (마감 시에만)**: 위에서 작업을 실제로 마감(`status: done`)했고, 세션에 결정·교훈·미결이 쌓였는데 `docs/sum/`에 이 세션의 기록이 없으면 — push 완료 후 `sum` 실행을 제안한다. 제안만, 자동 실행 금지 (승격은 사용자 확인이 필요한 흐름). 중간 푸시(마감 없음)에는 발화하지 않는다.
 
