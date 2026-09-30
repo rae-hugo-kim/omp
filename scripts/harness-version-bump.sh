@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # harness-version-bump.sh [--dry-run]
 #
-# DELIBERATE harness version bump — run ONCE after a harness change lands on main
-# (e.g. right after merging a harness PR), NOT as a per-commit hook. Bumps the
-# version a single time for everything that changed since the last harness/* tag
-# reachable from HEAD, so one logical change = one version (no per-commit churn).
+# DELIBERATE harness version bump — run ONCE per release, NOT per merge or commit.
+# Release when consumers have a reason to receive the change: behavior changes
+# (gates, sync, hooks, skills) and safety fixes now, structural changes as their own
+# version; doc-only changes wait for the next release (at most 7 days, at most one
+# bump per day — source repo: docs/decisions/003-harness-release-cadence.md). Bumps
+# a single time for everything that changed since the last harness/* tag reachable
+# from HEAD (no per-commit churn).
 #
 # Idempotent: if no harness asset changed since that tag, it does nothing. Safe
 # to run repeatedly.
