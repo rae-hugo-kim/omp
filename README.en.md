@@ -161,6 +161,8 @@ This repository is the **harness source** other OMP projects sync from.
 
 ### This repo (source) — version bump (deliberate, once)
 
+Harness asset changes merged to main are not bumped right away; bump once when consumers have a reason to receive them. Behavior changes (gates, sync, hooks, skills) and safety fixes go out immediately, structural changes as their own version. Documentation-only changes ride along with the next bump, but wait no longer than 7 days, and there is at most one bump per day (rationale and rejected alternatives: [`docs/decisions/003-harness-release-cadence.md`](docs/decisions/003-harness-release-cadence.md)).
+
 ```bash
 bash scripts/harness-version-bump.sh --dry-run   # preview what bumps to .N+1
 bash scripts/harness-version-bump.sh             # one bump + tag for changes since the last harness/* tag
