@@ -40,6 +40,8 @@ description: "3-pass adversarial verification layer: reviewer + heterogeneous ad
 
 부기 — 세션 수행 경로의 모델 회계: Pass 1의 모델은 `@slow`가 아니라 그 세션의 모델이며, 이종성(≥2 distinct family) 판정의 기준 계열도 세션 모델 계열이다.
 
+부기 — 가용성 판단: `omp usage`의 100% 표시는 모델을 쓸 수 없다는 증거가 아니다. 2026-09-26 openai-codex 7d 창이 100%로 보였지만 omp는 이를 `warning`으로 분류했고 `gpt-6-astra` 요청은 정상 응답했다. 이종 패스를 포기하거나 우회하기 전에 5번의 원샷 프로브로 확인한다. 불변식 2의 보완(독립 Pass 1)에는 비작성 세션만 있으면 되고, 다른 모델 계열은 필요하지 않다.
+
 ---
 
 ## 3개 게이트 정의
