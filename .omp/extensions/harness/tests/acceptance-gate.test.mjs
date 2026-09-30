@@ -14,7 +14,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -303,19 +303,24 @@ test('closeout landing: color.ui/color.diff=always and diff.external cannot brea
 
 test('closeout landing: a seed flip ALONE (scope still committed, or no task_closed row) is NOT a closeout -> BLOCK', () => {
   withDir({}, (dir) => {
-    const git = gitRepoWithTask(dir, { scope: UNCHECKED_SCOPE });
-    // flip + code, scope left in place, no audit row: unmet AC must not be "closed" this way
+    // all [x] at HEAD; flip + code, scope left in place, no audit row -> incomplete, names §3b
+    const git = gitRepoWithTask(dir);
     writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), `status: done\n${AC_BLOCK}`);
     writeFileSync(join(dir, 'a.js'), 'y\n');
     git('add', '-A');
-    let r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
     assert.equal(r.status, 2);
     assert.match(r.stderr, /HARNESS BACKSTOP/);
     assert.match(r.stderr, /incomplete: docs\/harness\/current-scope\.md is still in the commit/, 'the block names the missing §3 part');
-    // scope deleted but no audit row -> still incomplete, and the hint moves to §3c
+  });
+  withDir({}, (dir) => {
+    // all [x] at HEAD, scope deleted but no audit row -> still incomplete, and the hint moves to §3c
+    const git = gitRepoWithTask(dir);
+    writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), `status: done\n${AC_BLOCK}`);
     unlinkSync(join(dir, 'docs', 'harness', 'current-scope.md'));
+    writeFileSync(join(dir, 'a.js'), 'y\n');
     git('add', '-A');
-    r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
     assert.equal(r.status, 2);
     assert.match(r.stderr, /incomplete: no task_closed row/);
   });
@@ -455,4 +460,758 @@ test('closeout landing: a malformed staged state (`done-later` on disk and stage
     assert.equal(r.status, 2);
     assert.doesNotMatch(r.stderr, /not staged/);
   });
+});
+
+// --- #56: a closeout retires HEAD's current-scope.md, so the AC record it carries is the last
+// word on whether the task was done. Unchecked AC there = a false closeout (contract §2 never
+// auto-closes with `- [ ]`), blocked outright — not routed through the risk backstop, which lets
+// a docs-only closeout commit through with a warning. And the task_closed row must belong to
+// the seed being closed when that seed carries a task_id. ---
+
+const SEED_WITH_ID = `status: approved\ntask_id: "20260926-000000-abcd"\n${AC_BLOCK}`;
+const rowFor = (taskId) => `{"ts":"2026-09-26T00:00:00Z","event":"task_closed","actor":"assistant","meta":{"task_id":"${taskId}"}}\n`;
+
+test('#56 closeout with UNCHECKED AC in HEAD current-scope.md -> BLOCK with the count, even for a docs-only commit', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { scope: '# S\n\n## Acceptance Criteria\n\n- [x] one\n- [ ] two\n- [ ] three\n' });
+    closeoutInWorktree(dir);
+    writeFileSync(join(dir, 'a.js'), 'x\n'); // docs-only: risk=low must not let it through
+    git('add', '-A');
+    for (const level of ['low', 'medium']) {
+      const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: level });
+      assert.equal(r.status, 2, `risk=${level}: ${r.stderr}`);
+      assert.match(r.stderr, /2 unchecked acceptance criteria/);
+      assert.match(r.stderr, /- \[ \] two/);
+      assert.doesNotMatch(r.stderr, /closeout landing/);
+    }
+    // hook mode judges the same staged index
+    const hook = spawnSync('node', [GATE], {
+      input: JSON.stringify({ mode: 'hook', hook: 'pre-commit', session_state: { cwd: dir } }),
+      cwd: dir, encoding: 'utf-8', env: { ...HERMETIC, TEST_RISK_LEVEL: 'low' },
+    });
+    assert.equal(hook.status, 2, hook.stderr);
+    assert.match(hook.stderr, /2 unchecked acceptance criteria/);
+  });
+});
+
+test('#56 the check-offs committed BEFORE the closeout (all [x] at HEAD) still land', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { scope: UNCHECKED_SCOPE });
+    writeFileSync(join(dir, 'docs', 'harness', 'current-scope.md'), '# S\n\n## Acceptance Criteria\n\n- [x] not done yet\n');
+    git('add', '-A');
+    git('commit', '-q', '-m', 'check off');
+    closeoutInWorktree(dir);
+    git('add', '-A');
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stderr, /closeout landing/);
+  });
+});
+
+test('#56 HEAD scope with NO checkboxes (or no scope at all) cannot prove completion -> false closeout, BLOCK even docs-only', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { scope: '# S\n\n## Acceptance Criteria\n\n(none yet)\n' });
+    closeoutInWorktree(dir);
+    writeFileSync(join(dir, 'a.js'), 'x\n'); // docs-only
+    git('add', '-A');
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /HARNESS BLOCK: .*has no acceptance checkboxes/);
+  });
+  withDir({}, (dir) => {
+    // two-commit bypass G1 -> G2 (review round 2): scope deleted earlier on the approved seed, then flip + row
+    const git = gitRepoWithTask(dir);
+    unlinkSync(join(dir, 'docs', 'harness', 'current-scope.md'));
+    git('add', '-A');
+    git('commit', '-q', '-m', 'scope lost earlier');
+    writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), `status: done\n${AC_BLOCK}`);
+    writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}\n' + CLOSED_ROW);
+    git('add', '-A');
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /HARNESS BLOCK: .*HEAD has no docs\/harness\/current-scope\.md/);
+  });
+});
+
+test('#56 task_closed row for ANOTHER task_id is not this seed\'s closeout -> incomplete; the matching id lands', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { seed: SEED_WITH_ID });
+    closeoutInWorktree(dir);
+    writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), `status: done\ntask_id: "20260926-000000-abcd"\n${AC_BLOCK}`);
+    writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}\n' + rowFor('some-other-task'));
+    git('add', '-A');
+    let r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /incomplete: no task_closed row for task_id 20260926-000000-abcd/);
+    // a row without meta.task_id does not count either when the seed has an id
+    writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}\n{"event":"task_closed","actor":"assistant"}\n');
+    git('add', '-A');
+    r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 2, r.stderr);
+    // the right id (with the contract's JSON shape, spaces allowed) lands
+    writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}\n' + rowFor('some-other-task') + rowFor('20260926-000000-abcd'));
+    git('add', '-A');
+    r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stderr, /closeout landing/);
+  });
+});
+
+test('#56 review: leaving the audit row OUT of a false closeout does not downgrade it to "incomplete" (docs-only, risk=low, WIP) -> still BLOCK', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { scope: UNCHECKED_SCOPE });
+    writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), `status: done\n${AC_BLOCK}`);
+    unlinkSync(join(dir, 'docs', 'harness', 'current-scope.md'));
+    git('add', '-A'); // no task_closed row, no code
+    for (const [cmd, env] of [['git commit -m x', { TEST_RISK_LEVEL: 'low' }], ['git commit -am "wip: x"', { TEST_RISK_LEVEL: 'low' }]]) {
+      const r = runGateHermetic(dir, cmd, env);
+      assert.equal(r.status, 2, `${cmd}: ${r.stderr}`);
+      assert.match(r.stderr, /1 unchecked acceptance criteria/);
+      assert.doesNotMatch(r.stderr, /incomplete: no task_closed row/);
+    }
+  });
+});
+
+test('#56 review: a task_id with a trailing YAML comment is still the id (other row rejected, matching row lands); an unparseable task_id line is fail-closed', () => {
+  for (const idLine of ['task_id: 20260926-000000-abcd  # kickoff id', 'task_id: "20260926-000000-abcd" # quoted']) {
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir, { seed: `status: approved\n${idLine}\n${AC_BLOCK}` });
+      closeoutInWorktree(dir);
+      writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), `status: done\n${idLine}\n${AC_BLOCK}`);
+      writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}\n' + rowFor('some-other-task'));
+      git('add', '-A');
+      let r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+      assert.equal(r.status, 2, `${idLine}: ${r.stderr}`);
+      assert.match(r.stderr, /no task_closed row for task_id 20260926-000000-abcd/);
+      writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}\n' + rowFor('20260926-000000-abcd'));
+      git('add', '-A');
+      r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+      assert.equal(r.status, 0, `${idLine}: ${r.stderr}`);
+    });
+  }
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { seed: `status: approved\ntask_id: abcd#x\n${AC_BLOCK}` });
+    closeoutInWorktree(dir); // CLOSED_ROW carries task_id t1 — must NOT be accepted as "seed has no id"
+    git('add', '-A');
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /task_id line that is not a plain non-empty scalar/);
+  });
+});
+
+test('#56 review: the AC record covers deeper subsections, repeated headings and other bullets; CRLF and [X] land', () => {
+  const cases = [
+    ['### subsection', '# S\n\n## Acceptance Criteria\n\n- [x] one\n\n### Remaining\n\n- [ ] two\n'],
+    ['repeated heading', '# S\n\n## Acceptance Criteria\n\n- [x] one\n\n## Notes\n\ntext\n\n## Acceptance Criteria\n\n- [ ] two\n'],
+    ['star bullet', '# S\n\n## Acceptance Criteria\n\n- [x] one\n* [ ] two\n'],
+    ['numbered bullet', '# S\n\n## Acceptance Criteria\n\n1. [x] one\n2. [ ] two\n'],
+  ];
+  for (const [name, scope] of cases) {
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir, { scope });
+      closeoutInWorktree(dir);
+      git('add', '-A');
+      const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low' });
+      assert.equal(r.status, 2, `${name}: ${r.stderr}`);
+      assert.match(r.stderr, /1 unchecked acceptance criteria/, name);
+      assert.match(r.stderr, /- \[ \] two/, name);
+    });
+    // the same shapes gate the in-flight (non-closeout) commit too — Check 3 shares the parser
+    withDir({ 'seed.yaml': `status: approved\n${AC_BLOCK}`, 'current-scope.md': scope }, (dir) => {
+      const r = runGate(dir);
+      assert.equal(r.status, 2, `check 3 ${name}: ${r.stderr}`);
+      assert.match(r.stderr, /1 acceptance criteria not met/, name);
+    });
+  }
+  for (const [name, scope] of [
+    ['CRLF + [X]', '# S\r\n\r\n## Acceptance Criteria\r\n\r\n- [X] one\r\n- [x] two\r\n'],
+    ['non-checkbox prose after the AC section', '# S\n\n## Acceptance Criteria\n\n- [x] one\n\n## Cycles\n\n1. step one\n'],
+    ['a closing # run and trailing spaces on the heading', '# S\n\n## Acceptance Criteria ##  \n\n- [x] one\n'],
+  ]) {
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir, { scope });
+      closeoutInWorktree(dir);
+      git('add', '-A');
+      const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+      assert.equal(r.status, 0, `${name}: ${r.stderr}`);
+      assert.match(r.stderr, /closeout landing/, name);
+    });
+  }
+});
+
+test('#56 review: a row whose top-level event is not task_closed (nested "event") is not the audit row', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { seed: SEED_WITH_ID });
+    closeoutInWorktree(dir);
+    writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), `status: done\ntask_id: "20260926-000000-abcd"\n${AC_BLOCK}`);
+    writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}\n{"event":"not_closed","nested":{"event":"task_closed"},"meta":{"task_id":"20260926-000000-abcd"}}\n');
+    git('add', '-A');
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /incomplete: no task_closed row for task_id/);
+  });
+});
+
+test('#56 review r2/r3: code fences never hide a box — the AC section is a checklist, fail-closed', () => {
+  const shapes = [
+    ['literal ~~~ inside a closed backtick block', '# S\n\n## Acceptance Criteria\n\n- [x] one\n\n```\n~~~\n```\n- [ ] two\n'],
+    ['unterminated fence', '# S\n\n## Acceptance Criteria\n\n- [x] one\n\n```\n- [ ] two\n'],
+    ['inline ```js``` paragraph', '# S\n\n## Acceptance Criteria\n\n- [x] one\n\nuse ```js``` inline\n- [ ] two\n'],
+    ['closer shorter than opener', '# S\n\n## Acceptance Criteria\n\n- [x] one\n\n````\n```\n- [ ] two\n'],
+    ['bullet-attached opener (r3 high)', '# S\n\n## Acceptance Criteria\n\n- [x] one\n- ```md\n  example\n  ```\n- [ ] two\n```\n'],
+    ['closed fence around a box', '# S\n\n## Acceptance Criteria\n\n- [x] one\n\n~~~md\n- [ ] two\n~~~\n'],
+  ];
+  for (const [name, scope] of shapes) {
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir, { scope });
+      closeoutInWorktree(dir);
+      git('add', '-A');
+      const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+      assert.equal(r.status, 2, `${name}: ${r.stderr}`);
+      assert.match(r.stderr, /- \[ \] two/, name);
+    });
+    withDir({ 'seed.yaml': `status: approved\n${AC_BLOCK}`, 'current-scope.md': scope }, (dir) => {
+      assert.equal(runGate(dir).status, 2, `check 3 ${name}`);
+    });
+  }
+});
+
+test('#56 review r2: a heading indented 1-3 spaces is still the heading (fail-open regression), and a nested repeated AC heading keeps the outer boundary', () => {
+  for (const [name, scope] of [
+    ['indented heading', '# S\n\n   ## Acceptance Criteria\n\n- [x] one\n- [ ] two\n'],
+    ['nested repeated heading', '# S\n\n## Acceptance Criteria\n\n- [x] one\n\n### Acceptance Criteria\n\n- [x] inner\n\n### Remaining\n\n- [ ] two\n'],
+  ]) {
+    withDir({ 'seed.yaml': `status: approved\n${AC_BLOCK}`, 'current-scope.md': scope }, (dir) => {
+      const r = runGate(dir);
+      assert.equal(r.status, 2, `check 3 ${name}: ${r.stderr}`);
+      assert.match(r.stderr, /1 acceptance criteria not met/, name);
+    });
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir, { scope });
+      closeoutInWorktree(dir);
+      git('add', '-A');
+      const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low' });
+      assert.equal(r.status, 2, `${name}: ${r.stderr}`);
+      assert.match(r.stderr, /- \[ \] two/, name);
+    });
+  }
+});
+
+test('#56 review r2: an empty task_id (bare or "") is fail-closed, not read from the next line and not matched by an empty meta.task_id', () => {
+  for (const idLine of ['task_id:', 'task_id: ""', "task_id: ''"]) {
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir, { seed: `status: approved\n${idLine}\n${AC_BLOCK}` });
+      closeoutInWorktree(dir);
+      writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), `status: done\n${idLine}\n${AC_BLOCK}`);
+      writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}\n' + rowFor('') + rowFor('acceptance_criteria:'));
+      git('add', '-A');
+      const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+      assert.equal(r.status, 2, `${idLine}: ${r.stderr}`);
+      assert.match(r.stderr, /task_id line that is not a plain non-empty scalar/, idLine);
+    });
+  }
+});
+
+test('#56 review r2: the seed flip cannot land alone with the unchecked scope still committed (two-commit split) -> BLOCK even docs-only', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { scope: UNCHECKED_SCOPE });
+    writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), `status: done\n${AC_BLOCK}`);
+    git('add', '-A'); // flip only, docs-only
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /HARNESS BLOCK: .*1 unchecked acceptance criteria/);
+    assert.doesNotMatch(r.stderr, /still in the commit/);
+  });
+});
+
+test('#56 review r3/r5: a closing `#` run needs a space (`Acceptance Criteria#` is not the heading); an empty `##` line does not end the record', () => {
+  withDir({ 'seed.yaml': `status: approved\n${AC_BLOCK}`, 'current-scope.md': '# S\n\n## Acceptance Criteria ##\n\n- [x] one\n\n##\n\n- [ ] two\n' }, (dir) => {
+    const r = runGate(dir);
+    assert.equal(r.status, 2);
+    assert.match(r.stderr, /- \[ \] two/);
+  });
+  withDir({ 'seed.yaml': `status: approved\n${AC_BLOCK}`, 'current-scope.md': '# S\n\n## Acceptance Criteria#\n\n- [ ] one\n' }, (dir) => {
+    const r = runGate(dir);
+    assert.equal(r.status, 0);
+    assert.match(r.stderr, /No Acceptance Criteria section/);
+  });
+});
+
+test('#56 review r3: deleting the worktree seed.yaml after staging a false closeout does not skip the judgement', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { scope: UNCHECKED_SCOPE });
+    closeoutInWorktree(dir);
+    git('add', '-A');
+    unlinkSync(join(dir, 'docs', 'harness', 'seed.yaml')); // unstaged deletion; the index still carries `done`
+    for (const input of [
+      { tool_input: { command: 'git commit -m x' }, session_state: { cwd: dir } },
+      { mode: 'hook', hook: 'pre-commit', session_state: { cwd: dir } },
+    ]) {
+      const r = spawnSync('node', [GATE], { input: JSON.stringify(input), cwd: dir, encoding: 'utf-8', env: { ...HERMETIC, TEST_RISK_LEVEL: 'low' } });
+      assert.equal(r.status, 2, r.stderr);
+      assert.match(r.stderr, /1 unchecked acceptance criteria/);
+    }
+  });
+});
+
+test('#56 review r3: a git failure while verifying an established closeout is fail-closed (BLOCK), not "not a closeout"', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir);
+    closeoutInWorktree(dir);
+    git('add', '-A');
+    // PATH shim: real git, except `ls-tree` and `show HEAD:docs/harness/current-scope.md` fail
+    const shim = join(dir, 'shim');
+    mkdirSync(shim);
+    const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf-8' }).trim();
+    writeFileSync(join(shim, 'git'), `#!/bin/sh\nfor a in "$@"; do case "$a" in ls-tree|HEAD:docs/harness/current-scope.md) exit 128;; esac; done\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low', PATH: `${shim}:${process.env.PATH}` });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /HARNESS BLOCK: .*could not be verified/);
+  });
+});
+
+test('#56 review r4: a `# …` line inside a fence or HTML comment cannot hide a box; a blockquoted box counts; non-checkbox prose after the section is fine', () => {
+  const stillOpen = [
+    ['shell comment in a bash fence', '# S\n\n## Acceptance Criteria\n\n- [x] one\n\n```bash\n# run the suite\n```\n- [ ] two\n'],
+    ['heading-looking line in an unterminated fence', '# S\n\n## Acceptance Criteria\n\n- [x] one\n\n~~~\n## not a heading\n- [ ] two\n'],
+    ['bullet-attached fence with a # line', '# S\n\n## Acceptance Criteria\n\n- [x] one\n- ```sh\n  # comment\n  ```\n- [ ] two\n'],
+    ['html comment spanning lines', '# S\n\n## Acceptance Criteria\n\n- [x] one\n\n<!--\n# note\n-->\n- [ ] two\n'],
+    ['blockquoted box', '# S\n\n## Acceptance Criteria\n\n- [x] one\n> - [ ] two\n'],
+    ['nested blockquote box', '# S\n\n## Acceptance Criteria\n\n- [x] one\n> > - [ ] two\n'],
+  ];
+  for (const [name, scope] of stillOpen) {
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir, { scope });
+      closeoutInWorktree(dir);
+      git('add', '-A');
+      const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+      assert.equal(r.status, 2, `${name}: ${r.stderr}`);
+      assert.match(r.stderr, /- \[ \] two/, name);
+    });
+    withDir({ 'seed.yaml': `status: approved\n${AC_BLOCK}`, 'current-scope.md': scope }, (dir) => {
+      assert.equal(runGate(dir).status, 2, `check 3 ${name}`);
+    });
+  }
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { scope: '# S\n\n## Acceptance Criteria\n\n- [x] one\n\n```bash\n# run\n```\n\n<!-- # x -->\n\n## Follow-ups\n\n1. later (a step, not a checkbox — #48-4)\n' });
+    closeoutInWorktree(dir);
+    git('add', '-A');
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stderr, /closeout landing/);
+  });
+});
+
+test('#56 review r4: the block message tells how to undo the staged closeout; following it (undo, check off, commit, redo) lands', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { scope: UNCHECKED_SCOPE });
+    // an unrelated tracked file under docs/harness with an UNSTAGED edit must survive the undo (r7: a directory pathspec destroyed it)
+    writeFileSync(join(dir, 'docs', 'harness', 'notes.md'), 'k\n');
+    git('add', 'docs/harness/notes.md');
+    git('commit', '-q', '-m', 'notes');
+    closeoutInWorktree(dir);
+    git('add', '-A');
+    writeFileSync(join(dir, 'docs', 'harness', 'notes.md'), 'k3 unstaged\n');
+    const blocked = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(blocked.status, 2);
+    assert.match(blocked.stderr, /`git restore --staged --worktree -- docs\/harness\/seed\.yaml docs\/harness\/current-scope\.md docs\/harness\/audit\.jsonl`/);
+    git('restore', '--staged', '--worktree', '--', 'docs/harness/seed.yaml', 'docs/harness/current-scope.md', 'docs/harness/audit.jsonl');
+    assert.equal(readFileSync(join(dir, 'docs', 'harness', 'notes.md'), 'utf-8'), 'k3 unstaged\n', 'unrelated unstaged edit survives');
+    writeFileSync(join(dir, 'docs', 'harness', 'current-scope.md'), '# Scope\n\n## Acceptance Criteria\n\n- [x] not done yet\n');
+    git('add', '-A');
+    assert.equal(runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' }).status, 0, 'check-off commit');
+    git('commit', '-q', '-m', 'check off');
+    closeoutInWorktree(dir);
+    git('add', '-A');
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stderr, /closeout landing/);
+  });
+});
+
+test('#56 review r4/r5: an index seed read that fails for a git reason on an approved task is fail-closed, whatever the worktree seed says', () => {
+  for (const worktreeSeed of [null, `status: approved\n${AC_BLOCK}`]) {
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir);
+      closeoutInWorktree(dir);
+      git('add', '-A');
+      if (worktreeSeed) writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), worktreeSeed); // re-approved for the next task, unstaged
+      const shim = join(dir, 'shim');
+      mkdirSync(shim);
+      const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf-8' }).trim();
+      writeFileSync(join(shim, 'git'), `#!/bin/sh\nfor a in "$@"; do case "$a" in :docs/harness/seed.yaml) exit 128;; esac; done\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
+      const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low', PATH: `${shim}:${process.env.PATH}` });
+      assert.equal(r.status, 2, `${worktreeSeed ? 're-approved' : 'done'} worktree: ${r.stderr}`);
+      assert.match(r.stderr, /HARNESS BLOCK: .*could not be verified/);
+      assert.doesNotMatch(r.stderr, /not staged/);
+    });
+  }
+});
+
+test('#56 review r5: nothing closes the AC section — container-prefixed fake closers, HTML blocks, nested containers and pre-heading fence/comment noise cannot hide a box', () => {
+  const shapes = [
+    ['container-prefixed closer inside a fence', '# S\n\n## Acceptance Criteria\n- [x] one\n```\n> ```\n## Next\n```\n\n- [ ] two\n'],
+    ['indented fake closer inside a fence', '# S\n\n## Acceptance Criteria\n- [x] one\n```\n    ```\n## Next\n```\n\n- [ ] two\n'],
+    ['html block with a heading inside', '# S\n\n## Acceptance Criteria\n- [x] one\n<details>\n## Next\n</details>\n\n- [ ] two\n'],
+    ['pre block with a heading inside', '# S\n\n## Acceptance Criteria\n- [x] one\n<pre>\n# Next\n</pre>\n\n- [ ] two\n'],
+    ['nested list container', '# S\n\n## Acceptance Criteria\n- [x] one\n- - [ ] two\n'],
+    ['list then blockquote container', '# S\n\n## Acceptance Criteria\n- [x] one\n- > - [ ] two\n'],
+    ['blockquote without a space', '# S\n\n## Acceptance Criteria\n- [x] one\n>- [ ] two\n'],
+    ['a later H2 with a box (AC section is last by template)', '# S\n\n## Acceptance Criteria\n- [x] one\n\n## Follow-ups\n- [ ] two\n'],
+    ['indented fence before the real heading', '# S\n\n    ```\n## Acceptance Criteria\n- [x] one\n- [ ] two\n'],
+    ['inline comment opener before the real heading', '# S\n\ntext <!-- note\n## Acceptance Criteria\n- [x] one\n- [ ] two\n'],
+    ['repeated heading after an html comment', '# S\n\n## Acceptance Criteria\n- [x] one\n<!--\n-->\n## Acceptance Criteria\n- [ ] two\n'],
+  ];
+  for (const [name, scope] of shapes) {
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir, { scope });
+      closeoutInWorktree(dir);
+      git('add', '-A');
+      const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low' });
+      assert.equal(r.status, 2, `${name}: ${r.stderr}`);
+      assert.match(r.stderr, /- \[ \] two/, name);
+    });
+    withDir({ 'seed.yaml': `status: approved\n${AC_BLOCK}`, 'current-scope.md': scope }, (dir) => {
+      const r = runGate(dir);
+      assert.equal(r.status, 2, `check 3 ${name}: ${r.stderr}`);
+    });
+  }
+  // non-checkbox prose after the AC section (the one real historical shape, `## Cycles`) still lands
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { scope: '# S\n\n## Acceptance Criteria\n- [x] one\n\n## Cycles\n1. step one — 확인: 픽스처\n2. step two\n' });
+    closeoutInWorktree(dir);
+    git('add', '-A');
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stderr, /closeout landing/);
+  });
+});
+
+test('#56 review r5/r7: the undo command names only paths git knows — a NEW audit.jsonl is removed, a scope absent from HEAD and index is left out, and the command never fails', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { scope: UNCHECKED_SCOPE });
+    git('rm', '-q', 'docs/harness/audit.jsonl');
+    git('commit', '-q', '-m', 'no audit log yet');
+    closeoutInWorktree(dir); // creates audit.jsonl
+    git('add', '-A');
+    const blocked = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(blocked.status, 2);
+    const cmd = blocked.stderr.match(/`(git restore --staged --worktree -- [^`]+)`/)?.[1];
+    assert.equal(cmd, 'git restore --staged --worktree -- docs/harness/seed.yaml docs/harness/current-scope.md docs/harness/audit.jsonl');
+    git(...cmd.split(' ').slice(1));
+    assert.equal(existsSync(join(dir, 'docs', 'harness', 'audit.jsonl')), false, 'the file that was new in the closeout commit is removed, as the message says');
+    assert.match(readFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), 'utf-8'), /^status: approved/m);
+  });
+  withDir({}, (dir) => {
+    // HEAD has no scope and the commit does not add one: the path is unknown to git and must not be in the command
+    const git = gitRepoWithTask(dir);
+    unlinkSync(join(dir, 'docs', 'harness', 'current-scope.md'));
+    git('add', '-A');
+    git('commit', '-q', '-m', 'scope lost earlier');
+    writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), `status: done\n${AC_BLOCK}`);
+    writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}\n' + CLOSED_ROW);
+    git('add', '-A');
+    const blocked = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low' });
+    assert.equal(blocked.status, 2);
+    const cmd = blocked.stderr.match(/`(git restore --staged --worktree -- [^`]+)`/)?.[1];
+    assert.equal(cmd, 'git restore --staged --worktree -- docs/harness/seed.yaml docs/harness/audit.jsonl');
+    git(...cmd.split(' ').slice(1)); // must not throw
+    assert.match(readFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), 'utf-8'), /^status: approved/m);
+  });
+});
+
+test('#56 review r5/r7 (continued): after the undo, check off, commit and redo -> lands', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { scope: UNCHECKED_SCOPE });
+    git('rm', '-q', 'docs/harness/audit.jsonl');
+    git('commit', '-q', '-m', 'no audit log yet');
+    closeoutInWorktree(dir);
+    git('add', '-A');
+    git('restore', '--staged', '--worktree', '--', 'docs/harness/seed.yaml', 'docs/harness/current-scope.md', 'docs/harness/audit.jsonl');
+    writeFileSync(join(dir, 'docs', 'harness', 'current-scope.md'), '# Scope\n\n## Acceptance Criteria\n\n- [x] not done yet\n');
+    git('add', '-A');
+    git('commit', '-q', '-m', 'check off');
+    closeoutInWorktree(dir);
+    git('add', '-A');
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 0, r.stderr);
+  });
+});
+
+test('#56 review r6: seed status is ONE grammar — `Done`/`DONE`/`done-later`/`Approved` cannot dodge the judgement; `Done` lands, `done-later` is not the contract state', () => {
+  for (const value of ['Done', 'DONE', 'done-later', '"Done"']) {
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir, { scope: UNCHECKED_SCOPE });
+      closeoutInWorktree(dir);
+      writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), `status: ${value}\n${AC_BLOCK}`);
+      writeFileSync(join(dir, 'a.js'), 'x\n'); // docs-only
+      git('add', '-A');
+      for (const cmd of ['git commit -m x', 'git commit -am x']) {
+        const r = runGateHermetic(dir, cmd, { TEST_RISK_LEVEL: 'low' });
+        assert.equal(r.status, 2, `${value} ${cmd}: ${r.stderr}`);
+        assert.match(r.stderr, /1 unchecked acceptance criteria/, value);
+      }
+    });
+  }
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { seed: `status: Approved\n${AC_BLOCK}`, scope: UNCHECKED_SCOPE });
+    closeoutInWorktree(dir);
+    writeFileSync(join(dir, 'a.js'), 'x\n');
+    git('add', '-A');
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /1 unchecked acceptance criteria/);
+  });
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir);
+    closeoutInWorktree(dir);
+    writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), `status: Done  # closed\n${AC_BLOCK}`);
+    git('add', '-A');
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stderr, /closeout landing/);
+  });
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir);
+    closeoutInWorktree(dir);
+    writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), `status: done-later\n${AC_BLOCK}`);
+    git('add', '-A');
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /incomplete: docs\/harness\/seed\.yaml leaves `approved` for `done-later`/);
+  });
+});
+
+test('#56 review r6: the AC heading is recognized behind any prefix (blockquote, list marker, deep indent, trailing NBSP); no heading at all is the backstop, not a silent allow', () => {
+  for (const [name, heading] of [['blockquote', '> ## Acceptance Criteria'], ['list marker', '- ## Acceptance Criteria'], ['4-space indent', '    ## Acceptance Criteria'], ['trailing NBSP', '## Acceptance Criteria\u00a0'], ['closing run', '## Acceptance Criteria ##']]) {
+    const scope = `# S\n\n${heading}\n\n- [x] one\n- [ ] two\n`;
+    withDir({ 'seed.yaml': `status: approved\n${AC_BLOCK}`, 'current-scope.md': scope }, (dir) => {
+      const r = runGate(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'high' });
+      assert.equal(r.status, 2, `check 3 ${name}: ${r.stderr}`);
+      assert.match(r.stderr, /1 acceptance criteria not met/, name);
+    });
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir, { scope });
+      closeoutInWorktree(dir);
+      git('add', '-A');
+      const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low' });
+      assert.equal(r.status, 2, `${name}: ${r.stderr}`);
+    });
+  }
+  withDir({ 'seed.yaml': `status: approved\n${AC_BLOCK}`, 'current-scope.md': '# S\n\n## Scope\n\n- [ ] not under an AC heading\n' }, (dir) => {
+    const code = runGate(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(code.status, 2, code.stderr);
+    assert.match(code.stderr, /HARNESS BACKSTOP[\s\S]*no Acceptance Criteria section/);
+    const docs = runGate(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low' });
+    assert.equal(docs.status, 0);
+    assert.match(docs.stderr, /No Acceptance Criteria section/);
+  });
+});
+
+test('#56 review r6: a U+2028 / U+2029 / bare CR inside a box description does not drop the box', () => {
+  for (const [name, sep] of [['U+2028', '\u2028'], ['U+2029', '\u2029'], ['bare CR', '\r']]) {
+    const scope = `# S\n\n## Acceptance Criteria\n\n- [x] one\n- [ ] two${sep}more text\n`;
+    withDir({ 'seed.yaml': `status: approved\n${AC_BLOCK}`, 'current-scope.md': scope }, (dir) => {
+      const r = runGate(dir);
+      assert.equal(r.status, 2, `check 3 ${name}: ${r.stderr}`);
+      assert.match(r.stderr, /- \[ \] two/, name);
+    });
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir, { scope });
+      closeoutInWorktree(dir);
+      git('add', '-A');
+      const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low' });
+      assert.equal(r.status, 2, `${name}: ${r.stderr}`);
+    });
+  }
+});
+
+test('#56 review r6: a HEAD seed that exists but cannot be read is fail-closed; a >1 MiB HEAD seed is simply read', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { scope: UNCHECKED_SCOPE });
+    closeoutInWorktree(dir);
+    git('add', '-A');
+    const shim = join(dir, 'shim');
+    mkdirSync(shim);
+    const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf-8' }).trim();
+    writeFileSync(join(shim, 'git'), `#!/bin/sh\nfor a in "$@"; do case "$a" in HEAD:docs/harness/seed.yaml) exit 128;; esac; done\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low', PATH: `${shim}:${process.env.PATH}` });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /HARNESS BLOCK: .*could not be verified/);
+  });
+  withDir({}, (dir) => {
+    const big = `status: approved\n${AC_BLOCK}# ${'x'.repeat(1_500_000)}\n`;
+    const git = gitRepoWithTask(dir, { seed: big, scope: UNCHECKED_SCOPE });
+    closeoutInWorktree(dir);
+    writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), big.replace('status: approved', 'status: done'));
+    git('add', '-A');
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /1 unchecked acceptance criteria/);
+  });
+});
+
+test('#56 review r7: a committed status line that does not parse, a removed status line, or a removed seed still leaves `approved` -> judged (BLOCK on unchecked), and is not `done` (incomplete) when all checked', () => {
+  const shapes = [
+    ['done#closed', `status: done#closed\n${AC_BLOCK}`],
+    ['space before colon', `status : done\n${AC_BLOCK}`],
+    ['BOM', `\uFEFFstatus: done\n${AC_BLOCK}`],
+    ['trailing junk', `status: done extra\n${AC_BLOCK}`],
+    ['trailing NBSP', `status: done\u00a0\n${AC_BLOCK}`],
+    ['status line removed', `name: x\n${AC_BLOCK}`],
+    ['seed removed', null],
+  ];
+  for (const [name, seed] of shapes) {
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir, { scope: UNCHECKED_SCOPE });
+      closeoutInWorktree(dir);
+      writeFileSync(join(dir, 'a.js'), 'x\n'); // docs-only
+      if (seed === null) unlinkSync(join(dir, 'docs', 'harness', 'seed.yaml')); else writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), seed);
+      git('add', '-A');
+      const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low' });
+      assert.equal(r.status, 2, `${name}: ${r.stderr}`);
+      assert.match(r.stderr, /1 unchecked acceptance criteria/, name);
+    });
+  }
+  // all [x]: the grammar-valid `status : done` and BOM forms are simply `done` -> land; the rest are incomplete -> backstop
+  for (const [name, seed, lands] of [['space before colon', `status : done\n${AC_BLOCK}`, true], ['BOM', `\uFEFFstatus: done\n${AC_BLOCK}`, true], ['done#closed', `status: done#closed\n${AC_BLOCK}`, false], ['status line removed', `name: x\n${AC_BLOCK}`, false]]) {
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir);
+      closeoutInWorktree(dir);
+      writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), seed);
+      git('add', '-A');
+      const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+      assert.equal(r.status, lands ? 0 : 2, `${name}: ${r.stderr}`);
+      if (!lands) assert.match(r.stderr, /incomplete: docs\/harness\/seed\.yaml leaves `approved` for (a status line that is not a plain scalar|no status line)/, name);
+    });
+  }
+});
+
+test('#56 review r7: an incomplete closeout always reaches the backstop — `done-later` with the all-[x] scope retained + code -> BLOCK, docs-only -> allow with the warning', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir);
+    writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), `status: done-later\n${AC_BLOCK}`);
+    writeFileSync(join(dir, 'a.js'), 'y\n');
+    git('add', '-A');
+    const code = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(code.status, 2, code.stderr);
+    assert.match(code.stderr, /incomplete: docs\/harness\/seed\.yaml leaves `approved` for `done-later`[\s\S]*HARNESS BACKSTOP[\s\S]*reason: incomplete closeout/);
+    const docs = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low' });
+    assert.equal(docs.status, 0, docs.stderr);
+    assert.match(docs.stderr, /incomplete: docs\/harness\/seed\.yaml leaves `approved` for `done-later`/);
+  });
+});
+
+test('#56 review r7: a BOM before a line-1 task_id at HEAD does not turn the id into "no id"', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { seed: `\uFEFFtask_id: "20260926-000000-abcd"\nstatus: approved\n${AC_BLOCK}` });
+    closeoutInWorktree(dir);
+    writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}\n' + rowFor('some-other-task'));
+    git('add', '-A');
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /no task_closed row for task_id 20260926-000000-abcd/);
+  });
+});
+
+test('#56 review r8: `task_id :` (space before the colon) is the same key as `task_id:` — other row rejected, matching row lands, malformed value fail-closed', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { seed: `status: approved\ntask_id : "20260926-000000-abcd"\n${AC_BLOCK}` });
+    closeoutInWorktree(dir);
+    writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), `status: done\ntask_id : "20260926-000000-abcd"\n${AC_BLOCK}`);
+    writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}\n' + rowFor('some-other-task'));
+    git('add', '-A');
+    let r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /no task_closed row for task_id 20260926-000000-abcd/);
+    writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}\n' + rowFor('20260926-000000-abcd'));
+    git('add', '-A');
+    r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 0, r.stderr);
+  });
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { seed: `status: approved\ntask_id : "\n${AC_BLOCK}` });
+    closeoutInWorktree(dir);
+    git('add', '-A');
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /task_id line that is not a plain non-empty scalar/);
+  });
+});
+
+test('#56 review r8: the undo command names only what THIS commit changed — an unstaged check-off in a scope the commit did not delete survives', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { scope: UNCHECKED_SCOPE });
+    // seed flip + audit row staged; the scope stays, and the user has an UNSTAGED check-off in it
+    writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), `status: done\n${AC_BLOCK}`);
+    writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}\n' + CLOSED_ROW);
+    git('add', 'docs/harness/seed.yaml', 'docs/harness/audit.jsonl');
+    writeFileSync(join(dir, 'docs', 'harness', 'current-scope.md'), '# Scope\n\n## Acceptance Criteria\n\n- [x] not done yet\n');
+    const blocked = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low' });
+    assert.equal(blocked.status, 2, blocked.stderr);
+    const cmd = blocked.stderr.match(/`(git restore --staged --worktree -- [^`]+)`/)?.[1];
+    assert.equal(cmd, 'git restore --staged --worktree -- docs/harness/seed.yaml docs/harness/audit.jsonl');
+    git(...cmd.split(' ').slice(1));
+    assert.match(readFileSync(join(dir, 'docs', 'harness', 'current-scope.md'), 'utf-8'), /- \[x\] not done yet/, 'the unstaged check-off survives');
+    assert.match(readFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), 'utf-8'), /^status: approved/m);
+    // and the advertised next step works: stage the check-off, commit, redo the closeout
+    git('add', '-A');
+    git('commit', '-q', '-m', 'check off');
+    closeoutInWorktree(dir);
+    git('add', '-A');
+    assert.equal(runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' }).status, 0);
+  });
+});
+
+test('#56 review r9: a scope the commit MODIFIES (check-offs staged, not deleted) is not in the undo command; the staged check-off survives', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { scope: UNCHECKED_SCOPE });
+    writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), `status: done\n${AC_BLOCK}`);
+    writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}\n' + CLOSED_ROW);
+    writeFileSync(join(dir, 'docs', 'harness', 'current-scope.md'), '# Scope\n\n## Acceptance Criteria\n\n- [x] not done yet\n\n## Evidence\n\nnotes the user wants to keep\n');
+    git('add', '-A');
+    for (const cmdForm of ['git commit -m x', 'git commit -am x']) {
+      const blocked = runGateHermetic(dir, cmdForm, { TEST_RISK_LEVEL: 'low' });
+      assert.equal(blocked.status, 2, `${cmdForm}: ${blocked.stderr}`);
+      const cmd = blocked.stderr.match(/`(git restore --staged --worktree -- [^`]+)`/)?.[1];
+      assert.equal(cmd, 'git restore --staged --worktree -- docs/harness/seed.yaml docs/harness/audit.jsonl', cmdForm);
+    }
+    git('restore', '--staged', '--worktree', '--', 'docs/harness/seed.yaml', 'docs/harness/audit.jsonl');
+    assert.match(git('show', ':docs/harness/current-scope.md').toString(), /- \[x\] not done yet[\s\S]*notes the user wants to keep/, 'the staged check-off and notes survive');
+    git('commit', '-q', '-m', 'check off');
+    closeoutInWorktree(dir);
+    git('add', '-A');
+    assert.equal(runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' }).status, 0);
+  });
+});
+
+test('#56 review r9: inside a repository (`.git` present), a git that cannot read HEAD at all is fail-closed, not "not a repository"', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { scope: UNCHECKED_SCOPE });
+    closeoutInWorktree(dir);
+    git('add', '-A');
+    const shim = join(dir, 'shim');
+    mkdirSync(shim);
+    const realGit = execFileSync('sh', ['-c', 'command -v git'], { encoding: 'utf-8' }).trim();
+    writeFileSync(join(shim, 'git'), `#!/bin/sh\nfor a in "$@"; do case "$a" in HEAD:docs/harness/seed.yaml|rev-parse) exit 128;; esac; done\nexec "${realGit}" "$@"\n`, { mode: 0o755 });
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low', PATH: `${shim}:${process.env.PATH}` });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /HARNESS BLOCK: .*could not be verified/);
+    assert.doesNotMatch(r.stderr, /`git restore --staged --worktree -- docs\//, 'no executable command with real paths');
+    assert.match(r.stderr, /by hand/);
+  });
+});
+
+test('#56 review r9: a CR inside a quoted task_id, or an invalid task_id line beside a valid one, is fail-closed', () => {
+  for (const [name, idLines] of [['CR in quotes', 'task_id: "t\r1"'], ['invalid line before a valid one', 'task_id:\ntask_id: t1']]) {
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir, { seed: `status: approved\n${idLines}\n${AC_BLOCK}` });
+      closeoutInWorktree(dir);
+      writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}\n' + rowFor('t\r1') + rowFor('t1'));
+      git('add', '-A');
+      const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+      assert.equal(r.status, 2, `${name}: ${r.stderr}`);
+      assert.match(r.stderr, /task_id line that is not a plain non-empty scalar/, name);
+    });
+  }
 });
