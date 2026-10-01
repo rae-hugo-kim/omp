@@ -145,7 +145,8 @@ function backstop(reason, opts = {}) {
 
 // The acceptance record of a scope file (shared by Check 3 and the closeout landing, so both
 // paths count the same boxes): every checkbox line from the first `Acceptance Criteria` ATX
-// heading (any level, 0–3 leading spaces, an optional closing `#` run after a space) to the END
+// heading (any level, behind ANY prefix — blockquote, list marker, deep indent — with an
+// optional closing `#` run after a space; liberal on purpose, see below) to the END
 // OF FILE. Nothing closes the section. Five review rounds (2026-09-27) each produced a
 // valid-markdown shape — `###` subsections, fence variants (unterminated, mismatched,
 // bullet-attached, container-prefixed closers), HTML comments and blocks — by which an emulated
@@ -411,7 +412,7 @@ if (closeout?.falseCloseout) {
   console.error('');
   console.error('closeout_contract.md §2 never closes a task without an AC record that is fully checked. Options:');
   console.error(closeout.undo
-    ? `  1. Undo the staged closeout: \`git restore --staged --worktree -- ${closeout.undo.join(' ')}\` (only the paths this commit changed; they go back to HEAD, so an UNSTAGED edit in them is lost as well — stash it first if you need it), keep seed.yaml \`status: approved\` (\`thread-scope open\` regenerates a missing scope), check off the met criteria in docs/harness/current-scope.md and COMMIT that first (the record must reach HEAD before the closeout), then redo the closeout`
+    ? `  1. Undo the staged closeout: \`git restore --staged --worktree -- ${closeout.undo.join(' ')}\` (only the paths this commit changed; they go back to HEAD, so an UNSTAGED edit in them — or an untracked next-task scope at that path — is lost as well; stash or move it first if you need it), keep seed.yaml \`status: approved\` (\`thread-scope open\` regenerates a missing scope), check off the met criteria in docs/harness/current-scope.md and COMMIT that first (the record must reach HEAD before the closeout), then redo the closeout`
     : '  1. Undo the staged closeout by hand (git could not list what this commit changed — `git status` and `git restore --staged --worktree -- <path>` for the seed/scope/audit paths it touched), keep seed.yaml `status: approved`, check off the met criteria in docs/harness/current-scope.md and COMMIT that first, then redo the closeout');
   console.error('  2. If the task is not complete, stop after that undo — keep `status: approved` and the scope; a closeout is not a checkpoint');
   console.error('  3. Create docs/harness/acceptance-done to override');
