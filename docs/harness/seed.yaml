@@ -1,5 +1,6 @@
 name: audit-append-only-62
-status: approved
+status: done
+completed: 2026-10-01
 version: 1
 task_id: "20261001-101549-7cce"
 # gh-loop 사후 seed: 이슈 #62 본문(PR #59 3-pass 리뷰 r4/r8 low — closeout §3c가 audit.jsonl의
