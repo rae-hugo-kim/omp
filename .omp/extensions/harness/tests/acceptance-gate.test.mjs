@@ -1215,3 +1215,89 @@ test('#56 review r9: a CR inside a quoted task_id, or an invalid task_id line be
     });
   }
 });
+
+test('#62 audit.jsonl must be append-only: a removed or replaced row makes the closeout incomplete (plain, -a, hook); appending lands', () => {
+  const forms = [
+    ['plain', (dir) => runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' })],
+    ['-a', (dir) => runGateHermetic(dir, 'git commit -am x', { TEST_RISK_LEVEL: 'medium' })],
+    ['hook', (dir) => spawnSync('node', [GATE], {
+      input: JSON.stringify({ mode: 'hook', hook: 'pre-commit', session_state: { cwd: dir } }),
+      cwd: dir, encoding: 'utf-8', env: { ...HERMETIC, TEST_RISK_LEVEL: 'medium' },
+    })],
+  ];
+  for (const [name, run] of forms) {
+    // existing row DELETED, task_closed row added -> not a closeout
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir);
+      closeoutInWorktree(dir);
+      writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), CLOSED_ROW);
+      git('add', '-A');
+      const r = run(dir);
+      assert.equal(r.status, 2, `${name} deleted: ${r.stderr}`);
+      assert.match(r.stderr, /audit\.jsonl is not append-only/, name);
+    });
+    // existing row REPLACED by the task_closed row (same line count) -> not a closeout
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir);
+      closeoutInWorktree(dir);
+      writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened","edited":true}\n' + CLOSED_ROW);
+      git('add', '-A');
+      const r = run(dir);
+      assert.equal(r.status, 2, `${name} replaced: ${r.stderr}`);
+      assert.match(r.stderr, /audit\.jsonl is not append-only/, name);
+    });
+    // r1 high: a removed row that starts with `-- ` prints as `--- …` in the diff — a prefix-based
+    // header exemption let it through; only pre-hunk lines are header
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir);
+      writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}\n-- broken row\n');
+      git('add', '-A');
+      git('commit', '-q', '-m', 'broken row at HEAD');
+      closeoutInWorktree(dir);
+      git('add', '-A');
+      const r = run(dir);
+      assert.equal(r.status, 2, `${name} header-looking row: ${r.stderr}`);
+      assert.match(r.stderr, /audit\.jsonl is not append-only/, name);
+    });
+    // r1 low (design): a HEAD file without a trailing newline re-emits its last row as -/+ on
+    // append — fail-closed, the message names the case
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir);
+      writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}');
+      git('add', '-A');
+      git('commit', '-q', '-m', 'no trailing newline at HEAD');
+      closeoutInWorktree(dir);
+      git('add', '-A');
+      const r = run(dir);
+      assert.equal(r.status, 2, `${name} no trailing newline: ${r.stderr}`);
+      assert.match(r.stderr, /without a trailing newline/, name);
+    });
+    // append only (the closeoutInWorktree shape) still lands
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir);
+      closeoutInWorktree(dir);
+      git('add', '-A');
+      const r = run(dir);
+      assert.equal(r.status, 0, `${name} append: ${r.stderr}`);
+      assert.match(r.stderr, /closeout landing/, name);
+    });
+  }
+});
+
+test('#62 r2: a textconv driver on audit.jsonl cannot hide a removed row — the diff is read with --no-textconv', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir);
+    // the driver filters the row that the closeout deletes: with textconv applied, both sides of
+    // the diff agree and the deletion vanishes (pure append → would land)
+    writeFileSync(join(dir, '.gitattributes'), 'docs/harness/audit.jsonl diff=hide\n');
+    git('config', 'diff.hide.textconv', 'grep -v broken');
+    writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}\n{"event":"broken"}\n');
+    git('add', '-A');
+    git('commit', '-q', '-m', 'row to be hidden at HEAD');
+    closeoutInWorktree(dir);
+    git('add', '-A');
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /audit\.jsonl is not append-only/);
+  });
+});
