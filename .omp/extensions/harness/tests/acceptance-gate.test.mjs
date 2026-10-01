@@ -1283,3 +1283,21 @@ test('#62 audit.jsonl must be append-only: a removed or replaced row makes the c
     });
   }
 });
+
+test('#62 r2: a textconv driver on audit.jsonl cannot hide a removed row — the diff is read with --no-textconv', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir);
+    // the driver filters the row that the closeout deletes: with textconv applied, both sides of
+    // the diff agree and the deletion vanishes (pure append → would land)
+    writeFileSync(join(dir, '.gitattributes'), 'docs/harness/audit.jsonl diff=hide\n');
+    git('config', 'diff.hide.textconv', 'grep -v broken');
+    writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}\n{"event":"broken"}\n');
+    git('add', '-A');
+    git('commit', '-q', '-m', 'row to be hidden at HEAD');
+    closeoutInWorktree(dir);
+    git('add', '-A');
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /audit\.jsonl is not append-only/);
+  });
+});
