@@ -339,13 +339,22 @@ function closeoutState() {
     const seedTaskId = seedScalar(headSeed, 'task_id');
     if (seedTaskId === INVALID) return 'HEAD docs/harness/seed.yaml has a task_id line that is not a plain non-empty scalar, so the task_closed row cannot be matched (closeout_contract.md §3c)';
     const auditDiff = form.all ? diff('HEAD', '--', 'docs/harness/audit.jsonl') : diff('--cached', '--', 'docs/harness/audit.jsonl');
+    const auditLines = auditDiff.split('\n');
+    // The log is append-only (#62): a removed `-` line (the `--- a/…` header excepted) means an
+    // existing row was deleted or replaced, and a task_closed row added beside that is not a
+    // closeout — the history it is supposed to extend has been rewritten. Content that merely
+    // starts with `-` is a non-JSON row and counts too (fail-closed). A log fix belongs in its
+    // own commit, before the closeout.
+    if (auditLines.some((line) => line.startsWith('-') && !line.startsWith('--- '))) {
+      return 'docs/harness/audit.jsonl is not append-only in this commit — an existing row is removed or replaced (closeout_contract.md §3c; land the log fix in a separate commit, then close out)';
+    }
     const rowMatches = (line) => {
       if (!line.startsWith('+') || line.startsWith('+++ ')) return false;
       let row;
       try { row = JSON.parse(line.slice(1)); } catch { return false; }
       return row?.event === 'task_closed' && (seedTaskId === null || row.meta?.task_id === seedTaskId);
     };
-    if (!auditDiff.split('\n').some(rowMatches)) {
+    if (!auditLines.some(rowMatches)) {
       return seedTaskId === null
         ? 'no task_closed row is added to docs/harness/audit.jsonl in this commit (closeout_contract.md §3c; `git commit -a` does not add an untracked audit.jsonl — `git add` it)'
         : `no task_closed row for task_id ${seedTaskId} is added to docs/harness/audit.jsonl in this commit (closeout_contract.md §3c: meta.task_id must name the seed being closed)`;

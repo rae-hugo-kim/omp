@@ -1215,3 +1215,45 @@ test('#56 review r9: a CR inside a quoted task_id, or an invalid task_id line be
     });
   }
 });
+
+test('#62 audit.jsonl must be append-only: a removed or replaced row makes the closeout incomplete (plain, -a, hook); appending lands', () => {
+  const forms = [
+    ['plain', (dir) => runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' })],
+    ['-a', (dir) => runGateHermetic(dir, 'git commit -am x', { TEST_RISK_LEVEL: 'medium' })],
+    ['hook', (dir) => spawnSync('node', [GATE], {
+      input: JSON.stringify({ mode: 'hook', hook: 'pre-commit', session_state: { cwd: dir } }),
+      cwd: dir, encoding: 'utf-8', env: { ...HERMETIC, TEST_RISK_LEVEL: 'medium' },
+    })],
+  ];
+  for (const [name, run] of forms) {
+    // existing row DELETED, task_closed row added -> not a closeout
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir);
+      closeoutInWorktree(dir);
+      writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), CLOSED_ROW);
+      git('add', '-A');
+      const r = run(dir);
+      assert.equal(r.status, 2, `${name} deleted: ${r.stderr}`);
+      assert.match(r.stderr, /audit\.jsonl is not append-only/, name);
+    });
+    // existing row REPLACED by the task_closed row (same line count) -> not a closeout
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir);
+      closeoutInWorktree(dir);
+      writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened","edited":true}\n' + CLOSED_ROW);
+      git('add', '-A');
+      const r = run(dir);
+      assert.equal(r.status, 2, `${name} replaced: ${r.stderr}`);
+      assert.match(r.stderr, /audit\.jsonl is not append-only/, name);
+    });
+    // append only (the closeoutInWorktree shape) still lands
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir);
+      closeoutInWorktree(dir);
+      git('add', '-A');
+      const r = run(dir);
+      assert.equal(r.status, 0, `${name} append: ${r.stderr}`);
+      assert.match(r.stderr, /closeout landing/, name);
+    });
+  }
+});
