@@ -1246,6 +1246,32 @@ test('#62 audit.jsonl must be append-only: a removed or replaced row makes the c
       assert.equal(r.status, 2, `${name} replaced: ${r.stderr}`);
       assert.match(r.stderr, /audit\.jsonl is not append-only/, name);
     });
+    // r1 high: a removed row that starts with `-- ` prints as `--- …` in the diff — a prefix-based
+    // header exemption let it through; only pre-hunk lines are header
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir);
+      writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}\n-- broken row\n');
+      git('add', '-A');
+      git('commit', '-q', '-m', 'broken row at HEAD');
+      closeoutInWorktree(dir);
+      git('add', '-A');
+      const r = run(dir);
+      assert.equal(r.status, 2, `${name} header-looking row: ${r.stderr}`);
+      assert.match(r.stderr, /audit\.jsonl is not append-only/, name);
+    });
+    // r1 low (design): a HEAD file without a trailing newline re-emits its last row as -/+ on
+    // append — fail-closed, the message names the case
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir);
+      writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}');
+      git('add', '-A');
+      git('commit', '-q', '-m', 'no trailing newline at HEAD');
+      closeoutInWorktree(dir);
+      git('add', '-A');
+      const r = run(dir);
+      assert.equal(r.status, 2, `${name} no trailing newline: ${r.stderr}`);
+      assert.match(r.stderr, /without a trailing newline/, name);
+    });
     // append only (the closeoutInWorktree shape) still lands
     withDir({}, (dir) => {
       const git = gitRepoWithTask(dir);
