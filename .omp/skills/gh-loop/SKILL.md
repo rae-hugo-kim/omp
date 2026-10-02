@@ -49,7 +49,7 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 | 라벨 | 뜻 | 붙이는 시점 | 떼는 시점 |
 |---|---|---|---|
 | `agent-working` (`1D76DB`) | 에이전트 작업 중 — 사람 손 불필요 | 워커가 이슈를 잡을 때(dispatch 워커 기동·gh-fanout 클레임), 결정을 받아 워커가 다시 작업할 때(이슈·PR) | 결정 요청·park(→ `needs-decision`), 질문 없이 PR·보고만 남기고 끝남(→ `needs-review` — gh-loop 워커는 Stage 5에서 머지를 묻으므로 `needs-decision`으로 간다), 실패(→ `needs-decision` + 사유 댓글) |
-| `needs-decision` (`D93F0B`) | 사람이 결정해야 함 — 에이전트가 질문을 남기고 멈춤 | Stage 5 결정 게이트(**이슈와 PR 둘 다**), 사용자가 결정할 것이 본문에 있는 이슈를 만들 때 | 답을 받아 처리한 뒤(acted — 이슈·PR 둘 다), PR 머지·닫힘 |
+| `needs-decision` (`D93F0B`) | 사람이 결정해야 함 — 에이전트가 질문을 남기고 멈춤 | Stage 5 결정 게이트(**이슈와 PR 둘 다**), park(되묻기·명확화), 사용자가 결정할 것이 본문에 있는 이슈를 만들 때 | 답을 받아 처리한 뒤(acted — 이슈·PR 둘 다), 사용자가 `/gh-loop N`으로 워커를 띄울 때(→ `agent-working`), PR 머지·닫힘 |
 | `needs-review` (`FBCA04`) | 사람이 봐야 함 — 질문 없는 리뷰·머지 대기 PR, 확인할 보고 | compr가 PR을 열 때, 확인만 필요한 이슈를 만들 때 | 머지·닫힘, 확인 후, 결정 게이트(→ `needs-decision`) |
 
 - **모아 보기**: `is:open label:needs-decision,needs-review`(쉼표 = OR).
@@ -74,11 +74,12 @@ gh repo view --json nameWithOwner -q .nameWithOwner
    ```bash
    orca worktree create --repo <selector> --name gh-loop-issue-N --no-parent --issue N --json   # 카드에 이슈 링크 → 이후 issue:N 셀렉터로 재탐색
    # 응답의 result.worktree.id("<repoId>::<path>") 전체를 terminal create에 복사한다
-   gh issue edit N --remove-label needs-decision,needs-review --add-label agent-working   # 클레임 먼저(gh-fanout과 같은 순서) — 아래 기동이 실패하면 떼고 보고한다
+   gh issue edit N --remove-label needs-decision,needs-review --add-label agent-working   # 클레임 먼저(gh-fanout과 같은 순서)
+   # 아래 terminal create/send가 실패하면 롤백: gh issue edit N --remove-label agent-working 후 사용자에게 보고(거짓 클레임 방지)
    # 워커 명령(R8): 코디네이터 환경의 Orca 상태 확장 경로를 여기서 펼쳐 리터럴로 넣는다 — 없으면 확장 없이(5에서 안내)
    if [ -n "${ORCA_OMP_STATUS_EXTENSION:-}" ] && [ -f "$ORCA_OMP_STATUS_EXTENSION" ]; then
      WORKER_CMD="command omp --extension $(printf %q "$ORCA_OMP_STATUS_EXTENSION") --model <provider/model> --thinking <level>"
-   else
+   else   # 값이 없거나 파일이 없으면 plain omp — 워커 셸의 Orca 래퍼가 유효한 확장을 가졌다면 그것이 한 번 싣는다
      WORKER_CMD="omp --model <provider/model> --thinking <level>"
    fi
    orca terminal create --worktree "id:<repoId>::<path>" --title "gh-loop #N" --command "$WORKER_CMD" --json
@@ -102,7 +103,7 @@ gh repo view --json nameWithOwner -q .nameWithOwner
    **결정**: <결정 요지>
    **사용자 지시 원문**: "<인용>" (<날짜>, 코디네이터 세션 대화)
    **실행**: <코디네이터가 실행한 명령과 결과, 또는 "워커 재개">
-   <!-- gh-loop:session-decision:<원 질문 nonce> -->
+   <!-- gh-loop:session-decision:<가장 최근 결정 요청의 nonce> -->
    ```
    - **코디네이터가 바로 실행하는 결정**(머지·닫기): Stage 5 재개 5의 head 가드대로 실행한 뒤(머지는 `gh pr merge <pr> --merge --match-head-commit <질문에 적힌 head SHA>`처럼 질문에 적힌 방식으로), 같은 댓글에 `<!-- gh-loop:acted:<nonce> -->`를 함께 남기고 이슈·PR에서 `needs-decision`을 뗀다. 머지했으면 곧바로 7(정리)로 간다.
    - **워커가 실행할 결정**(수정 요청 등): 댓글(acted 없음)을 남기고 이슈(PR이 있으면 PR도)의 `needs-decision`을 `agent-working`으로 바꾼 **뒤** 6처럼 재개 프롬프트를 보낸다 — 라벨을 먼저 바꿔야 워커의 다음 전이를 덮어쓰지 않는다. 해석은 워커가 댓글의 지시 원문 인용을 보고 하고(Stage 5 재개 2의 예외), 해석 끝에 멈추면(이견·모호) 워커가 `needs-decision`으로 되돌린다(Stage 5 재개 park).
@@ -111,7 +112,7 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 #### worker 모드 (워커 세션)
 
 - 트리거: 프롬프트의 `<!-- gh-loop:worker -->`(또는 `--worker`). **다시 dispatch하지 않는다.**
-- 처음 시작하면 Stage 1 라벨 블록(멱등)을 실행하고 이슈에 `agent-working`을 보장한다(`gh issue edit N --remove-label needs-decision,needs-review --add-label agent-working` — 코디네이터가 3에서 붙였으면 no-op; 리포에 라벨이 없으면 이 명령이 실패하므로 블록이 먼저다). 이슈(및 handoff 문서)를 읽고 **Stage 2~5를 그대로** 수행한다 — 커밋 순서(Stage 2 문단), compr로 PR(`Closes #N`, PR에 `needs-review`), advisory 교차검증, 결정 지점에서 이슈 댓글 + 이슈·PR `needs-decision`(Stage 5) + **턴 종료**.
+- 처음 시작하면(재개 프롬프트가 아니면) Stage 1 라벨 블록(멱등)을 실행하고 이슈에 `agent-working`을 보장한다(`gh issue edit N --remove-label needs-decision,needs-review --add-label agent-working` — 코디네이터가 3에서 붙였으면 no-op; 리포에 라벨이 없으면 이 명령이 실패하므로 블록이 먼저다). 재개 때 새로 뜬 워커는 이 줄을 건너뛰고 Stage 5 재개를 따른다. 이슈(및 handoff 문서)를 읽고 **Stage 2~5를 그대로** 수행한다 — 커밋 순서(Stage 2 문단), compr로 PR(`Closes #N`, PR에 `needs-review`), advisory 교차검증, 결정 지점에서 이슈 댓글 + 이슈·PR `needs-decision`(Stage 5) + **턴 종료**.
 - 보고 채널: 이슈 댓글(마일스톤·결정 요청) + `orca worktree set --worktree active --comment "gh-loop #N: <마일스톤>" --json`(마일스톤마다). Run이 바인딩돼 있으면 코디네이터 핸들로 `orca orchestration send --type status` 1건씩(시작·결정 요청·완료만).
 - 재개 프롬프트를 받으면 Stage 5 "재개" 1~6을 워커가 수행한다(댓글 해석·권한자·nonce·멱등 — 코디네이터의 `세션에서 직접 결정함` 댓글도 그 nonce의 답이다, 재개 2). 머지 승인 댓글이면 `gh pr merge --match-head-commit <approved-sha>`까지는 워커가 실행하고(2026-10-01 #62 선례), 이슈에 "머지 완료, 정리 필요(워크트리·브랜치)" 댓글을 남긴 뒤 턴을 종료한다 — 정리는 코디네이터 몫.
 - **자기 워크트리를 지우지 않는다**(그 안에서 실행 중). 머지도 승인 없이는 하지 않는다(Non-Negotiables).
@@ -206,7 +207,7 @@ PR에 대해 교차검증을 1패스 돌린다 — 결과는 **참고용**이지
 3. 후보 중 **권한자(write+) 댓글만**; **owner 우선, 없으면 최신**. 권한자 간 **명시적 이견**이면 자동결정 말고 되묻기(parked).
 4. 그 댓글을 **LLM으로 해석**한다 — **고정 키워드/`grep` 금지**. 자연어로 충분(예: `"B, 검증까지 해야지"` → 옵션 B+검증; grep이었으면 놓쳤다). **모호하면 행동 금지** → 명확화 댓글 + parked 유지.
 5. 머지 결정이면: 승인 댓글이 **현재 PR head SHA 이후**여야 하고, **머지 직전 PR head를 다시 읽어** 승인 시점 SHA와 일치할 때만 머지 — `gh pr merge --match-head-commit <approved-sha>`(원자적 head 가드; 그 사이 새 커밋이 들어오면 머지 중단). 자율 단계로는 절대 머지 안 함.
-6. 멱등: 행동 **성공 후** `<!-- gh-loop:acted:<nonce> -->` 기록 + 이슈·PR **둘 다**에서 `needs-decision` 제거 — 수정 요청처럼 워커가 이어서 작업하는 결정이면 행동에 들어갈 때 `needs-decision` → `agent-working`으로 바꿔 두고, 끝나면 다음 결정 게이트(1)로 간다. acted된 nonce면 재실행 무시. acted/라벨 쓰기가 **실패하면 park**(모호하게 두지 말 것). 재개 시엔 마커뿐 아니라 **실제 상태를 재확인**(PR 이미 머지됨 등)해 멱등 보장 — stateless 마커는 원자적이지 않다(Guard policy 직렬화·멱등 참조).
+6. 멱등: 행동 **성공 후** `<!-- gh-loop:acted:<nonce> -->` 기록 + 이슈·PR **둘 다**에서 `needs-decision` 제거 — 수정 요청처럼 워커가 이어서 작업하는 결정이면 행동에 들어갈 때 이슈·PR의 `needs-decision` → `agent-working`으로 바꿔 두고, 끝나면 다음 결정 게이트(1)로 간다. acted된 nonce면 재실행 무시. acted/라벨 쓰기가 **실패하면 park**(모호하게 두지 말 것). 재개 시엔 마커뿐 아니라 **실제 상태를 재확인**(PR 이미 머지됨 등)해 멱등 보장 — stateless 마커는 원자적이지 않다(Guard policy 직렬화·멱등 참조).
    **park도 결정 요청이다**: 3의 되묻기·4의 명확화로 멈출 때는 1처럼 새 nonce 마커를 단 댓글을 남기고(다음 답을 그 질문에 묶는다) 이슈·PR을 `needs-decision`으로 되돌린다(`agent-working` 제거 — 코디네이터가 Stage 0 9에서 미리 바꿔 둔 경우 포함).
 
 ## Loop Safety
