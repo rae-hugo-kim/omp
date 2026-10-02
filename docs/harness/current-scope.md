@@ -20,9 +20,10 @@
 ## 검증 근거를 기록합니다.
 
 - `node --test .omp/extensions/harness/tests/*.test.mjs`: 653/653 PASS이며 실패·skip은 0건입니다.
-- `node scripts/docs-drift`: `OK (0 errors, 0 warnings)`입니다. 초기 실행의 외부 `orca-cli` 상대 링크 오류는 `skill://orca-cli` 참조로 수정했습니다.
-- Bash 예시 8개를 `bash -n`으로 확인했고, R8 명령 문자열의 확장 유무·공백/`$(literal)` 경로 argv 보존을 통과했습니다.
+- `node scripts/docs-drift`: 최초 링크 수정 후 `OK (0 errors, 0 warnings)`였으며, AC 체크 후 마감 전에는 오류 0건·예정된 `Closeout pending` 경고 1건입니다.
+- Bash 예시 9개를 `bash -n`으로 확인했고, R8 명령 문자열의 확장 유무·공백/`$(literal)` 경로 argv 보존을 통과했습니다.
 - 수정 링크는 정본 gh-loop와 이슈 #71로 연결됩니다. `AGENTS.md`의 승인·최소 범위·검증 규칙, gh-loop의 worker·R8·상태 라벨·nonce·커밋 순서와 대조했습니다.
 - `orca-ide status`, `worktree set --worktree active --comment`, `terminal list/show`가 성공했습니다. 현재 워커의 `agentIdentity: "omp"`와 `GPT-6-Astra · xhigh`를 관측했습니다.
 - controller CLI의 `plan --cap 1`은 워커 1개와 대기 1개를 반환했고, `scale`의 running=3/cap=3은 `hold`였습니다.
 - 새 워커를 기동하는 fan-out E2E·워크트리 삭제는 실행하지 않았습니다. 기존 전역 `~/.claude/skills/gh-fanout/` 미러는 없어 갱신 대상이 없으며 이 PR이 새 전역 설치를 만들지는 않습니다.
+- 3-pass 리뷰 r1·r2 FAIL의 지적을 반영한 r3는 `PASS WITH NOTES`였으며 `8b81e03`으로 착지했습니다. 남은 트래킹 운영 질문 소비·다중 카드의 활성 상태 보존·Orca 미머지 브랜치 보존 설명은 별도 문서 후속 변경으로 반영했습니다.
