@@ -1301,3 +1301,32 @@ test('#62 r2: a textconv driver on audit.jsonl cannot hide a removed row — the
     assert.match(r.stderr, /audit\.jsonl is not append-only/);
   });
 });
+
+test('#56 r10 fixtures: -a with an UNSTAGED closeout derives the undo list from HEAD (all three paths); valid-then-invalid duplicate key is INVALID; an unborn HEAD is not a closeout', () => {
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { scope: UNCHECKED_SCOPE });
+    closeoutInWorktree(dir); // nothing staged: only -a sees it
+    const r = runGateHermetic(dir, 'git commit -am x', { TEST_RISK_LEVEL: 'low' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /`git restore --staged --worktree -- docs\/harness\/seed\.yaml docs\/harness\/current-scope\.md docs\/harness\/audit\.jsonl`/);
+  });
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { seed: `status: approved\ntask_id: t1\ntask_id:\n${AC_BLOCK}` });
+    closeoutInWorktree(dir);
+    writeFileSync(join(dir, 'docs', 'harness', 'audit.jsonl'), '{"event":"thread_opened"}\n' + rowFor('t1'));
+    git('add', '-A');
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /task_id line that is not a plain non-empty scalar/);
+  });
+  withDir({}, (dir) => {
+    const git = (...args) => execFileSync('git', args, { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'], env: HERMETIC });
+    git('init', '-q', '-b', 'main'); // unborn HEAD
+    writeFileSync(join(dir, 'docs', 'harness', 'seed.yaml'), `status: done\n${AC_BLOCK}`);
+    writeFileSync(join(dir, 'a.js'), 'x\n');
+    git('add', '-A');
+    const r = runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.doesNotMatch(r.stderr, /HARNESS BLOCK/);
+  });
+});
