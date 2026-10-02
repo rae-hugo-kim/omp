@@ -146,6 +146,11 @@ API·스키마·env 키·스케줄·인터페이스 등 "다른 코드/사람이
 원격이 GitHub이고 `gh` 사용 가능하면, 미결 항목 중 **독립 작업 단위**인 것(다음 세션의 즉시 후속이 아니라, 언제 누가 해도 되는 일)을 골라 이슈 생성을 제안한다 (승격과 함께 일괄 확인):
 
 - 제목 = 미결 항목 한 줄. 본문 = 맥락 1-2줄 + sum 문서 링크
+- **상태 라벨 분류**(한 이슈에 하나만 — omp 하네스 gh-loop 스킬 "상태 라벨"): 본문에 사용자가 결정할 것이 있으면 `needs-decision`, 확인만 필요하면 `needs-review`, 에이전트가 처리할 백로그면 상태 라벨 없음. 제안 목록에 분류를 함께 보이고, 붙이기 전에 라벨을 보장한다(없으면 생성, 멱등):
+  ```bash
+  gh label create needs-decision --description "awaiting human decision" --color D93F0B 2>/dev/null || true
+  gh label create needs-review --description "내가 봐야 함 — 리뷰·머지 대기 PR이나 확인할 보고 (질문 없음)" --color FBCA04 2>/dev/null || true
+  ```
 - `gh issue list --state open`으로 같은 내용의 열린 이슈가 이미 있으면 생성 대신 참조
 - 생성 후 sum 문서의 해당 항목을 `→ 이슈 #N`으로 갱신
 - gh가 없거나 원격이 GitHub가 아니면 조용히 생략 (미결은 sum 문서와 INDEX에 남는다)

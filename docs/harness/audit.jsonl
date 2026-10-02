@@ -163,3 +163,4 @@
 {"ts":"2026-09-30T01:44:06.004Z","event":"acceptance_wip","actor":"rae","meta":{"mechanism":"env","reason":"backstop:closed seed (status:done)"}}
 {"ts":"2026-10-01T10:58:25Z","event":"task_closed","actor":"assistant","meta":{"task_id":"20261001-101549-7cce","name":"audit-append-only-62"}}
 {"ts":"2026-10-02T06:09:17Z","event":"task_closed","actor":"assistant","meta":{"task_id":"20261002-060410-86ff","name":"gh-loop-dispatch-mode-65"}}
+{"ts":"2026-10-02T12:02:14Z","event":"seed_revised","actor":"assistant","meta":{"task_id":"20261002-114256-f70f","from_version":1,"to_version":2,"changed_fields":["acceptance_criteria","assumptions"],"reason":"3-pass review r1 (FAIL) fixes: AC1/AC6 must pointers follow claim-first dispatch, park -> needs-decision, label switch before resume prompt, author-based write+ check; assumption adds the measured failure of --remove-label for a repo-absent label"}}

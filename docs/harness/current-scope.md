@@ -1,7 +1,7 @@
 # Current Scope: gh-loop-status-labels-69
 
 **Created**: 2026-10-02
-**Seed**: docs/harness/seed.yaml (task_id 20261002-114256-f70f, v1)
+**Seed**: docs/harness/seed.yaml (task_id 20261002-114256-f70f, v2)
 **Source**: issue #69, gh-loop
 
 ## Acceptance Criteria

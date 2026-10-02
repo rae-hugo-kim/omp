@@ -99,12 +99,16 @@ if [ -n "$(git ls-files docs/sum docs/reviews docs/brainstorming)" ]; then
   exit 1
 fi
 git push -u --follow-tags origin <branch-name>
-gh pr create --base <target> --head <branch> --title "<title>" --body "<body>"
+PR_URL=$(gh pr create --base <target> --head <branch> --title "<title>" --body "<body>") || exit 1   # 생성 실패면 라벨 단계로 가지 않는다(빈 URL은 현재 브랜치의 기존 PR을 가리킨다)
+gh label create needs-review --description "내가 봐야 함 — 리뷰·머지 대기 PR이나 확인할 보고 (질문 없음)" --color FBCA04 2>/dev/null || true
+gh pr edit "$PR_URL" --add-label needs-review || echo "needs-review 부착 실패 — PR은 열렸으니 라벨만 수동으로 붙인다"
 ```
 
 `--follow-tags` ensures annotated tags (e.g., a deliberate harness version bump via `scripts/harness-version-bump.sh`) are pushed with the branch.
 
 `--follow-tags` push가 non-ff로 거부됐다면 **태그는 이미 올라갔을 수 있다**(브랜치와 태그 push는 원자적이지 않다). rebase 전에 `git ls-remote --tags origin 'refs/tags/harness/*'`로 원격 태그의 커밋을 확인한다. rebase로 그 커밋이 고아가 되면 태그를 강제 이동하지 말고(이미 sync한 소비 리포에 DRIFT 유발) **다음 버전을 새로 발행**한다. (2026-09-05 harness/2026.74 실측)
+
+**상태 라벨 `needs-review`**: 새 PR은 사람이 봐야 하는 리뷰·머지 대기 상태라 `needs-review`를 붙인다 — 라벨이 없으면 위 줄이 만든다(설명·색 고정, 멱등). 부착은 PR 생성 뒤에 따로 하므로 라벨 권한이 없어도 PR 생성은 실패하지 않는다. 한 PR에는 상태 라벨이 하나만 붙고, gh-loop 결정 게이트가 이것을 `needs-decision`으로 바꾼다(`.omp/skills/gh-loop/SKILL.md` "상태 라벨"). 모아 보기: `is:open label:needs-decision,needs-review`.
 
 **PR body format**:
 ```markdown
