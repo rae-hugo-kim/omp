@@ -1,5 +1,6 @@
 name: gh-loop-dispatch-mode-65
-status: approved
+status: done
+completed: 2026-10-02
 version: 1
 task_id: "20261002-060410-86ff"
 # gh-loop 사후 seed: 이슈 #65 본문 + docs/handoff/handoff_2026-10-02_gh-loop-dispatch-mode.md(R1~R5, AC1~AC5)가
