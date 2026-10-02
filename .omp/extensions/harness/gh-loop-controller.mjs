@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 // gh-loop-controller.mjs — the multisession fan-out controller's DECISION logic (autonomy Q3): how
 // many worker sessions to run, which task each takes, when to scale, and which issues are free to
-// claim. It is the testable core of a THIN RPC orchestrator (analysis Q3) — NOT a daemon/dashboard.
+// claim. It is the testable core of a THIN on-demand orchestrator (analysis Q3) — NOT a daemon/dashboard.
 //
-// The controller spawns each worker as a separate `omp --mode rpc` process in its own git worktree
-// (one worktree/branch/issue), observes via GitHub (labels + throttled comments + a tracking issue),
-// and never auto-merges. Those git/spawn/gh calls are SEAMS owned by the controller skill; THIS file
-// is pure decision logic so it is unit-testable with no processes or network.
+// The controller skill launches omp workers in Orca-managed worktrees (one worktree/branch/issue),
+// observes GitHub labels/comments plus Orca cards, and never auto-merges. Orca/gh calls are SEAMS
+// owned by that skill; THIS file is pure decision logic with no processes or network.
 //
 //   planPool(tasks, { cap })        -> { workers:[{taskId,kind,role}], queued:[...], cap }
 //   nextScale(state, { cap })       -> { action:"up"|"down"|"hold", delta?, retire? }

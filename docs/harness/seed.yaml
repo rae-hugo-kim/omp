@@ -1,98 +1,53 @@
-name: gh-loop-status-labels-69
+name: gh-fanout-orca-workers-66
 status: done
-completed: 2026-10-02
-version: 2
-task_id: "20261002-114256-f70f"
-# gh-loop 사후 seed: 이슈 #69 본문(배선 대상 1~8 = R1~R8, 완료 기준 AC1~AC7)이 근거·결정·완료 기준을 담고 있어
-# kickoff 인터뷰는 생략(gh-loop-dispatch-mode-65 선례). 착지 뒤 권위는 이 seed.
-# 직전 seed(gh-loop-dispatch-mode-65, done)는 docs/harness/archive/20261002-gh-loop-dispatch-mode-65/seed.yaml로 보관.
+completed: 2026-10-03
+version: 1
+task_id: "20261002-151247-0c72"
+# gh-loop Stage 2에 따라 이슈 #66과 사용자 워커 지시를 명세로 삼습니다.
+# 직전 완료 seed(gh-loop-status-labels-69)는 git 이력에 보존합니다.
 goal: >
-  에이전트가 만든 이슈·PR에서 "사람이 결정해야 하는 것"과 "사람이 봐야 하는 것"을 구분하도록, 사람 손이 필요한
-  정도를 나타내는 상태 라벨 3개(`agent-working`·`needs-decision`·`needs-review` — 한 이슈·PR에 하나만, 백로그는
-  없음)를 gh-loop·gh-fanout·compr·sum의 이슈·PR 생성·전이 경로와 gh-loop 컨트롤러에 배선한다. 아울러 결정을
-  코디네이터 세션 대화로도 받는 경로(R7)와, 워커 기동 명령에 코디네이터의 Orca 상태 확장 경로를 넘기는
-  형태(R8)를 gh-loop 스킬에 서술한다.
-
+  gh-fanout의 RPC 워커 경로를 gh-loop Stage 0의 Orca 2단계 기동 경로로 전환하고,
+  GitHub 상태와 Orca 카드로 비차단 관측·재개·실패 처리를 안내합니다.
 constraints:
-  - git 상태 변경(커밋·푸시)과 GitHub 상태 변경(라벨·댓글·PR)은 gh-loop 절차 안에서만, 머지는 사용자 명시 승인 시에만
-  - 라벨 전환은 별칭·이중 인식 없이 한 번에 — `gh-loop:in-progress`/`gh-loop:blocked`를 새 라벨과 함께 인식하지 않는다
-  - option A 러너(`gh-loop-runner.mjs`)의 판정 로직은 바꾸지 않는다 — PR 댓글·`session-decision` 댓글 무시는 회귀 테스트로 고정한다
-  - 소비 리포에 동기화되는 경로(.omp/skills, .omp/extensions/harness)만으로 동작 — 라벨은 첫 사용 때 `gh label create … || true`로 생긴다
-  - "#66(gh-fanout 스폰 전환)이 같은 gh-fanout 파일을 건드리므로 이 이슈가 먼저 머지된다는 전제로 작업한다"
-
+  - "이슈 1개·워크트리 1개·워커 1개, cap, 단일 컨트롤러, 자동 머지 금지를 유지합니다."
+  - "모델은 사용자 선택과 gh-loop:model 마커를 재사용하고 R8 상태 확장을 전달합니다."
+  - "커밋은 체크 완료 seed·scope → 변경 → 리뷰 후속 → closeout 순서를 따릅니다."
+  - "이 워커는 재디스패치·자기 워크트리 삭제·머지를 하지 않습니다."
 acceptance_criteria:
-  - id: AC1-gh-loop-labels
-    title: gh-loop 결정 게이트가 이슈와 PR 양쪽에 `needs-decision`을 붙이고 acted 시 양쪽에서 떼며, 워커 시작 시 `agent-working`을 붙인다고 SKILL.md에 서술된다
-    source: https://github.com/rae-hugo-kim/omp/issues/69
-    must:
-      - ".omp/skills/gh-loop/SKILL.md 상태 라벨 절(표·하나만·백로그 없음·모아 보기·PR에 `gh-loop` 금지), Stage 0 3(워커 기동 전에 `agent-working` 클레임, 기동 실패 시 롤백)·worker 모드(처음 시작 시 라벨 블록 + 보장), Stage 5 1(이슈·PR `needs-decision`, 이전 상태 라벨 제거)·재개 6(acted 시 이슈·PR 둘 다에서 제거)·park(되묻기·명확화도 `needs-decision` + 새 nonce)"
-  - id: AC2-compr-and-issue-classification
-    title: compr가 PR 생성 시 `needs-review`를 붙이고, sum 5.5 등 이슈 생성 경로에 분류 규칙이 있다
-    source: https://github.com/rae-hugo-kim/omp/issues/69
-    must:
-      - ".omp/skills/compr/SKILL.md §5: PR 생성 뒤 라벨 보장 + `gh pr edit --add-label needs-review`(부착 실패는 PR을 되돌리지 않음)"
-      - "분류 규칙(결정 필요 → `needs-decision`, 확인만 → `needs-review`, 백로그 → 없음): gh-loop 상태 라벨 절·Stage 1, .omp/skills/sum/SKILL.md 5.5"
-  - id: AC3-label-bootstrap
-    title: 스킬이 세 라벨을 없으면 만든다(설명·색 고정)
-    source: https://github.com/rae-hugo-kim/omp/issues/69
-    must:
-      - "gh-loop Stage 1 라벨 블록에 `needs-decision` D93F0B · `needs-review` FBCA04 · `agent-working` 1D76DB를 이 리포의 라벨과 같은 설명으로 `gh label create … 2>/dev/null || true`; compr·sum은 자기가 붙이는 라벨을 같은 줄로 보장, gh-fanout은 gh-loop 블록을 먼저 실행"
-  - id: AC4-fanout-controller-tests
-    title: gh-fanout·controller의 `gh-loop:in-progress`/`gh-loop:blocked`가 새 라벨로 전환되고 테스트가 갱신되며, runner에 PR 댓글 ignore 회귀 테스트가 있다
-    source: https://github.com/rae-hugo-kim/omp/issues/69
-    must:
-      - "gh-loop-controller.mjs assign: `agent-working` → `already claimed`, `needs-decision`·`needs-review` → `awaiting human (<label>)` — 상태 라벨이 붙은 이슈는 백로그가 아니므로 실패·결정 대기·PR 대기 이슈를 다시 할당하지 않는다"
-      - "tests: gh-loop-controller.test.mjs assign, gh-loop-e2e.test.mjs compose(`agent-working`), gh-loop-runner.test.mjs 'PR comment'(`needs-decision`만 있고 `gh-loop`가 없는 대상의 issue_comment → ignore)"
-      - ".omp/skills/gh-fanout/SKILL.md §1·§3·§4·§6 전환; 시작 시 재조정은 이 컨트롤러가 띄운 워커만 대상(dispatch 워커의 `agent-working`은 건드리지 않음)"
+  - id: AC1-orca-spawn
+    title: "SKILL.md가 클레임 → worktree create --issue → terminal create → 준비 확인 → terminal send와 단계별 실패·전달 불확실성 처리를 설명합니다."
+  - id: AC2-model-extension
+    title: "사용자 모델 선택·이슈별 마커 재사용·R8 확장 전달·확장 부재 안내·단일 핸들 규칙을 설명합니다."
+  - id: AC3-observe-resume
+    title: "GitHub 라벨·댓글과 Orca 카드의 턴당 단발 관측, needs-decision 전이, 동일 워크트리 재개, 소유권 확인 후 정리를 설명합니다."
+  - id: AC4-cutover-scope
+    title: "현행 스킬과 controller 헤더의 RPC·raw git worktree 실행 안내를 제거하고, gh-loop·option A·audit 충돌 해결 방식은 변경하지 않습니다."
   - id: AC5-verification
-    title: "`node --test .omp/extensions/harness/tests/*.test.mjs` 전부 통과, `node scripts/docs-drift` OK"
-    source: https://github.com/rae-hugo-kim/omp/issues/69
-    must:
-      - "테스트·docs-drift 출력이 완료 보고에 인용된다"
-  - id: AC6-session-decision
-    title: SKILL.md에 세션 직접 결정 경로(R7)가 서술되고, 그 경우 이슈·PR에 `세션에서 직접 결정함` 댓글(원 질문 링크·결정 요지·지시 원문·`gh-loop:session-decision:<nonce>`, 실행했으면 `acted`)을 남기며, 재개 로직이 그 댓글을 해당 nonce의 답으로 인정하고 러너는 무시한다(회귀 테스트 포함)
-    source: https://github.com/rae-hugo-kim/omp/issues/69
-    must:
-      - "gh-loop SKILL.md Stage 0 9(댓글 형식·코디네이터 실행 vs 워커 재개·라벨 전이는 재개 프롬프트 전에), Stage 5 재개 2(자기 댓글 제외의 예외 — nonce 일치 + 댓글 작성자의 write+ 권한), Non-Negotiables·Guard policy 정합"
-      - "gh-loop-runner.test.mjs 'session-decision': 사람 계정(PAT)이 `needs-decision` 이슈에 단 session-decision 댓글(acted 유무 모두) → ignore"
-  - id: AC7-worker-launch-extension
-    title: SKILL.md Stage 0의 워커 기동·재개 명령이 코디네이터의 Orca 상태 확장 경로를 넘기고(`command omp --extension …`), 값이 없을 때의 안내가 서술된다
-    source: https://github.com/rae-hugo-kim/omp/issues/69
-    must:
-      - "Stage 0 3: `WORKER_CMD`(값이 있고 파일이 있으면 `command omp --extension <printf %q 리터럴> --model … --thinking …`, 없으면 `omp --model …`), 5: 확장 없이 띄웠을 때 안내, 6: 재개도 같은 `WORKER_CMD`; R8 근거와 #69 워커 실측(argv·`ORCA_PI_STATUS_OWNED`·`agentIdentity`)"
-
+    title: "controller·gh-loop 회귀 테스트, docs-drift, 링크·정본·규칙 충돌 점검, Orca CLI 읽기·카드 스모크 결과를 기록합니다."
+  - id: AC6-docs
+    title: "CHANGELOG에 #66 변경과 라이브 다중 워커 검증 한계를 기록합니다."
 out_of_scope:
-  - "GitHub 알림 문제(본인 계정 활동은 알림이 오지 않음 — 워커 봇 계정은 별건)"
-  - "기존 열린 이슈의 일괄 재분류"
-  - "option A 러너의 `issues labeled` 시작 판정 — PAT 모드에서는 에이전트의 상태 라벨 전이도 sender가 사람 계정이라 start로 읽힐 수 있다(러너 미배포; 후속 여부는 결정 요청에서 묻는다)"
-  - "README의 모아 보기 검색어(이슈의 '필요하면' 항목 — gh-loop·compr SKILL.md와 CHANGELOG에 기재)"
-  - "머지 자체 (사용자 승인으로만)"
-
+  - "gh-loop dispatch 구현 변경, option A 런타임, 모델 자동 선택은 다루지 않습니다."
+  - "audit.jsonl 병렬 충돌 해결 방식은 #71에서 결정하며 이 변경은 기존 append-only 절차만 따릅니다."
+  - "새 워커의 실제 fan-out 실행과 원격 머지·브랜치 삭제는 하지 않습니다."
+  - "PR 생성·교차검증 게시·nonce 결정 요청은 커밋 뒤 후속 절차이며 AC 선체크 대상이 아닙니다."
 assumptions:
-  - "`gh issue edit --remove-label <라벨>`은 리포에는 있지만 이슈에 붙어 있지 않은 라벨에 대해 no-op이고(2026-10-02 #69에서 exit 0, 타임라인 이벤트 없음 실측), 리포에 없는 라벨이면 명령 전체가 실패한다(`'<label>' not found`, exit 1 — 같은 날 실측) — `gh pr edit`도 같은 라벨 편집 경로라 전이 전에 라벨 블록이 먼저 돈다"
-  - "Orca 셸 래퍼는 `ORCA_OMP_STATUS_EXTENSION`이 있는 셸에서만 `omp` 함수를 정의하고 `command omp --extension …`을 호출한다(Orca rcfile `__orca_omp_invoke`, 2026-10-02 확인)"
-  - "이 리포에는 `gh-loop:in-progress`·`gh-loop:blocked` 라벨이 없어 별칭 없는 전환에 이관 작업이 없다(2026-10-02 `gh label list`)"
-
+  - "#65에서 실측한 worker-start의 omp 모델 거부·런처 셸 폴백을 전제로 2단계 경로를 재사용합니다."
+  - "컨트롤러 결정 함수는 순수 함수로 유지하며 스폰·관측은 스킬 절차가 담당합니다."
 risks:
-  - "gh-fanout과 gh-loop dispatch가 같은 `agent-working`을 공유한다 — gh-fanout 시작 시 재조정이 dispatch 워커의 클레임을 뺏지 않도록 SKILL.md에 범위를 적었을 뿐 코드로 강제하지 않는다"
-  - "세션 직접 결정 댓글은 자기 댓글 제외의 예외다 — 워커가 nonce 일치와 write+ 권한 확인을 빠뜨리면 마커만 단 비권한 댓글이 답으로 읽힐 수 있다(SKILL.md 재개 2에 명시, LLM 절차라 테스트로 강제 불가)"
-  - "compr의 `needs-review` 부착은 PR 생성 뒤 별도 호출이라 실패하면 라벨 없는 PR이 남는다(안내 출력, PR은 유지)"
-
+  - "GitHub 라벨은 CAS가 아니므로 동시 컨트롤러는 지원하지 않습니다."
+  - "명령 전달 실패는 전달 여부가 불확실할 수 있어 재스폰하지 않고 확인·park합니다."
+  - "실제 다중 워커 기동은 수행하지 않으므로 읽기·카드 스모크가 전체 fan-out E2E 증거는 아닙니다."
 references:
-  - path: https://github.com/rae-hugo-kim/omp/issues/69
-    reason: 원 이슈 (R1~R8·AC1~AC7, 라벨 표)
-  - path: https://github.com/rae-hugo-kim/omp/issues/65#issuecomment-5950026236
-    reason: R7 첫 적용(`세션에서 직접 결정함` 댓글 형식의 선례)
+  - path: https://github.com/rae-hugo-kim/omp/issues/66
+    reason: "범위와 사용자 선택 모델 마커의 원본입니다."
   - path: .omp/skills/gh-loop/SKILL.md
-    reason: 변경 대상 스킬(상태 라벨 절·Stage 0·Stage 1·Stage 5)
-  - path: .omp/extensions/harness/gh-loop-controller.mjs
-    reason: gh-fanout 할당 판정(assign)
-  - path: .omp/extensions/harness/gh-loop-runner.mjs
-    reason: option A 러너 판정(변경 없음, 회귀 테스트 대상)
-
+    reason: "Stage 0·worker 모드·Stage 2~5와 상태 라벨의 정본입니다."
+  - path: skill://orca-cli
+    reason: "Orca CLI와 핸들·정리 규칙의 정본입니다."
 estimate:
-  risk: high
-  files: 13
+  risk: medium
+  files: 6
   depth: high
-  model: claude-opus-5-5
-  effort: max
+  model: openai-codex/gpt-6-astra
+  effort: xhigh
