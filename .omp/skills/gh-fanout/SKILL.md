@@ -49,7 +49,7 @@ node .omp/extensions/harness/gh-loop-controller.mjs plan --tasks-json "$TASKS" -
 → `workers`(지금 띄울 것) + `queued`(스케일 시). review는 changed-files로 reviewer 증가, risk=high면 +1(이종 리뷰어).
 
 ### 3. 워커 spawn — claim → worktree → spawn (실패 시 롤백)
-각 워커 슬롯마다 (단일 컨트롤러 전제):
+각 워커 슬롯마다 (단일 컨트롤러 전제). **worker-start 전환 예정 → 이슈 #66** — gh-loop는 #65부터 dispatch 모드(Orca `worktree create --issue` + `terminal create --command "omp --model …"`)이고, 아래 `omp --mode rpc` 스폰은 그 후속 이슈에서 같은 경로로 바꾼다:
 ```bash
 ISSUE=<slot issue>
 gh issue edit "$ISSUE" --add-label "gh-loop:in-progress"      # 클레임 먼저(다음 스캔의 재선점 방지)

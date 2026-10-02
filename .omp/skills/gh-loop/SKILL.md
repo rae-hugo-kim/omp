@@ -10,14 +10,17 @@ description: Runs a finding→issue→fix→PR→cross-verify→HITL loop on Git
 
 발견사항을 GitHub 이슈로 만들고, 수정하고, PR을 열고, 교차검증한 뒤, **판단이 필요한 지점에서 멈춰 사용자에게 묻는** 반자율 루프. GitHub(이슈/PR/라벨/댓글)이 곧 상태저장소이자 버스다 — 루프는 프로세스를 점유하지 않고 **stateless-resumable**하다.
 
-이것은 **option-D PoC**다 (analysis `claudedocs/harness-auto-capture-analysis.md#Q2`): 단일 세션에서 네가 킥오프하고, 결정점에선 이슈에 질문을 남기고 **턴을 종료**한다. 준비되면 `/gh-loop <issue-number>`로 재호출해 재개한다. 완전 자율 런타임(GitHub Actions/runner = 옵션 A)은 검증 후 별도 작업이다.
+이것은 **option-D PoC**다 (analysis `claudedocs/harness-auto-capture-analysis.md#Q2`): 결정점에선 이슈에 질문을 남기고 **턴을 종료**한다. 준비되면 `/gh-loop <issue-number>`로 재호출해 재개한다. 완전 자율 런타임(GitHub Actions/runner = 옵션 A)은 검증 후 별도 작업이다.
+
+**2026-10-02부터 기본은 dispatch 모드다(#65)**: `/gh-loop`를 받은 메인 세션은 **코디네이터**로서 오케스트레이션과 사용자 소통만 하고, 루프(Stage 2~5)는 새 워크트리에 띄운 **워커** omp 세션이 수행한다. 첫 완주(#62 → PR #64)가 메인 세션을 통째로 점유한 데 대한 사용자 결정 — 감독은 비차단, 모델은 매번 사용자에게 묻고, 범위는 gh-loop만(gh-fanout 전환은 후속 이슈).
 
 ## Non-Negotiables
 
 | Rule | Violation = STOP |
 |------|------------------|
 | **머지 절대 자동 금지** | 교차검증은 advisory일 뿐. 에이전트는 **자율 단계로 머지하지 않는다**; `gh pr merge`는 **PR별 명시적 인간 승인**(이슈/PR 댓글)이 있을 때만 그 지시로 실행한다. |
-| **블로킹 대기 금지** | 결정점에선 질문을 이슈에 게시하고 **턴 종료**. 프로세스를 붙잡고 폴링/sleep 하지 않는다. |
+| **블로킹 대기 금지** | 결정점에선 질문을 이슈에 게시하고 **턴 종료**. 프로세스를 붙잡고 폴링/sleep 하지 않는다. 코디네이터도 같다 — 워커를 띄운 뒤 **즉시 복귀**하고 `orca orchestration check --wait`·`terminal read` 폴링을 하지 않는다. 상태 원천은 GitHub(라벨·댓글)이다. |
+| **코디네이터는 코드를 만지지 않는다** | dispatch 모드의 메인 세션은 이슈 읽기·모델 질문·워커 기동·재개 프롬프트·머지 뒤 정리만 한다. 수정·커밋·PR·댓글 해석은 **워커**가 한다(소유자 1명). 워커는 **다시 dispatch하지 않는다**(재귀 금지). |
 | **dedup/throttle** | 이슈 생성 전 항상 `gh-loop-issue.mjs`로 중복·상한을 판정. 동일 finding 이슈 폭주 금지. 단 `gh issue list`는 **최종일관성**이라 생성 직후 조회가 권위적이지 않음 — Stage 1 주의 참조. |
 | **사용자 응답 최우선** | 재개 시 이슈 댓글의 최신 사용자 지시를 memory/계획보다 우선한다 (CLAUDE.md "user > memory"). |
 | **파괴 작업 가드** | force-push·history 재작성·대량 삭제는 advisory에 그치지 않고 사용자 확인. |
@@ -25,9 +28,10 @@ description: Runs a finding→issue→fix→PR→cross-verify→HITL loop on Git
 ## Inputs
 
 - `$ARGUMENTS`:
-  - **finding 설명** (산문) → 새 루프 시작 (Stage 1부터).
-  - **이슈 번호** (예: `42`) → 그 이슈에서 **재개** (needs-decision 응답 처리 또는 다음 단계).
+  - **finding 설명** (산문) → 새 루프 시작 (Stage 1부터; 코디네이터가 이슈를 만든 뒤 Stage 0 dispatch로 넘어간다).
+  - **이슈 번호** (예: `42`) → 그 이슈에서 **재개** (코디네이터: 워커 재개 프롬프트 또는 머지 뒤 정리; 워커: needs-decision 응답 처리 또는 다음 단계).
   - 비어 있음 → 사용자에게 finding 또는 재개할 이슈를 묻는다.
+- **모드 판별(R1)**: 기본은 **dispatch 모드(코디네이터)**. 프롬프트에 워커 마커 `<!-- gh-loop:worker -->`(또는 인자 `--worker`)가 있을 때만 **worker 모드**. 둘을 섞지 않는다 — worker 모드에서 Stage 0을 실행하지 않고, dispatch 모드에서 Stage 2~5를 실행하지 않는다.
 
 ## Prerequisites (discover, don't assume)
 
@@ -39,6 +43,44 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 미인증 → `gh auth login` 안내 후 중단. autopilot/ralph·reviewer 등 재사용 자산은 OMC/하네스가 제공(아래 Reuse Map).
 
 ## Process
+
+### Stage 0 — dispatch (코디네이터) / worker 모드
+
+#### dispatch 절차 (코디네이터 — 코드를 만지지 않는다)
+
+1. `issue://N`을 읽고 `gh-loop` 라벨을 보장한다(Stage 1의 라벨 블록 재사용). finding 산문으로 호출됐으면 Stage 1을 그대로 수행해 이슈를 만든 뒤 그 번호로 계속한다.
+2. **모델 질문**: 이슈 댓글에 `<!-- gh-loop:model:<id>:<effort> -->` 마커가 이미 있으면 묻지 않고 그 값을 쓴다(사용자가 바꾸라고 하지 않는 한). 없으면 `ask` 툴로 선택지를 제시한다 — `omp config get modelRoles`의 역할별 실제 id(최소 `smol`/`default`/`slow`/`plan`, 예: `smol → anthropic/claude-fable-5-1:medium`) + **"이 세션과 동일"**. 자동 선택 정책은 없다(사용자 결정 2026-10-02). 선택은 이슈 댓글에 마커로 기록해 재개 때 다시 묻지 않는다:
+   ```bash
+   GHLOOP_OUT=$(mktemp -d); trap 'rm -rf "$GHLOOP_OUT"' EXIT
+   printf '%s\n' "gh-loop dispatch 모델: <provider/model> / thinking: <level>" "<!-- gh-loop:model:<provider/model>:<level> -->" > "$GHLOOP_OUT/model.md"
+   gh issue comment N --body-file "$GHLOOP_OUT/model.md"
+   ```
+   `modelRoles` id의 `:<level>` 접미는 thinking 레벨이다 — `omp --model <provider/model> --thinking <level>`로 나눠 넘긴다.
+3. **워커 기동** — **2단계 경로가 1순위**(R4 스파이크 실측, 아래). Linux에서 Orca 터미널 밖 셸이면 `orca` 대신 `orca-ide`(orca-cli 스킬):
+   ```bash
+   orca worktree create --repo <selector> --name gh-loop-issue-N --no-parent --issue N --json   # 카드에 이슈 링크 → 이후 issue:N 셀렉터로 재탐색
+   # 응답의 result.worktree.id("<repoId>::<path>") 전체를 다음 명령에 복사한다
+   orca terminal create --worktree "id:<repoId>::<path>" --title "gh-loop #N" --command "omp --model <provider/model> --thinking <level>" --json
+   orca terminal wait --terminal <handle> --for tui-idle --timeout-ms 120000 --json   # 타임아웃돼도 `terminal read --screen`으로 상태바(모델·thinking)가 보이면 진행
+   orca terminal send --terminal <handle> --text "<워커 프롬프트 — 한 단락, 줄바꿈 없이>" --enter --json
+   ```
+   `--agent` 없는 `worktree create`는 첫 탭에 폴백 셸을 남긴다 — 커스텀 argv(`--model`)가 필요한 경우라 허용되는 2단계 경로이며, 그 셸은 `terminal list`로 미사용임을 확인한 뒤에만 닫는다. 어느 경로든 **워커 핸들 하나**(`terminal create`가 돌려준 `result.terminal.handle`)만 쓴다.
+
+   **`orca orchestration worker-start --agent omp` 실측(R4, 2026-10-02, Orca CLI on WSL)**: `run-create` 뒤 `worker-start --spec … --worktree current --agent omp --model anthropic/claude-fable-5-1 --effort medium` → `invalid_argument: "Agent omp does not support launch-time model selection. Omit --model to run the model from its own config."` — 조용한 무시가 아니라 **거부**다. `--model` 없이 `--agent omp`는 `state: ready`로 돌아오지만, Orca의 omp 런처가 `ORCA_OMP_FRESH_CONFIG`를 요구해 그 변수가 없는 호스트에서는 `Orca: fresh OMP settings are unavailable on this host` 뒤 **bash 셸로 폴백**하고 `--spec` 프롬프트가 셸에 타이핑됐다(`Command 'Please' not found`). 따라서 worker-start는 모델 지정이 불가능하고 기동도 호스트 상태에 의존해 **1순위가 아니다** — Orca가 omp 런치타임 모델 선택을 지원하면 재검토한다(그때는 `run-create --objective` + `worker-start --spec "<워커 프롬프트>" --worktree new-top-level --agent omp --model <id> --effort <level> --name gh-loop-issue-N --repo <selector> --comment "gh-loop #N: 시작"` 한 명령). 2단계 경로는 같은 날 `terminal create --command "omp --model anthropic/claude-fable-5-1 --thinking medium"`로 상태바 `Fable 5.1 · ◑ med`를 확인했다(`terminal wait --for tui-idle`은 60초에서 타임아웃 → `terminal read --screen`으로 확인).
+4. **워커 프롬프트**에 반드시 넣는 것: 워커 마커 `<!-- gh-loop:worker -->`, 이슈 번호, "gh-loop Stage 2~5 수행", 커밋 순서(Stage 2 문단), **머지 금지**(결정은 이슈 댓글 + `needs-decision` + 턴 종료), 보고 채널(이슈 댓글 + `orca worktree set --worktree active --comment`), **"자기 워크트리를 지우지 말 것"**, Run이 바인딩돼 있으면 코디네이터 핸들로 `orca orchestration send --type status` 1건(시작·결정 요청·완료 마일스톤만). 요구 사항이 handoff 문서에 있으면 그 경로와 "먼저 읽고 그대로 수행"을 적는다.
+5. **즉시 복귀**: 사용자에게 워크트리 id·워커 핸들·모델을 보고하고 턴을 종료한다. `check --wait`·`terminal read` 폴링 금지(Non-Negotiables).
+6. **재개** `/gh-loop N`(코디네이터): `orca worktree show --worktree issue:N --json`으로 워크트리를 찾고, `terminal list --worktree id:…`에 살아 있는 omp 터미널이 있으면 `terminal send`로 재개 프롬프트(워커 마커 + "이슈 #N 재개 — 댓글을 해석해 다음 단계 수행")를 보내고, 없으면 같은 워크트리에 `terminal create --command "omp --model … --thinking …"`(이슈의 모델 마커 값)로 새 워커를 띄운 뒤 같은 프롬프트를 보낸다. 댓글 해석(LLM, 권한자, nonce 이후)은 **워커가** 한다 — 코디네이터는 해석하지 않는다(소유자 1명).
+7. **정리**(머지 뒤): 워커가 "머지 완료, 정리 필요"를 이슈 댓글(+ status 메일)로 알리면 코디네이터가 `orca worktree rm --worktree issue:N --json`(로컬 브랜치도 함께 지워진다) + `git push origin --delete <branch>`를 실행한다. 미커밋 변경이 있으면 중단하고 보고한다(`--force` 금지). 리뷰 사이드카(`docs/reviews/`, gitignored)는 삭제 전에 메인 체크아웃으로 복사한다. 워커는 자기 워크트리 안에서 실행 중이라 스스로 지울 수 없다.
+8. **턴 시작 루틴**(코디네이터): Run이 있으면 `orca orchestration check --unread`, 그리고 `orca worktree ps --json`의 `gh-loop-issue-*` 카드 comment를 보고 결정 요청·완료를 사용자에게 전달한다. 폴링이 아니라 턴마다 한 번이다.
+
+#### worker 모드 (워커 세션)
+
+- 트리거: 프롬프트의 `<!-- gh-loop:worker -->`(또는 `--worker`). **다시 dispatch하지 않는다.**
+- 이슈(및 handoff 문서)를 읽고 **Stage 2~5를 그대로** 수행한다 — 커밋 순서(Stage 2 문단), compr로 PR(`Closes #N`), advisory 교차검증, 결정 지점에서 이슈 댓글 + `needs-decision` + **턴 종료**.
+- 보고 채널: 이슈 댓글(마일스톤·결정 요청) + `orca worktree set --worktree active --comment "gh-loop #N: <마일스톤>" --json`(마일스톤마다). Run이 바인딩돼 있으면 코디네이터 핸들로 `orca orchestration send --type status` 1건씩(시작·결정 요청·완료만).
+- 재개 프롬프트를 받으면 Stage 5 "재개" 1~6을 워커가 수행한다(댓글 해석·권한자·nonce·멱등). 머지 승인 댓글이면 `gh pr merge --match-head-commit <approved-sha>`까지는 워커가 실행하고(2026-10-01 #62 선례), 이슈에 "머지 완료, 정리 필요(워크트리·브랜치)" 댓글을 남긴 뒤 턴을 종료한다 — 정리는 코디네이터 몫.
+- **자기 워크트리를 지우지 않는다**(그 안에서 실행 중). 머지도 승인 없이는 하지 않는다(Non-Negotiables).
+- `.omp/harness-state/`는 세션 cwd 기준(#58) — 워크트리에서 테스트해도 "No build/test verification recorded" 경고가 날 수 있다(medium은 경고, high는 BLOCK).
 
 ### Stage 1 — Finding → Issue (dedup + throttle)
 
@@ -86,6 +128,8 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 ### Stage 2 — Issue → Fix (재사용, 신규 구현 없음)
 
 생성/지정된 이슈를 작업 단위로 **autopilot**(또는 복잡하면 **ralph**)에 넘긴다. 하네스 게이트(context/acceptance/backpressure/review)가 그 안에서 그대로 작동한다. 새 수정 엔진을 만들지 않는다 — 기존 실행 substrate를 배선만 한다 (analysis Q2.4).
+
+**커밋 순서(하네스 게이트 전제)**: acceptance-gate는 미체크 AC가 있는 중간 커밋을 막는다(WIP 레인만 예외). 구현·테스트를 먼저 끝내고 seed+scope(전부 `[x]`)를 docs 커밋으로 착지 → 코드 커밋 → 리뷰·후속 커밋 → closeout 커밋 순으로 낸다(#56 `ecccc54`, #62 `8dfe619` 선례). WIP 레인은 커밋마다 `acceptance_wip` 감사 행이 쌓이므로 루프에서는 쓰지 않는다. handoff 문서가 있으면 seed 착지 커밋에 함께 싣는다(`docs/rules/artifact_roles_contract.md` §Handoff).
 
 ### Stage 3 — Fix → PR
 
@@ -144,15 +188,16 @@ option-A에서 "권한자 댓글 = 트리거"의 안전 정책:
 
 | Stage | Asset | 위치 |
 |---|---|---|
+| 0 dispatch / 재개 / 정리 (코디네이터) | `orca worktree create --issue N`(카드 링크) · `terminal create --command "omp --model … --thinking …"` · `terminal send` · `issue:<N>` 셀렉터 · `worktree rm` · (보류) `orca orchestration run-create`/`worker-start` | **Orca CLI**: `.omp/skills/orca-cli/SKILL.md` · 본 스킬 Stage 0 |
 | 1 finding→issue (dedup/throttle/label) | `gh issue create` + 헬퍼 | **harness(신규)**: `.omp/extensions/harness/gh-loop-issue.mjs` |
 | 2 issue→fix | autopilot / ralph + 하네스 게이트 | **OMC**(전역 스킬) + `.omp/extensions/harness/gates/` |
 | 3 fix→PR | `gh pr create` (compr 절차) | **harness**: `.omp/skills/compr/SKILL.md` |
 | 4 cross-verify (advisory) | reviewer · adversary · ccg/codex | **harness**: `.omp/agents/{reviewer,adversary,verifier}.md` · **OMC**: ccg/codex |
-| 5 decision gate / resume | `needs-decision` 라벨 + `issue://` read | 본 스킬 컨벤션 + `gh` CLI |
+| 5 decision gate / resume | `needs-decision` 라벨 + `issue://` read(워커가 해석) | 본 스킬 컨벤션 + `gh` CLI |
 
 ## Substrate note
 
-- **지금(option D)**: 단일 세션, 수동 킥오프·재호출. 본 레포가 만드는 건 **재사용 자산**(이 스킬 + 헬퍼)이고, 실제 실행은 각 프로젝트에서 이 스킬을 호출해 일어난다.
+- **지금(option D + dispatch)**: 코디네이터 세션이 킥오프·재개 프롬프트·정리만 하고, 루프는 워크트리별 워커 세션이 수행한다. 본 레포가 만드는 건 **재사용 자산**(이 스킬 + 헬퍼)이고, 실제 실행은 각 프로젝트에서 이 스킬을 호출해 일어난다.
 - **검증 후(option A, 별도 작업)**: `.github/workflows/` + self-hosted runner + `issue_comment` 트리거로 재개를 자동화. 본 PoC의 범위 밖.
 
 ## State
