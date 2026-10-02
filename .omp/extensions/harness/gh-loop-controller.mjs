@@ -63,8 +63,10 @@ export function nextScale(state = {}, { cap = 3 } = {}) {
   return { action: 'hold' };
 }
 
-// Which open issues are free to claim. An issue is "claimed" if it is in `claimed` (numbers or
-// {number}) OR carries the in-progress label — preventing two workers grabbing the same issue.
+// Which open issues are free to claim. Only an issue WITHOUT a status label is agent backlog (gh-loop
+// SKILL.md "상태 라벨"): one in `claimed` (numbers or {number}) or carrying `agent-working` is held by a
+// worker — two workers never grab the same issue — and `needs-decision` / `needs-review` wait for a human.
+const HUMAN_STATUS_LABELS = ['needs-decision', 'needs-review'];
 export function assign(issues, { claimed = [] } = {}) {
   const num = (x) => (x && x.number != null ? x.number : x);
   const key = (x) => String(num(x)); // normalize so 1 and "1" match (cross-source type drift)
@@ -79,8 +81,10 @@ export function assign(issues, { claimed = [] } = {}) {
     const k = String(n);
     if (seen.has(k)) { skipped.push({ issue: n, reason: 'duplicate in list' }); continue; } // never double-assign
     seen.add(k);
-    const inProgress = Array.isArray(iss.labels) && iss.labels.some((l) => labelName(l) === 'gh-loop:in-progress');
-    if (claimedSet.has(k) || inProgress) skipped.push({ issue: n, reason: 'already claimed' });
+    const names = Array.isArray(iss.labels) ? iss.labels.map(labelName) : [];
+    const waiting = HUMAN_STATUS_LABELS.find((l) => names.includes(l));
+    if (claimedSet.has(k) || names.includes('agent-working')) skipped.push({ issue: n, reason: 'already claimed' });
+    else if (waiting) skipped.push({ issue: n, reason: `awaiting human (${waiting})` });
     else assignable.push({ issue: n });
   }
   return { assignable, skipped };

@@ -34,12 +34,13 @@ command -v omp   # 워커 런타임: omp --mode rpc (JSONL-over-stdio, new_sessi
 ## Process
 
 ### 1. 후보 수집 + 중복할당 방지 (assign)
+라벨 보장이 먼저다 — gh-loop `SKILL.md` Stage 1의 라벨 블록(`gh-loop` + 상태 라벨 3개, 없으면 생성·멱등)을 실행한다. 새 리포에는 `agent-working`이 없어 아래 `--label agent-working` 조회가 곧장 실패한다.
 ```bash
 ISSUES=$(gh issue list --state open --label gh-loop --json number,title,labels --limit 100)
-CLAIMED=$(gh issue list --state open --label "gh-loop:in-progress" --json number | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>process.stdout.write(JSON.stringify(JSON.parse(s).map(i=>i.number))))')
+CLAIMED=$(gh issue list --state open --label agent-working --json number | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>process.stdout.write(JSON.stringify(JSON.parse(s).map(i=>i.number))))')
 node .omp/extensions/harness/gh-loop-controller.mjs assign --issues-json "$ISSUES" --claimed-json "$CLAIMED"
 ```
-→ `assignable`만 fan-out 대상(이미 `gh-loop:in-progress`면 skip — 다른 워커가 잡음).
+→ `assignable`만 fan-out 대상 — 상태 라벨(gh-loop `SKILL.md` "상태 라벨")이 없는 이슈만 백로그다. `agent-working`이면 다른 워커가 잡았고, `needs-decision`·`needs-review`면 사람 차례라 skip한다.
 
 ### 2. 풀 shape 결정 (planPool)
 각 assignable을 task로 — `kind`(fix/review), 신호(risk = `risk-assess`, `changedFiles` = `pr://<n>/diff`/`gh pr diff`):
@@ -52,22 +53,22 @@ node .omp/extensions/harness/gh-loop-controller.mjs plan --tasks-json "$TASKS" -
 각 워커 슬롯마다 (단일 컨트롤러 전제). **worker-start 전환 예정 → 이슈 #66** — gh-loop는 #65부터 dispatch 모드(Orca `worktree create --issue` + `terminal create --command "omp --model …"`)이고, 아래 `omp --mode rpc` 스폰은 그 후속 이슈에서 같은 경로로 바꾼다:
 ```bash
 ISSUE=<slot issue>
-gh issue edit "$ISSUE" --add-label "gh-loop:in-progress"      # 클레임 먼저(다음 스캔의 재선점 방지)
+gh issue edit "$ISSUE" --add-label agent-working              # 클레임 먼저(다음 스캔의 재선점 방지)
 WT="$(git rev-parse --show-toplevel)/../wt-gh-loop-$ISSUE"
 git worktree remove "$WT" 2>/dev/null                         # stale 정리는 깨끗할 때만(미커밋 있으면 실패→사람 확인, state 보존)
 if git worktree add "$WT" -B "gh-loop/issue-$ISSUE"; then     # FS·브랜치 격리
   PI_AUTO_QA=0 omp --mode rpc --cwd "$WT" &                   # 자식; new_session → prompt "gh-loop for issue #$ISSUE"
 else
-  gh issue edit "$ISSUE" --remove-label "gh-loop:in-progress" # 롤백: 거짓-클레임 방지
+  gh issue edit "$ISSUE" --remove-label agent-working         # 롤백: 거짓-클레임 방지
 fi
 ```
-- **롤백 불변식**: worktree 생성/spawn 실패 시 `in-progress` 라벨을 **제거**해 이슈가 거짓-클레임으로 남지 않게 한다.
+- **롤백 불변식**: worktree 생성/spawn 실패 시 `agent-working`을 **제거**해 이슈가 거짓-클레임으로 남지 않게 한다.
 - **Auto QA off (headless)**: 워커는 `PI_AUTO_QA=0`으로 spawn — v17.0.9부터 `dev.autoqa` 기본 true라 첫 `xd://report_issue` 기록이 **동의 다이얼로그**를 띄우는데, headless RPC 워커에는 응답할 사람이 없다. 명시적 off로 미결-동의 불확실성을 제거한다.
 - 워커는 그 worktree에서 **gh-loop** 절차를 자기 이슈에 실행 — 머지 자동 안 함.
 
 ### 4. 모니터 + GitHub 로깅 (관측 평면)
 - 컨트롤러가 워커 **RPC 이벤트 스트림**(`agent_end`/`tool_execution_*`)을 수신 → **상태-변화 마일스톤만** 추린다(시작/막힘/완료/needs-decision). 모든 tool 이벤트를 올리지 말 것.
-- **라벨**(상태): `gh-loop:in-progress` → 완료 시 제거 / 실패 시 `gh-loop:blocked`.
+- **라벨**(상태 — 하나만, gh-loop `SKILL.md` "상태 라벨"): 클레임 때 `agent-working` → 워커가 결정 요청을 남기면 `needs-decision`(gh-loop Stage 5가 이슈·PR 둘 다에 붙인다) / 질문 없이 PR만 남기면 `needs-review` / 실패(크래시·수렴 실패)면 컨트롤러가 `agent-working`을 떼고 `needs-decision` + 사유 댓글.
 - **코멘트**(마일스톤): 이슈에 **상태-변화당 1개**, 같은 마일스톤 키는 dedup. *(주의: 이건 `gh-loop-issue`의 이슈-**생성** throttle과 별개 — 여기선 코멘트 coalescing이 따로 필요. 마일스톤만 + 키 dedup으로 GitHub secondary rate-limit 회피.)*
 - **트래킹 이슈**(풀): 부모 이슈를 **edit로 갱신**해 "워커 N/cap, 완료 X, 막힘 Y" 유지(코멘트 누적 X). 사람은 이걸로 전체를 본다(tmux 불요).
 
@@ -85,7 +86,7 @@ node .omp/extensions/harness/gh-loop-controller.mjs scale --state-json "$STATE" 
   git branch -d "gh-loop/issue-$ISSUE" 2>/dev/null || true   # -d(머지된 것만); 폐기 확정 시에만 -D
   ```
 - **크래시**: 무조건 `--force`로 지우지 말 것 — 워커 커밋은 **브랜치에 보존**(재개/회수용). worktree dir만 정리하되 미커밋 손실 위험 시 보류.
-- **시작 시 재조정**: 컨트롤러 기동 시 `gh-loop:in-progress`인데 **살아있는 워커가 없는** 이슈(이전 크래시) → 라벨 정리/재클레임, stale worktree·브랜치 점검.
+- **시작 시 재조정**: 컨트롤러 기동 시 `agent-working`인데 **이 컨트롤러가 띄운 살아있는 워커가 없는** 이슈(이전 크래시 — `wt-gh-loop-<N>` worktree·`gh-loop/issue-<N>` 브랜치로 식별) → 라벨 정리/재클레임, stale worktree·브랜치 점검. gh-loop dispatch 워커(Orca 카드 `gh-loop-issue-<N>`)가 잡은 `agent-working`은 같은 라벨이므로 건드리지 않고, 어느 쪽 워커인지 모르면(worktree·브랜치·카드 모두 없음) 건드리지 않고 보고한다.
 - 컨트롤러는 백로그·워커가 다 비면 종료(상시 대기 X).
 
 ## Observability (tmux 대체)

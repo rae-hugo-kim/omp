@@ -92,8 +92,8 @@ test('compose: runner START -> controller pool + assignment for that issue', () 
   assert.equal(pool.workers[0].role, 'fixer');
   assert.deepEqual(assign([issue], { claimed: [] }).assignable, [{ issue: issue.number }]);
   assert.equal(assign([issue], { claimed: [issue.number] }).assignable.length, 0); // claimed -> not re-assigned
-  const busy = { ...issue, labels: [...issue.labels, { name: 'gh-loop:in-progress' }] };
-  assert.equal(assign([busy], { claimed: [] }).skipped[0].reason, 'already claimed'); // in-progress label too
+  const busy = { ...issue, labels: [...issue.labels, { name: 'agent-working' }] };
+  assert.equal(assign([busy], { claimed: [] }).skipped[0].reason, 'already claimed'); // agent-working label too
 });
 
 test('compose: throttle survives the full pipe — many findings, small cap', () => {

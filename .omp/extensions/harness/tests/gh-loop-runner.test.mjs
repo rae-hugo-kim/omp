@@ -100,3 +100,22 @@ test('marker self-exclusion is case-insensitive (GH-LOOP / gh-loop / no-space)',
     assert.equal(d.action, 'ignore', `marker ${m} must self-exclude`);
   }
 });
+
+test('PR comment: a needs-decision PR without the gh-loop label never resumes the loop (#69)', () => {
+  // The decision gate labels the issue AND its PR needs-decision but never puts gh-loop on the PR, so an
+  // authorized comment on the PR must not start a second resume of the loop the issue already drives.
+  const d = decideRun({ ...base, event: 'issue_comment', action: 'created', labels: ['needs-decision'], commentBody: 'B, 검증까지 해야지' });
+  assert.equal(d.action, 'ignore');
+  assert.match(d.reason, /not a gh-loop issue/);
+});
+
+test('session-decision comment (coordinator, PAT mode) is ignored — the coordinator wakes the worker itself (#69 R7)', () => {
+  // Posted from the owner's own account (not the bot login) while the issue still carries needs-decision;
+  // only the marker keeps the runner from launching a duplicate worker.
+  const head = '## 세션에서 직접 결정함\n**사용자 지시 원문**: "머지 + 정리까지"\n<!-- gh-loop:session-decision:1790921636-23195 -->';
+  for (const commentBody of [head, `${head}\n<!-- gh-loop:acted:1790921636-23195 -->`]) {
+    const d = decideRun({ ...base, actor: 'alice', actorPermission: 'admin', event: 'issue_comment', action: 'created', labels: ['gh-loop', 'needs-decision'], commentBody });
+    assert.equal(d.action, 'ignore');
+    assert.match(d.reason, /marker/);
+  }
+});
