@@ -44,7 +44,7 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 
 ## 상태 라벨 (사람 손이 필요한 정도 — #69)
 
-이슈·PR의 **상태 라벨**은 사람이 지금 무엇을 해야 하는지를 나타낸다. 한 이슈·PR에는 **하나만** 붙고, 전이할 때 이전 라벨을 뗀다(`--remove-label <이전> --add-label <다음>`). 리포에 있지만 붙어 있지 않은 라벨을 떼는 것은 no-op이지만, **리포에 없는 라벨을 떼려 하면 명령 전체가 실패한다**(`'<label>' not found`, exit 1 — 둘 다 2026-10-02 실측). 그래서 전이 전에 Stage 1 라벨 블록이 먼저 돈다(없을 때만 생성, 설명·색 고정). 에이전트가 처리할 백로그에는 상태 라벨이 없다.
+이슈·PR의 **상태 라벨**은 사람이 지금 무엇을 해야 하는지를 나타낸다. 한 이슈·PR에는 **하나만** 붙고, 전이할 때 이전 라벨을 뗀다(`--remove-label <이전> --add-label <다음>`). 리포에 있지만 붙어 있지 않은 라벨을 떼는 것은 no-op이지만, **리포에 없는 라벨을 떼려 하면 명령 전체가 실패한다**(`'<label>' not found`, exit 1 — 둘 다 2026-10-02 실측). 그래서 전이 전에 Stage 1 라벨 블록이 먼저 돈다(없을 때만 생성, 설명·색 고정). **PR의 라벨도 `gh issue edit <PR 번호|URL>`로 바꾼다** — `gh pr edit`는 gh 2.65.0에서 `Projects (classic) is being deprecated` GraphQL 오류로 실패한다(2026-10-02 PR #70 실측, `gh issue edit`는 PR 번호·URL 모두 성공). 에이전트가 처리할 백로그에는 상태 라벨이 없다.
 
 | 라벨 | 뜻 | 붙이는 시점 | 떼는 시점 |
 |---|---|---|---|
@@ -197,7 +197,7 @@ PR에 대해 교차검증을 1패스 돌린다 — 결과는 **참고용**이지
    ```bash
    gh issue comment <issue> --body-file /tmp/ghloop-question.md
    gh issue edit <issue> --remove-label agent-working,needs-review --add-label needs-decision
-   gh pr edit <pr> --remove-label agent-working,needs-review --add-label needs-decision   # PR이 있으면
+   gh issue edit <pr> --remove-label agent-working,needs-review --add-label needs-decision   # PR이 있으면 — PR도 gh issue edit(상태 라벨 절)
    ```
 2. **턴을 종료**한다 (option D: 프로세스 안 붙잡음). 사용자에게: "이슈 #N에 결정 요청을 남겼습니다. 댓글로 답한 뒤 `/gh-loop N`으로 재개하세요." (코디네이터 세션 대화로 답해도 된다 — Stage 0 9.)
 
