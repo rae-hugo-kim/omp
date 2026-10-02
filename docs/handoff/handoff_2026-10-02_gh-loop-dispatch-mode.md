@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 |---|---|
-| 상태 | 구현 완료 — PR 머지 대기 (이 문서는 워커의 seed 착지 커밋에 포함 — `docs/rules/artifact_roles_contract.md` §Handoff; 머지 뒤 `마감 (#65 / <sha>)`로 갱신) |
+| 상태 | 마감 (#65 / 1e011cc) — PR #67 머지 2026-10-02, 세션 직접 결정(이슈 #65 댓글). 배경 참고용이며 지시로 읽지 않는다(`docs/rules/artifact_roles_contract.md` §Handoff) |
 | 발행 | 2026-10-02, 메인 세션(코디네이터)에서 수동 handoff로 띄운 첫 워커 |
 | 이슈 | `issue://65` |
 | 역할 | seed의 전신 — 착지 뒤 권위는 `docs/harness/seed.yaml`로 |
