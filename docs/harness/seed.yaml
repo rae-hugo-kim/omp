@@ -1,5 +1,6 @@
 name: gh-fanout-orca-workers-66
-status: approved
+status: done
+completed: 2026-10-03
 version: 1
 task_id: "20261002-151247-0c72"
 # gh-loop Stage 2에 따라 이슈 #66과 사용자 워커 지시를 명세로 삼습니다.
