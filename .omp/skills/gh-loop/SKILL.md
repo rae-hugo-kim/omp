@@ -118,14 +118,14 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 #### worker 모드 (워커 세션)
 
 - 트리거: 프롬프트의 `<!-- gh-loop:worker -->`(또는 `--worker`). **다시 dispatch하지 않는다.**
-- 처음 시작하면(재개 프롬프트가 아니면) Stage 1 라벨 블록(멱등)을 실행하고 이슈에 `agent-working`을 보장한다(`gh issue edit N --remove-label needs-decision,needs-review --add-label agent-working` — 코디네이터가 3에서 붙였으면 no-op; 리포에 라벨이 없으면 이 명령이 실패하므로 블록이 먼저다). 그다음 **dispatch 기록을 ingest**한다(#79) — **권한자(write+) 작성자의** 이슈 댓글 본문만 파일로 받아 넘기면(Guard policy의 권한 임계값과 같은 필터 — 아무나 붙여 넣은 튜플은 입력에 들어오지 않는다) 그 안의 유효한 `omp-dispatch/v1` 튜플 중 **이 이슈 번호의 것**이 모두(재dispatch면 둘 다; 다른 이슈 번호의 튜플은 무시하고 알린다) `docs/harness/audit.jsonl`에 `gh_loop_dispatched`(issue·risk·files·depth·ac_count·model·effort·dispatched_at)로 append되고(같은 issue+ts면 skip), 이 행은 seed 착지 커밋(Stage 2 커밋 순서)에 실린다:
+- 처음 시작하면(재개 프롬프트가 아니면) Stage 1 라벨 블록(멱등)을 실행하고 이슈에 `agent-working`을 보장한다(`gh issue edit N --remove-label needs-decision,needs-review --add-label agent-working` — 코디네이터가 3에서 붙였으면 no-op; 리포에 라벨이 없으면 이 명령이 실패하므로 블록이 먼저다). 그다음 **dispatch 기록을 ingest**한다(#79) — `author_association`이 OWNER/MEMBER/COLLABORATOR인 작성자의 이슈 댓글 본문만 파일로 받아 넘긴다(아무나 붙여 넣은 튜플은 입력에 들어오지 않게 하는 1차 필터다. 이것은 Guard policy의 write+ 판정 그 자체가 아니라 근사치다 — COLLABORATOR에는 read/triage 권한자도 포함되므로 엄밀한 권한은 option A 러너처럼 `gh api repos/{owner}/{repo}/collaborators/<login>/permission`으로 작성자별로 조회한다). 그 안의 유효한 `omp-dispatch/v1` 튜플 중 **이 이슈 번호의 것**이 모두(재dispatch면 둘 다; 다른 이슈 번호의 튜플은 무시하고 알린다) `docs/harness/audit.jsonl`에 `gh_loop_dispatched`(issue·risk·files·depth·ac_count·model·effort·dispatched_at)로 append되고(같은 issue+ts면 skip), 이 행은 seed 착지 커밋(Stage 2 커밋 순서)에 실린다:
   ```bash
   GHLOOP_OUT=$(mktemp -d); trap 'rm -rf "$GHLOOP_OUT"' EXIT
   gh api "repos/{owner}/{repo}/issues/N/comments" --paginate \
     --jq '.[] | select(.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR") | .body' > "$GHLOOP_OUT/comments.md"
   node .omp/extensions/harness/gh-loop-record.mjs ingest --issue N --comment-file "$GHLOOP_OUT/comments.md"
   ```
-  재개 때 새로 뜬 워커는 이 두 단계를 건너뛰고 Stage 5 재개를 따른다. 이슈(및 handoff 문서)를 읽고 **Stage 2~5를 그대로** 수행한다 — 커밋 순서(Stage 2 문단), compr로 PR(`Closes #N`, PR에 `needs-review`), advisory 교차검증, 결정 지점에서 이슈 댓글 + 이슈·PR `needs-decision`(Stage 5) + **턴 종료**.
+  재개 때 새로 뜬 워커는 이 두 단계를 건너뛰고 Stage 5 재개를 따른다(재개 중 코디네이터가 모델을 바꿔 다시 dispatch했으면 — 새 마커·튜플 댓글 — 그 워커가 위 ingest를 한 번 더 실행해 새 행을 남긴다. 멱등이라 기존 행은 skip된다). 이슈(및 handoff 문서)를 읽고 **Stage 2~5를 그대로** 수행한다 — 커밋 순서(Stage 2 문단), compr로 PR(`Closes #N`, PR에 `needs-review`), advisory 교차검증, 결정 지점에서 이슈 댓글 + 이슈·PR `needs-decision`(Stage 5) + **턴 종료**.
 - 보고 채널: 이슈 댓글(마일스톤·결정 요청) + `orca worktree set --worktree active --comment "gh-loop #N: <마일스톤>" --json`(마일스톤마다). Run이 바인딩돼 있으면 코디네이터 핸들로 `orca orchestration send --type status` 1건씩(시작·결정 요청·완료만).
 - 재개 프롬프트를 받으면 Stage 5 "재개" 1~6을 워커가 수행한다(댓글 해석·권한자·nonce·멱등 — 코디네이터의 `세션에서 직접 결정함` 댓글도 그 nonce의 답이다, 재개 2). 머지 승인 댓글이면 `gh pr merge --match-head-commit <approved-sha>`까지는 워커가 실행하고(2026-10-01 #62 선례), 이슈에 "머지 완료, 정리 필요(워크트리·브랜치)" 댓글을 남긴 뒤 턴을 종료한다 — 정리는 코디네이터 몫.
 - **자기 워크트리를 지우지 않는다**(그 안에서 실행 중). 머지도 승인 없이는 하지 않는다(Non-Negotiables).
@@ -188,7 +188,7 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 # files/insertions/deletions: git diff --shortstat <base>...HEAD (closeout 커밋 전까지의 브랜치 변경);
 # review-rounds: 코드 커밋 전 reviewer 라운드 수(위); verifier: verifier verdict(PASS / PASS WITH NOTES / FAIL — report §3은 PASS로 시작하지 않는 값을 FAIL로 센다);
 # decisions: closeout 전에 남긴 `gh-loop:decision` nonce 수(뒤따르는 머지 결정 게이트는 구조상 항상 1회라 세지 않는다).
-# model/effort/risk/depth/files_predicted/dispatched_at은 audit의 gh_loop_dispatched 행(이슈의 최신 dispatch)에서 채운다 — 특정 dispatch에 묶으려면 --dispatched-at <그 행의 ts>.
+# model/effort/risk/depth/files_predicted/dispatched_at은 audit의 gh_loop_dispatched 행(이슈의 최신 dispatch — dispatched_at 기준)에서 채운다 — 특정 dispatch에 묶으려면 --dispatched-at <그 행의 meta.dispatched_at>(행의 ts가 아니라 튜플의 ts).
 node .omp/extensions/harness/gh-loop-record.mjs close --issue N --files-changed <n> --insertions <n> --deletions <n> \
   --review-rounds <n> --verifier <verdict> --decisions <n>
 ```

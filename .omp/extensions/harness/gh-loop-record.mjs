@@ -20,7 +20,7 @@
 // CLI (for the skill):
 //   node gh-loop-record.mjs dispatch  --issue N --risk r --files n --depth d --ac-count n --model m [--effort e] [--ts iso] [--roles-json J] [--out dir]
 //   node gh-loop-record.mjs recommend --risk r --depth d --files n [--roles-json J]
-//   node gh-loop-record.mjs ingest    --comment-file f [--audit path]
+//   node gh-loop-record.mjs ingest    --issue N --comment-file f [--audit path]
 //   node gh-loop-record.mjs close     --issue N --files-changed n --insertions n --deletions n --review-rounds n --verifier V --decisions n
 //                                     [--pr M] [--model m] [--effort e] [--dispatched-at iso] [--audit path]
 //   Test seam: GHLOOP_RECORD_NOW overrides the row timestamp.

@@ -180,3 +180,4 @@
 {"ts":"2026-10-03T00:46:00Z","event":"task_closed","actor":"assistant","meta":{"task_id":"20261003-004031-0e67","name":"harness-core-language-line-49"}}
 {"ts":"2026-10-03T14:25:12.912Z","event":"thread_opened","actor":"assistant","meta":{"thread_id":"T-20261003142512-22ba","seed_task_id":"20261003-142428-1f5f","seed_version":1,"ac_targeted":["AC1","AC2","AC3","AC4","AC5"]}}
 {"ts":"2026-10-03T14:25:12.459Z","event":"gh_loop_dispatched","actor":"assistant","meta":{"issue":79,"risk":"high","files":10,"depth":"high","ac_count":4,"model":"anthropic/claude-fable-5-1","effort":"high","dispatched_at":"2026-10-03T14:09:58Z"}}
+{"ts":"2026-10-03T15:16:45.871Z","event":"estimate_vs_actual","actor":"rae","meta":{"predicted":{"risk":"high","files":10,"depth":"high","model":"anthropic/claude-fable-5-1","effort":"high","ts":"2026-10-03T14:26:17Z"},"actual":{"risk":"high","diffSize":866,"files":9,"reason":"866+ lines of code changed"},"fails_since_estimate":0}}

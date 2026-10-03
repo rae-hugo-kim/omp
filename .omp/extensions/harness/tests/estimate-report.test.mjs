@@ -40,7 +40,7 @@ const FIXTURE = [
   dispatched(71, { model: 'astra', effort: 'xhigh', files: 9 }, '2026-10-02T23:30:00Z'),
   closed(71, { model: 'astra', effort: 'xhigh', files_predicted: 9, files_changed: 7, insertions: 83, deletions: 41, review_rounds: 3, verifier: 'PASS WITH NOTES', decisions: 1, dispatched_at: '2026-10-02T23:30:00Z', duration_min: 40 }, '2026-10-03T00:10:00Z'),
   dispatched(72, {}, '2026-10-03T01:00:00Z'),
-  closed(72, { review_rounds: 3, verifier: 'FAIL', duration_min: 90 }, '2026-10-03T02:30:00Z'),
+  closed(72, { review_rounds: 3, verifier: 'FAIL', dispatched_at: '2026-10-03T01:00:00Z', duration_min: 90 }, '2026-10-03T02:30:00Z'),
   dispatched(73, { risk: 'low', depth: 'low', files: 2 }, '2026-10-03T03:00:00Z'),
   closed(74, { model: 'opus', effort: null, risk: null, depth: null, files_predicted: null, dispatched_at: null, duration_min: null, review_rounds: 2 }, '2026-10-03T04:00:00Z'),
   '{"ts":"2026-10-03T05:00:00Z","event":"gh_loop_dispatched","actor":"assistant","meta":{"issue":"75","risk":"medium"}}',   // malformed: dropped
