@@ -1,5 +1,6 @@
 name: harness-core-language-line-49
-status: approved
+status: done
+completed: 2026-10-03
 version: 1
 task_id: "20261003-004031-0e67"
 # gh-loop worker Stage 2에 따라 이슈 #49의 "승인된 구현 방향 (2026-10-03)" 절과 AC1~AC4를 명세로 삼습니다.
