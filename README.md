@@ -142,7 +142,7 @@ kickoff → startdev 흐름에서 자동으로 작동하는 장치들. 집행 �
 |--------|--------|------|
 | `pre-commit` (차단) | commit-gates → acceptance/backpressure/review/archive | 스테이징된 인덱스 기준 판정. 실패 시 커밋 객체 미생성. node 부재 시 fail-closed(`OMP_NODE_BIN` 탈출구) |
 | `post-commit` (비차단) | 백스톱 + 유예 소비 | 게이트 미경유 커밋(`--no-verify`·cherry-pick·revert·rebase) advisory + one-shot 플래그 소비 |
-| `pre-commit` (관측) | review-gate → estimate-vs-actual | 인테이크가 남긴 `.omp/harness-state/cycle-estimate`(예상 위험·파일 수·깊이·모델)를 `risk-assess` 실측과 붙여 `audit.jsonl`에 `estimate_vs_actual` 기록·소비. 판정 불관여. 표는 `node .omp/extensions/harness/estimate-report.mjs` |
+| `pre-commit` (관측) | review-gate → estimate-vs-actual | 인테이크가 남긴 `.omp/harness-state/cycle-estimate`(예상 위험·파일 수·깊이·모델)를 `risk-assess` 실측과 붙여 `audit.jsonl`에 `estimate_vs_actual` 기록·소비. 판정 불관여. 표는 `node .omp/extensions/harness/estimate-report.mjs`(gh-loop 워커의 `gh_loop_dispatched`·`gh_loop_closed`도 §3 모델×규모 셀로 모음 — `gh-loop-record.mjs`) |
 | `post-merge` (비차단) | 백스톱 | merge 자동커밋 관측 — git이 pre-commit/post-commit을 발화하지 않는 유일 경로 |
 | `pre-push` (차단) | 아카이브 유출·docs drift | `docs/sum`·`docs/reviews` 추적 상태 및 FAIL 드리프트 차단 |
 

@@ -63,13 +63,19 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 #### dispatch 절차 (코디네이터 — 코드를 만지지 않는다)
 
 1. `issue://N`을 읽고 라벨을 보장한다(Stage 1의 라벨 블록 — `gh-loop` + 상태 라벨 3개). finding 산문으로 호출됐으면 Stage 1을 그대로 수행해 이슈를 만든 뒤 그 번호로 계속한다.
-2. **모델 질문**: 이슈 댓글에 `<!-- gh-loop:model:<id>:<effort> -->` 마커가 이미 있으면 묻지 않고 그 값을 쓴다(사용자가 바꾸라고 하지 않는 한). 없으면 `ask` 툴로 선택지를 제시한다 — `omp config get modelRoles`의 역할별 실제 id(최소 `smol`/`default`/`slow`/`plan`, 예: `smol → anthropic/claude-fable-5-1:medium`) + **"이 세션과 동일"**. 자동 선택 정책은 없다(사용자 결정 2026-10-02). 선택은 이슈 댓글에 마커로 기록해 재개 때 다시 묻지 않는다:
+2. **모델 질문**: 이슈 댓글에 `<!-- gh-loop:model:<id>:<effort> -->` 마커가 이미 있으면 묻지 않고 그 값을 쓴다(사용자가 바꾸라고 하지 않는 한). 없으면 먼저 이슈 본문에서 **규모를 추정**하고(risk = risk-assess 분류 그대로, files = 예상 변경 파일 수, depth = 추론 깊이 low|high, ac_count = AC 수 — `rule://harness-cycle_definition` "예상 레코드"와 같은 축) `ask` 툴로 선택지를 제시한다 — `omp config get modelRoles`의 역할별 실제 id(최소 `smol`/`default`/`slow`/`plan`, 예: `smol → anthropic/claude-fable-5-1:medium`) + **"이 세션과 동일"**, 그리고 질문 본문 끝에 **규모 기반 추천 한 줄**(#79):
+   ```bash
+   node .omp/extensions/harness/gh-loop-record.mjs recommend --risk <risk> --depth <depth> --files <n> --roles-json "$(omp config get modelRoles)"
+   # → 규모 기반 추천: <provider/model>:<level> (<tier> — <사유>; risk × depth × files [S|M|L])
+   ```
+   추천은 `gh-loop-record.mjs`의 단순 규칙표(risk × depth × files 구간 → `smol`/`default`/`slow`/`plan` 역할)가 낸 **표시용 한 줄**이다 — 기본값으로 두지 않고 선택지로도 만들지 않으며, 사용자가 매번 고른다(사용자 결정 2026-10-02; 규칙표는 `estimate-report.mjs` §3이 쌓이면 테스트와 함께 조정한다). 자동 선택 정책은 없다. 선택은 이슈 댓글에 마커 + **dispatch 튜플** `["omp-dispatch/v1", <issue>, <risk>, <files>, <depth>, <ac_count>, <model>, <effort>, <ts>]`로 기록해 재개 때 다시 묻지 않고, 워커가 `audit.jsonl`에 `gh_loop_dispatched`로 남기게 한다(코디네이터는 트리를 만지지 않는다):
    ```bash
    GHLOOP_OUT=$(mktemp -d); trap 'rm -rf "$GHLOOP_OUT"' EXIT
-   printf '%s\n' "gh-loop dispatch 모델: <provider/model> / thinking: <level>" "<!-- gh-loop:model:<provider/model>:<level> -->" > "$GHLOOP_OUT/model.md"
+   node .omp/extensions/harness/gh-loop-record.mjs dispatch --issue N --risk <risk> --files <n> --depth <depth> --ac-count <n> \
+     --model <provider/model> --effort <level> --out "$GHLOOP_OUT" > /dev/null     # model.md = 모델 줄 + 마커 + 튜플(인라인 코드)
    gh issue comment N --body-file "$GHLOOP_OUT/model.md"
    ```
-   `modelRoles` id의 `:<level>` 접미는 thinking 레벨이다 — `omp --model <provider/model> --thinking <level>`로 나눠 넘긴다.
+   `modelRoles` id의 `:<level>` 접미는 thinking 레벨이다 — `omp --model <provider/model> --thinking <level>`로 나눠 넘긴다. 마커만 있고 튜플이 없는 옛 댓글(#79 이전)이면 워커의 ingest가 "no tuple"로 멈추므로, 워커가 같은 축을 이슈에서 추정해 튜플 댓글을 하나 더 남기고 ingest한다(#79 자체가 첫 사례).
 3. **워커 기동** — **2단계 경로가 1순위**(R4 스파이크 실측, 아래). Linux에서 Orca 터미널 밖 셸이면 `orca` 대신 `orca-ide`(orca-cli 스킬):
    ```bash
    orca worktree create --repo <selector> --name gh-loop-issue-N --no-parent --issue N --json   # 카드에 이슈 링크 → 이후 issue:N 셀렉터로 재탐색
@@ -112,7 +118,14 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 #### worker 모드 (워커 세션)
 
 - 트리거: 프롬프트의 `<!-- gh-loop:worker -->`(또는 `--worker`). **다시 dispatch하지 않는다.**
-- 처음 시작하면(재개 프롬프트가 아니면) Stage 1 라벨 블록(멱등)을 실행하고 이슈에 `agent-working`을 보장한다(`gh issue edit N --remove-label needs-decision,needs-review --add-label agent-working` — 코디네이터가 3에서 붙였으면 no-op; 리포에 라벨이 없으면 이 명령이 실패하므로 블록이 먼저다). 재개 때 새로 뜬 워커는 이 줄을 건너뛰고 Stage 5 재개를 따른다. 이슈(및 handoff 문서)를 읽고 **Stage 2~5를 그대로** 수행한다 — 커밋 순서(Stage 2 문단), compr로 PR(`Closes #N`, PR에 `needs-review`), advisory 교차검증, 결정 지점에서 이슈 댓글 + 이슈·PR `needs-decision`(Stage 5) + **턴 종료**.
+- 처음 시작하면(재개 프롬프트가 아니면) Stage 1 라벨 블록(멱등)을 실행하고 이슈에 `agent-working`을 보장한다(`gh issue edit N --remove-label needs-decision,needs-review --add-label agent-working` — 코디네이터가 3에서 붙였으면 no-op; 리포에 라벨이 없으면 이 명령이 실패하므로 블록이 먼저다). 그다음 **dispatch 기록을 ingest**한다(#79) — **권한자(write+) 작성자의** 이슈 댓글 본문만 파일로 받아 넘기면(Guard policy의 권한 임계값과 같은 필터 — 아무나 붙여 넣은 튜플은 입력에 들어오지 않는다) 그 안의 유효한 `omp-dispatch/v1` 튜플 중 **이 이슈 번호의 것**이 모두(재dispatch면 둘 다; 다른 이슈 번호의 튜플은 무시하고 알린다) `docs/harness/audit.jsonl`에 `gh_loop_dispatched`(issue·risk·files·depth·ac_count·model·effort·dispatched_at)로 append되고(같은 issue+ts면 skip), 이 행은 seed 착지 커밋(Stage 2 커밋 순서)에 실린다:
+  ```bash
+  GHLOOP_OUT=$(mktemp -d); trap 'rm -rf "$GHLOOP_OUT"' EXIT
+  gh api "repos/{owner}/{repo}/issues/N/comments" --paginate \
+    --jq '.[] | select(.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR") | .body' > "$GHLOOP_OUT/comments.md"
+  node .omp/extensions/harness/gh-loop-record.mjs ingest --issue N --comment-file "$GHLOOP_OUT/comments.md"
+  ```
+  재개 때 새로 뜬 워커는 이 두 단계를 건너뛰고 Stage 5 재개를 따른다. 이슈(및 handoff 문서)를 읽고 **Stage 2~5를 그대로** 수행한다 — 커밋 순서(Stage 2 문단), compr로 PR(`Closes #N`, PR에 `needs-review`), advisory 교차검증, 결정 지점에서 이슈 댓글 + 이슈·PR `needs-decision`(Stage 5) + **턴 종료**.
 - 보고 채널: 이슈 댓글(마일스톤·결정 요청) + `orca worktree set --worktree active --comment "gh-loop #N: <마일스톤>" --json`(마일스톤마다). Run이 바인딩돼 있으면 코디네이터 핸들로 `orca orchestration send --type status` 1건씩(시작·결정 요청·완료만).
 - 재개 프롬프트를 받으면 Stage 5 "재개" 1~6을 워커가 수행한다(댓글 해석·권한자·nonce·멱등 — 코디네이터의 `세션에서 직접 결정함` 댓글도 그 nonce의 답이다, 재개 2). 머지 승인 댓글이면 `gh pr merge --match-head-commit <approved-sha>`까지는 워커가 실행하고(2026-10-01 #62 선례), 이슈에 "머지 완료, 정리 필요(워크트리·브랜치)" 댓글을 남긴 뒤 턴을 종료한다 — 정리는 코디네이터 몫.
 - **자기 워크트리를 지우지 않는다**(그 안에서 실행 중). 머지도 승인 없이는 하지 않는다(Non-Negotiables).
@@ -168,7 +181,18 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 
 생성/지정된 이슈를 작업 단위로 **autopilot**(또는 복잡하면 **ralph**)에 넘긴다. 하네스 게이트(context/acceptance/backpressure/review)가 그 안에서 그대로 작동한다. 새 수정 엔진을 만들지 않는다 — 기존 실행 substrate를 배선만 한다 (analysis Q2.4).
 
-**커밋 순서(하네스 게이트 전제)**: acceptance-gate는 미체크 AC가 있는 중간 커밋을 막는다(WIP 레인만 예외). 구현·테스트를 먼저 끝내고 seed+scope(전부 `[x]`)를 docs 커밋으로 착지 → 코드 커밋 → 리뷰·후속 커밋 → closeout 커밋 순으로 낸다(#56 `ecccc54`, #62 `8dfe619` 선례). WIP 레인은 커밋마다 `acceptance_wip` 감사 행이 쌓이므로 루프에서는 쓰지 않는다. handoff 문서가 있으면 seed 착지 커밋에 함께 싣는다(`docs/rules/artifact_roles_contract.md` §Handoff).
+**커밋 순서(하네스 게이트 전제)**: acceptance-gate는 미체크 AC가 있는 중간 커밋을 막는다(WIP 레인만 예외). 구현·테스트를 먼저 끝내고 seed+scope(전부 `[x]`)를 docs 커밋으로 착지 → 코드 커밋(그 **앞**에 reviewer 3-pass를 돌려 review-gate 사이드카를 만든다 — high/critical이면 게이트가 요구한다) → 리뷰 지적을 고친 후속 커밋 → closeout 커밋 순으로 낸다(#56 `ecccc54`, #62 `8dfe619` 선례). WIP 레인은 커밋마다 `acceptance_wip` 감사 행이 쌓이므로 루프에서는 쓰지 않는다. handoff 문서가 있으면 seed 착지 커밋에 함께 싣는다(`docs/rules/artifact_roles_contract.md` §Handoff).
+
+**closeout 기록(#79)**: closeout 커밋(`thread_closed`·`task_closed`를 append하는 그 커밋)에 워커 실측을 `gh_loop_closed`로 함께 append한다 — 실측은 그 시점의 값이며 머지 뒤에는 커밋할 수 없으므로 closeout이 "시작→PR" 종점이다(PR은 closeout 직후 열린다). 그래서 세는 리뷰 라운드는 **코드 커밋 앞에 돌린 reviewer 3-pass 라운드**(review-gate 사이드카를 만드는 그 리뷰 — r1 FAIL → 수정 → r2 … 식으로 closeout 전에 끝난다)이고, Stage 4가 PR에 게시하는 것은 그 결과의 요약이다(PR 뒤에 추가 라운드가 생기면 그것은 이 행에 들어가지 않는다 — 한 dispatch에 한 행, 두 번째 실행은 skip):
+```bash
+# files/insertions/deletions: git diff --shortstat <base>...HEAD (closeout 커밋 전까지의 브랜치 변경);
+# review-rounds: 코드 커밋 전 reviewer 라운드 수(위); verifier: verifier verdict(PASS / PASS WITH NOTES / FAIL — report §3은 PASS로 시작하지 않는 값을 FAIL로 센다);
+# decisions: closeout 전에 남긴 `gh-loop:decision` nonce 수(뒤따르는 머지 결정 게이트는 구조상 항상 1회라 세지 않는다).
+# model/effort/risk/depth/files_predicted/dispatched_at은 audit의 gh_loop_dispatched 행(이슈의 최신 dispatch)에서 채운다 — 특정 dispatch에 묶으려면 --dispatched-at <그 행의 ts>.
+node .omp/extensions/harness/gh-loop-record.mjs close --issue N --files-changed <n> --insertions <n> --deletions <n> \
+  --review-rounds <n> --verifier <verdict> --decisions <n>
+```
+같은 issue의 같은 dispatch(dispatch 행이 없으면 같은 issue)에 대해 두 번 실행하면 skip한다. 두 이벤트는 어떤 게이트 판정에도 관여하지 않으며, `node .omp/extensions/harness/estimate-report.mjs` §3이 모델×규모 셀로 모은다(라우팅 기준·추천 규칙표를 바꿀 때의 원자료 — `rule://harness-agent_routing`).
 
 ### Stage 3 — Fix → PR
 
@@ -176,12 +200,14 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 
 ### Stage 4 — PR → Cross-verify (**advisory**)
 
-PR에 대해 교차검증을 1패스 돌린다 — 결과는 **참고용**이지 머지 게이트가 아니다:
-- `reviewer` 에이전트 (`.omp/agents/reviewer.md`) — 적대적 다중패스 리뷰.
+PR에 교차검증 결과를 게시한다 — 결과는 **참고용**이지 머지 게이트가 아니다:
+- `reviewer` 에이전트 (`.omp/agents/reviewer.md`) — 적대적 다중패스 리뷰. 이 리뷰는 코드 커밋 **앞**에 돈다(review-gate가 high/critical 커밋에 요구하는 사이드카를 만드는 그 라운드들 — Stage 2 커밋 순서·"closeout 기록"의 `review-rounds`); PR 단계에서는 그 결과를 게시하고, 필요하면 PR diff에 1패스를 더 돌린다(추가 라운드는 `gh_loop_closed`에 들어가지 않는다).
 - 이종 모델 2차 의견: `adversary` 에이전트 (`.omp/agents/adversary.md`) 또는 OMC `ccg`(claude+codex+gemini).
 - 결과 요약을 파일로 써서 PR 코멘트로 게시한다 (`gh pr comment <pr> --body-file /tmp/ghloop-review.md`) — 본문을 쉘 명령줄에 보간하지 않는다.
 
 ### Stage 5 — Decision Gate → HITL (the crux)
+
+머지 질문(Stage 5의 마지막 결정 게이트) 전에 워커는 closeout 커밋에 `gh_loop_closed` 실측을 함께 남긴다(Stage 2 "closeout 기록" — 변경 파일/줄·리뷰 라운드·verifier 판정·결정 왕복·dispatch→closeout 분). 결정 요청 댓글의 **Context**에는 그 행의 요약 한 줄(예: `9 files +400/-20, r2, verifier PASS, 0 decision(s), 200 min`)을 적어 사용자가 예측(`gh_loop_dispatched`)과 나란히 보게 한다.
 
 판단이 필요하면 (예: 교차검증이 HIGH+ 이슈 제기 / 스키마·API 파괴 변경 / 머지 직전 / 파괴 작업) **자동 진행하지 않는다**:
 
@@ -251,12 +277,12 @@ option-A에서 "권한자 댓글 = 트리거"의 안전 정책:
 
 | Stage | Asset | 위치 |
 |---|---|---|
-| 0 dispatch / 재개 / 정리 / 세션 직접 결정 (코디네이터) | `orca worktree create --issue N`(카드 링크) · `terminal create --command "command omp --extension <EXT> --model … --thinking …"`(R8) · `terminal send` · `issue:<N>` 셀렉터 · `worktree rm` · `세션에서 직접 결정함` 댓글(R7) · (보류) `orca orchestration run-create`/`worker-start` | **Orca CLI**: `.omp/skills/orca-cli/SKILL.md` · 본 스킬 Stage 0 |
+| 0 dispatch / 재개 / 정리 / 세션 직접 결정 (코디네이터) | `orca worktree create --issue N`(카드 링크) · `terminal create --command "command omp --extension <EXT> --model … --thinking …"`(R8) · `terminal send` · `issue:<N>` 셀렉터 · `worktree rm` · `세션에서 직접 결정함` 댓글(R7) · `gh-loop-record.mjs recommend`/`dispatch`(규모 기반 추천 한 줄 + dispatch 튜플, #79) · (보류) `orca orchestration run-create`/`worker-start` | **Orca CLI**: `.omp/skills/orca-cli/SKILL.md` · **harness**: `.omp/extensions/harness/gh-loop-record.mjs` · 본 스킬 Stage 0 |
 | 1 finding→issue (dedup/throttle/label) | `gh issue create` + 헬퍼 | **harness(신규)**: `.omp/extensions/harness/gh-loop-issue.mjs` |
 | 2 issue→fix | autopilot / ralph + 하네스 게이트 | **OMC**(전역 스킬) + `.omp/extensions/harness/gates/` |
 | 3 fix→PR | `gh pr create` + `needs-review` (compr 절차) | **harness**: `.omp/skills/compr/SKILL.md` |
 | 4 cross-verify (advisory) | reviewer · adversary · ccg/codex | **harness**: `.omp/agents/{reviewer,adversary,verifier}.md` · **OMC**: ccg/codex |
-| 5 decision gate / resume | 상태 라벨(이슈·PR `needs-decision`) + `issue://` read(워커가 해석, `session-decision` 댓글 포함) | 본 스킬 컨벤션(상태 라벨 절) + `gh` CLI |
+| 5 decision gate / resume / closeout 기록 | 상태 라벨(이슈·PR `needs-decision`) + `issue://` read(워커가 해석, `session-decision` 댓글 포함) · `gh-loop-record.mjs ingest`/`close`(`gh_loop_dispatched`·`gh_loop_closed`, #79) → `estimate-report.mjs` §3 | 본 스킬 컨벤션(상태 라벨 절) + `gh` CLI · **harness**: `.omp/extensions/harness/gh-loop-record.mjs` |
 
 ## Substrate note
 

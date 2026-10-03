@@ -59,6 +59,7 @@
 | **scope** | `scope_amended`·`scope_expansion_approved` | P2 amend·out_of_scope 축소 | 스코프 변경 흔적(사용자 승인 포함) |
 | **thread** | `thread_opened`·`thread_closed` | `thread-scope.mjs` | 스레드 provenance + satisfaction verdict(R2 핵심) |
 | **closeout** | `task_closed` | closeout 절차 | 종료상태 전이 기록 |
+| **gh-loop** | `gh_loop_dispatched`·`gh_loop_closed` | `gh-loop-record.mjs`(워커 — `ingest` / `close`, #79) | dispatch 예측(issue·risk·files·depth·ac_count·model·effort) ↔ closeout 실측(변경 파일/줄·리뷰 라운드·verifier·결정 왕복·분). 판정 불관여, `estimate-report.mjs` §3의 원자료 |
 
 ## R1 — Role Separation (혼동 없이)
 
