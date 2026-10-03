@@ -105,8 +105,8 @@ gh repo view --json nameWithOwner -q .nameWithOwner
    **실행**: <코디네이터가 실행한 명령과 결과, 또는 "워커 재개">
    <!-- gh-loop:session-decision:<가장 최근 결정 요청의 nonce> -->
    ```
-   - **코디네이터가 바로 실행하는 결정**(머지·닫기): Stage 5 재개 5의 head 가드대로 실행한 뒤(머지는 `gh pr merge <pr> --merge --match-head-commit <질문에 적힌 head SHA>`처럼 질문에 적힌 방식으로), 같은 댓글에 `<!-- gh-loop:acted:<nonce> -->`를 함께 남기고 이슈·PR에서 `needs-decision`을 뗀다. 머지했으면 곧바로 7(정리)로 간다.
-   - **워커가 실행할 결정**(수정 요청 등): 댓글(acted 없음)을 남기고 이슈(PR이 있으면 PR도)의 `needs-decision`을 `agent-working`으로 바꾼 **뒤** 6처럼 재개 프롬프트를 보낸다 — 라벨을 먼저 바꿔야 워커의 다음 전이를 덮어쓰지 않는다. 해석은 워커가 댓글의 지시 원문 인용을 보고 하고(Stage 5 재개 2의 예외), 해석 끝에 멈추면(이견·모호) 워커가 `needs-decision`으로 되돌린다(Stage 5 재개 park).
+   - **코디네이터가 바로 실행하는 결정**(머지·닫기): Stage 5 재개 5의 head 가드와 아래 “순차 PR 갱신”의 최신 base·검증 확인을 거칩니다. 머지는 `gh pr merge <pr> --merge --match-head-commit <질문에 적힌 head SHA>`처럼 승인된 방식으로 실행한 뒤, 같은 댓글에 `<!-- gh-loop:acted:<nonce> -->`를 함께 남기고 이슈·PR에서 `needs-decision`을 뗍니다. 머지했으면 곧바로 7(정리)로 갑니다.
+   - **워커가 실행할 결정**(수정 요청·PR별 rebase/force-with-lease 등): 댓글(acted 없음)을 남기고 이슈(PR이 있으면 PR도)의 `needs-decision`을 `agent-working`으로 바꾼 **뒤** 6처럼 재개 프롬프트를 보냅니다. 라벨을 먼저 바꿔야 워커의 다음 전이를 덮어쓰지 않습니다. 워커는 Stage 5 재개 2에 따라 인용된 지시를 해석하며, 이견·모호성으로 멈추면 새 nonce와 `needs-decision`으로 되돌립니다. rebase 승인은 머지 승인이 아닙니다.
    - option A 러너는 이 댓글을 계속 무시한다(`<!-- gh-loop:` 마커 자기 제외) — 코디네이터가 워커를 직접 깨우므로 러너까지 기동하면 중복이다(회귀 테스트 `gh-loop-runner.test.mjs` "session-decision").
 
 #### worker 모드 (워커 세션)
@@ -206,9 +206,31 @@ PR에 대해 교차검증을 1패스 돌린다 — 결과는 **참고용**이지
 2. **가장 최근 에이전트 질문 마커**(`<!-- gh-loop:decision:<nonce> -->`)를 찾고, **그 이후에 달린 댓글만** 후보로 본다 — 그 전 댓글은 *이전 결정용 stale*이라 무시. 에이전트 자기 댓글 제외(bot author / `gh-loop:` 마커). **예외(R7)**: `<!-- gh-loop:session-decision:<nonce> -->` 댓글은 그 nonce가 이 질문의 nonce와 같으면 코디네이터가 옮긴 사용자의 답으로 후보에 넣는다(bot 토큰 모드라 봇 계정으로 달렸어도 이 댓글에 한해 bot author 제외를 풀고, nonce가 다르면 다른 `gh-loop:` 마커 댓글처럼 제외한다). 권한·owner 우선(3)은 인용된 사람이 아니라 **댓글 작성자**로 판정한다 — 그 마커를 단 write 미만 댓글은 무시. 해석은 댓글의 지시 원문 인용을 보고 한다. 같은 댓글에 `acted:<nonce>`도 있으면 코디네이터가 이미 실행한 것이라 6의 실제 상태 재확인만 한다.
 3. 후보 중 **권한자(write+) 댓글만**; **owner 우선, 없으면 최신**. 권한자 간 **명시적 이견**이면 자동결정 말고 되묻기(parked).
 4. 그 댓글을 **LLM으로 해석**한다 — **고정 키워드/`grep` 금지**. 자연어로 충분(예: `"B, 검증까지 해야지"` → 옵션 B+검증; grep이었으면 놓쳤다). **모호하면 행동 금지** → 명확화 댓글 + parked 유지.
-5. 머지 결정이면: 승인 댓글이 **현재 PR head SHA 이후**여야 하고, **머지 직전 PR head를 다시 읽어** 승인 시점 SHA와 일치할 때만 머지 — `gh pr merge --match-head-commit <approved-sha>`(원자적 head 가드; 그 사이 새 커밋이 들어오면 머지 중단). 자율 단계로는 절대 머지 안 함.
+5. 머지 결정이면 질문의 **승인된 head SHA**를 확인하고, 아래 “순차 PR 갱신”에 따라 최신 base와 검증 근거를 확인합니다. **머지 직전 PR head를 다시 읽어** 승인 SHA와 일치할 때만 `gh pr merge <pr> --merge --match-head-commit <approved-sha>`처럼 승인된 방식으로 머지합니다. head가 바뀌면 댓글 시각만으로 승인했다고 추정하지 않고 **새 head·새 nonce로 다시 승인받습니다**. rebase/force-with-lease 승인이나 배치 운영 승인을 머지 승인으로 재사용하지 않습니다. 자율 단계로는 머지하지 않습니다.
 6. 멱등: 행동 **성공 후** `<!-- gh-loop:acted:<nonce> -->` 기록 + 이슈·PR **둘 다**에서 `needs-decision` 제거 — 수정 요청처럼 워커가 이어서 작업하는 결정이면 행동에 들어갈 때 이슈·PR의 `needs-decision` → `agent-working`으로 바꿔 두고, 끝나면 다음 결정 게이트(1)로 간다. acted된 nonce면 재실행 무시. acted/라벨 쓰기가 **실패하면 park**(모호하게 두지 말 것). 재개 시엔 마커뿐 아니라 **실제 상태를 재확인**(PR 이미 머지됨 등)해 멱등 보장 — stateless 마커는 원자적이지 않다(Guard policy 직렬화·멱등 참조).
    **park도 결정 요청이다**: 3의 되묻기·4의 명확화로 멈출 때는 1처럼 새 nonce 마커를 단 댓글을 남기고(다음 답을 그 질문에 묶는다) 이슈·PR을 `needs-decision`으로 되돌린다(`agent-working` 제거 — 코디네이터가 Stage 0 9에서 미리 바꿔 둔 경우 포함).
+
+### 순차 PR 갱신 — 소유 워커가 rebase·검증합니다.
+
+[이슈 #71](https://github.com/rae-hugo-kim/omp/issues/71)의 A+C 결정에 따라 코디네이터는 PR을 하나씩 처리합니다. `docs/harness/audit.jsonl merge=union`은 **로컬 merge·rebase의 순수 append 충돌을 줄이는 속성**입니다. #73~#76 실측에서 GitHub는 union이 있어도 `CONFLICTING`이었으므로 서버의 자동 해결을 약속하지 않습니다. 병렬 PR이 모두 충돌하거나 항상 rebase가 필요한 것도 아닙니다.
+
+1. **현재 상태와 PR별 권한을 고정합니다.** 코디네이터는 앞 PR의 실제 머지 상태를 확인한 뒤 다음 PR의 이슈·소유 워커·head/base 리포와 브랜치·현재 head SHA·최신 원격 base SHA를 확인합니다. base가 head의 조상이 아니거나 충돌하면 소유 워커에게 갱신을 맡깁니다. 실행 전 **해당 PR URL·head/base 리포와 ref·기존 head·대상 base SHA·rebase와 원격 히스토리 갱신 방식**을 명시해 승인받습니다. 승인이 없거나 범위가 불명확하면 Stage 5의 새 nonce 질문을 남기고 이슈·PR을 `needs-decision`으로 바꾼 뒤 종료합니다. 세션 직접 결정은 Stage 0 9로 양쪽에 기록하며, 다른 PR이나 미래 갱신의 포괄 승인으로 해석하지 않습니다.
+2. **소유 워커가 사전 상태를 보존합니다.** 승인 확인 후에만 이슈·PR을 `agent-working`으로 옮기고, 자기 워크트리의 브랜치·`git status --porcelain`(untracked 포함)·진행 중인 rebase/merge 부재를 확인합니다. 더러운 트리를 stash/reset/clean으로 치우지 않습니다. 원격 이름을 `origin`으로 추정하지 않고 fetch URL과 `git remote get-url --push --all "$HEAD_REMOTE"`의 실제 목적지를 확인합니다. push URL은 **하나이며 승인된 PR head 리포와 같을 때만** `HEAD_PUSH_URL`로 고정합니다. 복수 URL·불일치·조회 실패는 중단합니다. 확인한 원격에서 head/base를 fetch하고 PR head와 `git ls-remote "$HEAD_PUSH_URL" "refs/heads/$BRANCH"`의 SHA, 로컬 HEAD가 모두 승인된 기존 head와 같은지 대조합니다. 기존 head(`OLD_HEAD`), 공통 조상(`OLD_BASE`), 승인된 최신 base(`BASE_SHA`), 예상 원격 head(`EXPECTED_REMOTE_SHA`), PR URL·두 리포·ref·push URL, 원 AC·변경 파일 목록과 세 시점의 감사 로그 원본을 임시 위치에 보존합니다. SHA는 비어 있지 않은 완전한 값이어야 하며 원격 base가 승인 SHA와 달라졌으면 다시 결정받습니다. 감사 로그의 양쪽 변경이 공통 조상 원본을 그대로 둔 **순수 append**인지 먼저 확인하고, 삭제·교체·비JSON 행·끝 개행 손상은 보고하고 중단합니다.
+   리터럴 URL도 Git의 URL 재작성 대상이므로, 모든 유효 설정 범위에서 `url.*.insteadOf`·`url.*.pushInsteadOf`가 **없음**을 확인하고 push 직전 다시 대조합니다. 재작성 설정이 있거나 조회 결과가 불명확하면 설정을 임의로 바꾸지 않고 park합니다. 명시 refspec 밖의 태그·서브모듈 전송은 아래 명령의 옵션으로 차단합니다.
+3. **고정한 base 위에서 실제 rebase합니다.** `git check-attr --source "$BASE_SHA" merge -- docs/harness/audit.jsonl`로 rebase 대상 트리의 유효 속성을 확인한 뒤 `git rebase "$BASE_SHA"`를 실행합니다. `--source` 지원은 설치된 Git의 도움말로 확인합니다. 미지원·union 미설정·충돌을 임의 속성 변경이나 `ours`/`theirs`·수동 union으로 우회하지 않습니다. 다른 파일 충돌, 로그 재작성, 범위 밖 변경이 나타나면 상태와 사유를 보존해 Stage 5로 park합니다. 코디네이터가 대신 편집·rebase하지 않습니다.
+4. **성공 exit만으로 통과시키지 않고 검증 4종을 수행합니다.** rebase 재생·충돌 해결에는 커밋 게이트의 append-only 검사를 기대할 수 없으므로 아래 검증을 생략하지 않습니다.
+   - **로그 무결성을 검증합니다.** 결과의 끝 개행을 확인하고 모든 물리적 행을 JSON으로 파싱합니다(빈 행·비JSON 행도 실패합니다). 최신 base 로그가 바이트 단위 prefix로 남고, 기존 PR의 추가 행이 원래 순서·내용·개수대로 결과의 나머지 부분에 보존됐는지 확인합니다. 공통 조상·최신 base·기존 head의 사전 스냅샷과 대조하며, 정렬·중복 제거·기존 행 삭제/교체는 하지 않습니다. union은 JSON 유효성·append-only·시간순서를 보증하지 않으며, 누락·손상은 별도 수정 승인 없이 조용히 통과시키지 않습니다.
+   - **원 작업 범위를 대조합니다.** `git range-diff "$OLD_BASE..$OLD_HEAD" "$BASE_SHA..HEAD"`와 최신 base 대비 diff를 원 AC·변경 파일 목록에 대조합니다. seed/scope를 포함한 다른 파일 충돌이나 원 범위를 벗어난 변경은 자동 해결로 간주하지 않습니다.
+   - **발견된 검증 명령을 실행합니다.** 해당 리포의 테스트·build/lint 등 필요한 명령을 찾아 실행하고 실제 변경 경로를 스모크 검증합니다. 이 소스 리포는 하네스 suite와 `node scripts/docs-drift`도 실행합니다. 소비 리포에 없는 소스 전용 명령은 복사하지 않습니다.
+   - **새 head의 리뷰·verifier 근거를 확보합니다.** 이전 head의 결과를 그대로 재사용하지 말고 새 diff·AC에 대한 검토, 명령·결과와 남은 한계를 이슈·PR에 기록합니다.
+5. **명시적 lease로만 갱신합니다.** 검증 후 작업트리 청결과 로컬 HEAD, 실제 push URL, 원격 base SHA·head SHA를 다시 확인합니다. 원 PR URL과 base 리포를 고정해 `gh pr view`로 `baseRefName`·`baseRefOid`·`headRefName`·`headRefOid`·`headRepository`·`headRepositoryOwner`도 재조회합니다. 리포·ref가 승인 대상과 다르거나 base SHA 또는 `EXPECTED_REMOTE_SHA`가 달라졌으면 push하지 않고 새 nonce로 결정받습니다. `HEAD_PUSH_URL`·`BRANCH`는 2에서 확인한 해당 PR의 목적지·브랜치이며, 예상 SHA는 승인 때의 값을 유지합니다.
+   ```bash
+   git push --no-follow-tags --recurse-submodules=no --force-with-lease="refs/heads/$BRANCH:$EXPECTED_REMOTE_SHA" "$HEAD_PUSH_URL" "HEAD:refs/heads/$BRANCH"
+   ```
+   일반 `--force`, 예상 SHA 없는 `--force-with-lease`, lease 실패 뒤 새 SHA를 넣어 자동 재시도하는 것은 금지합니다. 응답 유실이면 실제 원격 SHA를 한 번 확인하고, 결과가 불명확하면 성공으로 기록하거나 재시도하지 않고 park합니다.
+6. **변경된 head는 별도로 머지 승인받습니다.** 원격 PR head가 검증한 새 로컬 HEAD와 같음을 확인한 뒤 rebase 승인 nonce의 `acted`와 검증 결과를 이슈·PR에 기록합니다. 이어 **PR URL·head/base 리포와 ref·새 head SHA·base SHA·새 nonce·머지 방식**을 담은 별도 질문을 남기고 양쪽을 `needs-decision`으로 바꾼 뒤 종료합니다. 머지 직전에도 5의 PR 대상 리포·ref·SHA를 재조회하며, base 브랜치가 바뀌면 SHA가 같아도 새 nonce로 승인받습니다. base가 전진했으면 최신 base 포함 여부·검증부터 다시 확인합니다. Stage 5 재개 5의 `--match-head-commit`으로 승인된 head만 머지합니다. 이 옵션은 head 가드이지 base 리포·ref·SHA를 원자적으로 잠그는 수단은 아니므로 최종 조회 뒤의 base 변경 경쟁은 남습니다. 다음 PR은 이 PR의 실제 머지를 확인한 뒤 처리합니다.
+
+**배포 범위를 구분합니다.** 이 소스 리포와 이 속성을 포함한 신규 템플릿 복사에는 한 경로의 union 규칙이 적용됩니다. 기존 소비 리포의 `.gitattributes`는 `scripts/harness-sync.sh` allowlist 밖이며 이번 변경도 sync 범위를 넓히지 않습니다. 소비 리포는 별도 적용 승인 후 **기존 속성과 우선순위를 읽고 해당 한 줄만 반영**하며 `git check-attr`로 유효값을 확인합니다. 파일 전체 덮어쓰기는 금지합니다. 속성이 없는 리포에서는 자동 해결을 전제하지 않고 위 중단·보고 절차를 따릅니다.
 
 ## Loop Safety
 

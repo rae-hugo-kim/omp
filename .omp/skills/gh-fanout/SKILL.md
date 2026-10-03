@@ -146,6 +146,17 @@ node .omp/extensions/harness/gh-loop-controller.mjs scale --state-json "$STATE" 
 - **크래시 상태는 보존합니다.** 커밋·미커밋 파일·브랜치를 지우지 않고 §4의 결정 요청으로 보냅니다. 기동 응답이 유실되었거나 소유권이 불명확하면 조회 결과를 보고할 뿐 자동 재클레임하지 않습니다.
 - **정리는 코디네이터만 합니다.** PR 머지 또는 폐기를 실제로 확인하고 **해당 워크트리·브랜치 삭제를 명시적으로 승인받은 뒤**, 미커밋 변경이 없는지 확인합니다. gitignored 리뷰 사이드카는 메인 체크아웃으로 먼저 보존합니다. `orca worktree rm --worktree "id:$WT_ID" --json`은 로컬 브랜치 삭제도 시도하지만, 기존에 있던 브랜치나 머지됐음을 증명하지 못한 브랜치는 보존합니다(설치 CLI `--help`). 보존된 브랜치는 보고하고 별도 승인 없는 추가 삭제는 하지 않습니다. 원격 브랜치 삭제도 따로 승인받아 기록한 브랜치에만 실행합니다. `--force`는 사용하지 않고 삭제 실패는 보고합니다. 워커는 자기 워크트리를 지우지 않습니다.
 
+### 7. PR은 하나씩 승인·갱신·머지합니다.
+
+구현 워커는 병렬로 일하지만, 코디네이터는 **현재 head에 대한 승인을 받은 PR부터 하나씩** 처리합니다. [gh-loop](../gh-loop/SKILL.md)의 “순차 PR 갱신 — 소유 워커가 rebase·검증합니다”가 실행 절차의 정본입니다.
+
+1. 앞 PR의 **실제 머지 상태**를 확인한 뒤 다음 PR의 head/base·최신 원격 base SHA·승인 head·소유 워커를 대조합니다. 이미 최신 base를 포함하고 검증이 유효하면 불필요한 rebase는 하지 않습니다. `CONFLICTING`이거나 base가 오래됐으면 코디네이터가 대신 코드를 만지지 않고 **해당 PR의 소유 워커**에게 갱신을 맡깁니다.
+2. **PR별 rebase와 원격 히스토리 갱신 승인을 먼저 받습니다.** PR URL·head/base 리포와 ref·기존 head·대상 base SHA·예상 원격 head SHA·`--force-with-lease` 방식을 질문에 명시합니다. #71의 A+C 방향 승인이나 트래킹 이슈의 운영 승인은 개별 PR의 재작성·머지 권한이 아닙니다. 세션 직접 결정은 gh-loop Stage 0 9로 이슈·PR에 기록하고, 워커 재개는 §6의 cap·소유권·라벨 절차를 유지합니다.
+3. 소유 워커는 **깨끗한 작업트리·원격 SHA·최신 base·원 AC/변경 범위**를 확인하고 승인된 base로 rebase합니다. gh-loop의 검증 4종(감사 로그의 기존 행·추가 행 보존과 끝 개행·모든 행 JSON 파싱, 원 작업 범위 대조, 발견된 명령과 실제 스모크, 새 head 리뷰·verifier)을 수행한 뒤에만 `git push --no-follow-tags --recurse-submodules=no --force-with-lease="refs/heads/$BRANCH:$EXPECTED_REMOTE_SHA" "$HEAD_PUSH_URL" "HEAD:refs/heads/$BRANCH"`로 갱신합니다. 목적지는 gh-loop 절차로 확인한 **단일 push URL**로 고정하며 URL 재작성 설정(`url.*.insteadOf`·`url.*.pushInsteadOf`) 부재와 PR의 head/base 리포·ref·SHA를 push 직전에 다시 대조합니다. 재작성 설정이 있거나 조회가 불명확하면 park하며 태그·서브모듈은 전송하지 않습니다. 예상 SHA는 비어 있지 않은 완전한 승인 값이고 자동 갱신하지 않습니다. 일반 `--force`나 예상 SHA 없는 lease는 금지합니다.
+4. rebase·추가 커밋으로 **head가 바뀌면 기존 머지 승인은 재사용하지 않습니다.** 검증 근거와 PR 대상 리포·ref·새 head/base SHA·새 nonce로 별도 머지 승인을 요청하고 이슈·PR 양쪽을 `needs-decision`으로 바꾼 뒤 종료합니다. 답을 받은 뒤 gh-loop Stage 5의 권한자·nonce·acted 규칙을 거쳐, 머지 직전 대상 리포·ref·SHA를 다시 확인하고 승인된 방식의 `gh pr merge <pr> --merge --match-head-commit <approved-sha>`로 처리합니다. base ref가 바뀌면 SHA가 같아도 재승인하며, head 가드가 base까지 원자적으로 고정하지는 않습니다. 실패·불명확성은 새 질문으로 park하며 다음 PR로 자동 진행하지 않습니다.
+
+`docs/harness/audit.jsonl`에만 적용하는 `merge=union`은 **로컬 순수 append 충돌 완화**이며 JSON·append-only·시간순서 보증이 아닙니다. 기존 로그 삭제·교체, 비JSON 행, 다른 파일 충돌은 중단·보고하고 정렬·덮어쓰기로 통과시키지 않습니다. GitHub가 이 속성으로 자동 해결한다고 가정하지 않습니다(#73~#76 실측). 소비 리포의 속성 적용은 gh-loop의 배포 범위를 따르며 `.gitattributes` 전체를 복사하거나 sync allowlist를 넓히지 않습니다.
+
 ## Observability
 
 사용자는 GitHub 라벨·마일스톤 댓글·트래킹 이슈·PR로 진행을 보고, Orca 카드 코멘트로 현재 작업을 확인합니다. 정밀 디버그가 필요한 경우에만 해당 워커의 `terminal show/read`를 단발로 사용합니다. GitHub 결정 요청 뒤에는 턴을 끝내며 사용자가 `/gh-loop N` 또는 컨트롤러 재호출로 재개합니다.
@@ -166,4 +177,4 @@ node .omp/extensions/harness/gh-loop-controller.mjs scale --state-json "$STATE" 
 - **로컬 온디맨드** 컨트롤러(이 박스). **24/7 상시응답**은 분리(robo-omp/cloud — WSL2 데스크톱은 상시서버 아님).
 - **라이브 N워커 실주행**은 비용 N배 — 결정 로직은 테스트로 검증됨; 실제 다중 구동은 환경/예산 따라.
 - 워커끼리 **직접 통신 안 함**(이슈 단위 분할이라 대부분 불요); fine 조정은 컨트롤러 경유.
-- **audit 충돌 해결 방식은 별도입니다.** 병렬 PR의 `docs/harness/audit.jsonl` 끝 충돌은 [이슈 #71](https://github.com/rae-hugo-kim/omp/issues/71)에서 사용자가 결정합니다. 이 스킬은 자동 충돌 해결·로그 재작성 정책을 추가하지 않습니다.
+- **audit 충돌은 A+C로 처리합니다.** [이슈 #71](https://github.com/rae-hugo-kim/omp/issues/71)의 승인에 따라 한 경로의 로컬 union과 §7의 순차 PR 절차를 사용합니다. 작업별 감사 파일 이주·과거 로그 재작성·추가 러너 기능·기존 PR 일괄 rebase/머지는 범위 밖입니다.

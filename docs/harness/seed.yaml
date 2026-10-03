@@ -1,53 +1,54 @@
-name: gh-fanout-orca-workers-66
+name: audit-union-serial-prs-71
 status: done
 completed: 2026-10-03
 version: 1
-task_id: "20261002-151247-0c72"
-# gh-loop Stage 2에 따라 이슈 #66과 사용자 워커 지시를 명세로 삼습니다.
-# 직전 완료 seed(gh-loop-status-labels-69)는 git 이력에 보존합니다.
+task_id: "20261002-233155-9050"
+# gh-loop worker Stage 2에 따라 이슈 #71의 승인된 A+C와 AC1~AC5를 명세로 삼습니다.
+# 직전 완료 seed(gh-fanout-orca-workers-66)는 git 이력에 보존합니다.
 goal: >
-  gh-fanout의 RPC 워커 경로를 gh-loop Stage 0의 Orca 2단계 기동 경로로 전환하고,
-  GitHub 상태와 Orca 카드로 비차단 관측·재개·실패 처리를 안내합니다.
+  감사 로그의 순수 append 충돌을 로컬 union rebase로 줄이고,
+  소유 워커가 PR별 승인·검증을 거쳐 순차 갱신하도록 gh-fanout·gh-loop 절차를 명확히 합니다.
 constraints:
-  - "이슈 1개·워크트리 1개·워커 1개, cap, 단일 컨트롤러, 자동 머지 금지를 유지합니다."
-  - "모델은 사용자 선택과 gh-loop:model 마커를 재사용하고 R8 상태 확장을 전달합니다."
-  - "커밋은 체크 완료 seed·scope → 변경 → 리뷰 후속 → closeout 순서를 따릅니다."
-  - "이 워커는 재디스패치·자기 워크트리 삭제·머지를 하지 않습니다."
+  - "docs/harness/audit.jsonl 한 경로에만 merge=union을 지정하고 기존 속성을 보존합니다."
+  - "코디네이터는 순차 처리와 결정 기록을 맡고 실제 rebase·검증·갱신은 소유 워커가 맡습니다."
+  - "PR별 rebase·명시적 원격 SHA lease 승인은 변경된 head의 머지 승인과 구분합니다."
+  - "union 뒤에도 기존 로그 삭제·교체, 비JSON 행, 다른 파일 충돌은 중단·보고합니다."
+  - "Stage 2의 체크 완료 seed·scope → 변경 → 리뷰 후속 → closeout 커밋 순서를 따릅니다."
 acceptance_criteria:
-  - id: AC1-orca-spawn
-    title: "SKILL.md가 클레임 → worktree create --issue → terminal create → 준비 확인 → terminal send와 단계별 실패·전달 불확실성 처리를 설명합니다."
-  - id: AC2-model-extension
-    title: "사용자 모델 선택·이슈별 마커 재사용·R8 확장 전달·확장 부재 안내·단일 핸들 규칙을 설명합니다."
-  - id: AC3-observe-resume
-    title: "GitHub 라벨·댓글과 Orca 카드의 턴당 단발 관측, needs-decision 전이, 동일 워크트리 재개, 소유권 확인 후 정리를 설명합니다."
-  - id: AC4-cutover-scope
-    title: "현행 스킬과 controller 헤더의 RPC·raw git worktree 실행 안내를 제거하고, gh-loop·option A·audit 충돌 해결 방식은 변경하지 않습니다."
-  - id: AC5-verification
-    title: "controller·gh-loop 회귀 테스트, docs-drift, 링크·정본·규칙 충돌 점검, Orca CLI 읽기·카드 스모크 결과를 기록합니다."
-  - id: AC6-docs
-    title: "CHANGELOG에 #66 변경과 라이브 다중 워커 검증 한계를 기록합니다."
+  - id: AC1
+    title: "git check-attr가 감사 로그만 union으로 판정하고 기존 .gitattributes 속성을 보존합니다."
+  - id: AC2
+    title: "격리된 임시 git 리포에서 같은 base의 두 append를 실제 rebase하여 기존 로그·두 이벤트 보존 및 모든 행의 JSON 파싱을 확인합니다."
+  - id: AC3
+    title: "순차 절차가 최신 base·깨끗한 작업트리·원격 SHA·원 작업 범위와 rebase 후 로그 보존·JSON을 검증하며 로그 재작성·다른 파일 충돌을 중단합니다."
+  - id: AC4
+    title: "PR별 rebase/force-with-lease와 새 head 머지 승인을 구분하고 match-head-commit·기존 역할·결정 기록·라벨 계약을 유지하며 GitHub union 자동 해결을 약속하지 않습니다."
+  - id: AC5
+    title: "최종 하네스 suite·docs-drift, 로컬 rebase 스모크 및 문서·배포 범위 확인 결과를 기록하고 소비 리포 속성 덮어쓰기나 sync 확장을 하지 않습니다."
 out_of_scope:
-  - "gh-loop dispatch 구현 변경, option A 런타임, 모델 자동 선택은 다루지 않습니다."
-  - "audit.jsonl 병렬 충돌 해결 방식은 #71에서 결정하며 이 변경은 기존 append-only 절차만 따릅니다."
-  - "새 워커의 실제 fan-out 실행과 원격 머지·브랜치 삭제는 하지 않습니다."
-  - "PR 생성·교차검증 게시·nonce 결정 요청은 커밋 뒤 후속 절차이며 AC 선체크 대상이 아닙니다."
+  - "기존 PR의 실제 rebase·강제 push, 새 PR 머지, 워크트리·브랜치 삭제는 승인하지 않습니다."
+  - "소비 리포 .gitattributes 전체 덮어쓰기, 감사 파일 구조 이주·과거 로그 정렬, 추가 러너 기능은 다루지 않습니다."
+  - "#73~#76에서 끝난 GitHub union 원격 실험을 다시 만들지 않습니다."
+  - "PR 생성·검증 근거 게시·head와 nonce 결정 요청은 커밋 뒤 후속 절차로 수행하며 AC 선체크 대상이 아닙니다."
 assumptions:
-  - "#65에서 실측한 worker-start의 omp 모델 거부·런처 셸 폴백을 전제로 2단계 경로를 재사용합니다."
-  - "컨트롤러 결정 함수는 순수 함수로 유지하며 스폰·관측은 스킬 절차가 담당합니다."
+  - "#71의 실측 결과를 기준으로 GitHub는 union을 통한 서버 자동 충돌 해결을 제공한다고 가정하지 않습니다."
+  - "시작 HEAD는 PR #72가 머지된 068465a이고 작업트리는 깨끗하며 .gitattributes는 없습니다."
+  - "sync allowlist는 두 스킬을 포함하지만 .gitattributes는 포함하지 않습니다."
 risks:
-  - "GitHub 라벨은 CAS가 아니므로 동시 컨트롤러는 지원하지 않습니다."
-  - "명령 전달 실패는 전달 여부가 불확실할 수 있어 재스폰하지 않고 확인·park합니다."
-  - "실제 다중 워커 기동은 수행하지 않으므로 읽기·카드 스모크가 전체 fan-out E2E 증거는 아닙니다."
+  - "union은 JSON·append-only·행의 시간순서·모든 충돌 해결을 보증하지 않습니다."
+  - "head가 바뀌면 이전 머지 승인은 무효이며 명시적 lease 실패도 자동 재시도하지 않습니다."
 references:
-  - path: https://github.com/rae-hugo-kim/omp/issues/66
-    reason: "범위와 사용자 선택 모델 마커의 원본입니다."
+  - path: https://github.com/rae-hugo-kim/omp/issues/71
+    reason: "승인 방향·AC·실측 결과·세션 결정·모델 마커의 원문입니다."
   - path: .omp/skills/gh-loop/SKILL.md
-    reason: "Stage 0·worker 모드·Stage 2~5와 상태 라벨의 정본입니다."
-  - path: skill://orca-cli
-    reason: "Orca CLI와 핸들·정리 규칙의 정본입니다."
+    reason: "worker Stage 2~5와 상태·승인 절차의 정본입니다."
+  - path: .omp/skills/gh-fanout/SKILL.md
+    reason: "순차 PR 코디네이터 절차와 소유권의 정본입니다."
+  - path: docs/rules/closeout_contract.md
+    reason: "AC 착지·seed 종료·scope 은퇴·감사 append 순서를 정의합니다."
 estimate:
   risk: medium
-  files: 6
+  files: 7
   depth: high
   model: openai-codex/gpt-6-astra
   effort: xhigh
