@@ -1,5 +1,6 @@
 name: audit-union-serial-prs-71
-status: approved
+status: done
+completed: 2026-10-03
 version: 1
 task_id: "20261002-233155-9050"
 # gh-loop worker Stage 2에 따라 이슈 #71의 승인된 A+C와 AC1~AC5를 명세로 삼습니다.
