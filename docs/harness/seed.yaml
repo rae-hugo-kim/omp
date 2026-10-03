@@ -1,48 +1,52 @@
-name: harness-core-language-line-49
-status: done
-completed: 2026-10-03
+name: gh-loop-dispatch-closeout-record-79
+status: approved
 version: 1
-task_id: "20261003-004031-0e67"
-# gh-loop worker Stage 2에 따라 이슈 #49의 "승인된 구현 방향 (2026-10-03)" 절과 AC1~AC4를 명세로 삼습니다.
-# 직전 완료 seed(audit-union-serial-prs-71)는 git 이력에 보존합니다.
+task_id: "20261003-142428-1f5f"
+# gh-loop worker Stage 2에 따라 이슈 #79 본문(제안 1~4·AC 초안)과 "결정됨 (2026-10-03)" 절·세션 직접 결정 댓글을 명세로 삼습니다.
+# 직전 완료 seed(harness-core-language-line-49)는 git 이력에 보존합니다.
 goal: >
-  harness-core에 언어 지시 한 줄(도구 호출 사이 진행 서술 포함)을 추가하고,
-  harness-writing_style이 존재하지 않는 글로벌 규칙을 가리키던 참조를 rule://harness-core로 정정합니다.
+  gh-loop 워커 모델의 예측(dispatch)과 실측(closeout)을 audit.jsonl에 남기고 estimate-report가
+  모델×규모 셀로 모아 보여 주며, dispatch 때 ask 선택지 끝에 규모 기반 추천 한 줄을 덧붙입니다 —
+  자동 모델 선택은 추가하지 않습니다.
 constraints:
-  - "09-28 ①만 구현합니다: harness-core 한 줄 추가와 harness-writing_style의 참조 정정."
-  - ".omp/RULES.md 생성, bootstrap·init의 사용자 레벨 파일 설치, PERSONALITY 템플릿 변경, AGENTS.md 수정은 하지 않습니다."
-  - "AC1은 omp -p --no-session으로 렌더한 프롬프트에 새 줄이 실제로 들어가는지 실측하고 출력을 PR에 기록합니다."
+  - "기존 cycle-estimate 튜플·estimate_vs_actual 이벤트·estimate.mjs 관례(JSON 튜플 + 버전 태그, 게이트 판정 비관여)를 따릅니다."
+  - "이벤트 스키마와 report 출력은 테스트로 고정합니다(node:test, byte-for-byte 픽스처)."
+  - "모델은 매번 사용자가 고릅니다(2026-10-02 결정 불변): 추천은 표시용 한 줄이며 기본값·자동 선택이 없습니다."
   - "Stage 2의 체크 완료 seed·scope → 변경 → 리뷰 후속 → closeout 커밋 순서를 따릅니다."
 acceptance_criteria:
   - id: AC1
-    title: "소비 리포 대용 cwd(이 리포의 워크트리)에서 omp -p --no-session으로 렌더한 시스템 프롬프트에 새 언어 줄이 포함되고, 변경 전 HEAD 사본에는 없음을 실측합니다."
+    title: "gh_loop_dispatched·gh_loop_closed 이벤트 2종이 .omp/extensions/harness/gh-loop-record.mjs(dispatch/ingest/close)로 추가되고 스키마가 tests/gh-loop-record.test.mjs로 고정되며, gh-loop SKILL.md Stage 0(모델 질문·마커 + omp-dispatch/v1 튜플)과 Stage 5(closeout 기록)에 기록 단계가 있습니다."
   - id: AC2
-    title: "harness-writing_style.md가 존재하지 않는 글로벌 규칙을 참조하지 않습니다(grep -n '글로벌 규칙' 0건)."
+    title: "estimate-report.mjs가 §3 Dispatch(모델×risk/depth/size 셀 → dispatched·closed·리뷰 라운드 중앙값·verifier 비PASS·결정 왕복 중앙값·분 중앙값)를 출력하고 tests/estimate-report.test.mjs가 출력을 byte-for-byte 고정합니다."
   - id: AC3
-    title: "bash scripts/harness-audit.sh --terse 점수가 내려가지 않고, 하네스 suite 전부 통과하며, node scripts/docs-drift가 0 errors/0 warnings입니다."
+    title: "자동 모델 선택을 추가하지 않습니다: 마커·ask 질문 절차가 불변이고, recommend는 한 줄 텍스트만 내며 어떤 코드 경로도 모델을 대신 고르지 않습니다."
   - id: AC4
-    title: "범위 밖 변경이 없습니다: .omp/RULES.md 생성, bootstrap/init의 사용자 레벨 파일 설치, PERSONALITY 템플릿, AGENTS.md 수정은 하지 않습니다."
+    title: "규모 기반 추천: gh-loop-record.mjs recommend가 risk×depth×files 구간 → smol/default/slow/plan 규칙표로 '규모 기반 추천: <id>:<level> …' 한 줄을 내고, 규칙표가 테스트로 고정됩니다(기본값 없음)."
+  - id: AC5
+    title: "하네스 suite(node --test .omp/extensions/harness/tests/*.test.mjs) 전부 통과, node scripts/docs-drift 0 errors/0 warnings, 그리고 이 이슈 자체의 dispatch 튜플이 ingest되어 audit.jsonl에 gh_loop_dispatched(issue 79) 행이 있습니다."
 out_of_scope:
-  - "09-28 ②(bootstrap이 사용자 레벨 AGENTS.md·RULES.md를 부재 시 설치)와 본문의 .omp/RULES.md 프로젝트 sticky는 다루지 않습니다."
-  - "claudedocs/CLAUDEKR.md는 AGENTS.md를 건드리지 않으므로 재스탬프하지 않습니다."
+  - "harness-agent_routing의 등급 기준·추천 규칙표 수치 조정은 표본(§3)이 쌓인 뒤의 후속입니다."
+  - "모델별 토큰 통계는 omp 세션 통계가 노출되면 추가합니다."
   - "PR 생성·교차검증 게시·head와 nonce 결정 요청은 커밋 뒤 후속 절차이며 AC 선체크 대상이 아닙니다."
 assumptions:
-  - "시작 HEAD는 PR #77이 머지된 78a16cb이고 작업트리는 깨끗했습니다."
-  - "omp에는 시스템 프롬프트 덤프 플래그가 없어 모델에게 새 줄 인용을 요청하는 방식으로 렌더 여부를 실측합니다."
+  - "시작 HEAD는 PR #80이 머지된 4965c53이고 작업트리는 깨끗했습니다."
+  - "코디네이터의 모델 마커 댓글(2026-10-03T14:09:58Z)에는 튜플이 없으므로(#79 이전 포맷) 워커가 같은 축을 이슈에서 추정해 튜플 댓글을 남기고 ingest합니다."
 risks:
-  - "렌더 실측은 모델의 인용에 의존하므로 변경 전 HEAD 사본을 대조군(NONE 응답)으로 함께 기록합니다."
+  - "closeout 시점의 실측은 머지 결정 게이트(항상 1회)와 머지 뒤 상황을 담지 못합니다 — SKILL에 명시합니다."
 references:
-  - path: https://github.com/rae-hugo-kim/omp/issues/49
-    reason: "승인 방향·AC·09-25·09-28 실측·세션 결정·모델 마커의 원문입니다."
-  - path: .omp/rules/harness-core.md
-    reason: "언어 지시 한 줄이 들어가는 상시 규칙입니다."
-  - path: .omp/rules/harness-writing_style.md
-    reason: "존재하지 않는 글로벌 규칙 참조를 정정하는 대상입니다."
+  - path: https://github.com/rae-hugo-kim/omp/issues/79
+    reason: "현황 표·제안 1~4·AC 초안·결정됨 절·세션 직접 결정·모델 마커의 원문입니다."
+  - path: .omp/extensions/harness/gates/estimate.mjs
+    reason: "따라야 할 튜플·이벤트 관례(omp-estimate/v1, estimate_vs_actual)입니다."
+  - path: .omp/extensions/harness/estimate-report.mjs
+    reason: "모델별 절을 추가하는 리포트입니다."
+  - path: .omp/skills/gh-loop/SKILL.md
+    reason: "Stage 0·2·5에 기록 단계를 적는 스킬입니다."
   - path: docs/rules/closeout_contract.md
     reason: "AC 착지·seed 종료·scope 은퇴·감사 append 순서를 정의합니다."
 estimate:
-  risk: low
-  files: 3
-  depth: low
-  model: anthropic/claude-sonnet-5-5
+  risk: high
+  files: 10
+  depth: high
+  model: anthropic/claude-fable-5-1
   effort: high
