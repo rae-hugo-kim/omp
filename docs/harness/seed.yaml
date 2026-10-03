@@ -1,5 +1,6 @@
 name: gh-loop-dispatch-closeout-record-79
-status: approved
+status: done
+completed: 2026-10-03
 version: 1
 task_id: "20261003-142428-1f5f"
 # gh-loop worker Stage 2에 따라 이슈 #79 본문(제안 1~4·AC 초안)과 "결정됨 (2026-10-03)" 절·세션 직접 결정 댓글을 명세로 삼습니다.
