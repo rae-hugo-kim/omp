@@ -870,7 +870,7 @@ function gitInvocationTarget(rest, baseDir) {
     if (GIT_OPT_WITH_ARG.has(t)) { if (substShredValue(rest[i + 1] ?? '')) return { unknown: true, verb: undefined }; i += 2; continue; }
     i += 1;
   }
-  return unknown ? { unknown, verb: rest[i] } : { target, verb: rest[i] };
+  return unknown ? { unknown, verb: rest[i], index: i } : { target, verb: rest[i], index: i };
 }
 
 function scanCommitTarget(command, baseDir, depth) {
@@ -938,16 +938,21 @@ export function commitTargetDir(command, baseDir) {
 // dropped. Residuals: non-commit git writes (`git -C other add`), `>|` (the lexer splits on
 // `|`), a commit inside `$(…)` (isGitCommit's own limit), `git push <url-or-path>` (the target
 // is the cwd repo's remote, not a directory), and a `-C` after an unknown cwd (fails closed).
-const MUTATOR_ALL = new Set(['rm', 'rmdir', 'unlink', 'mv', 'touch', 'mkdir', 'truncate', 'tee', 'patch']);
+const MUTATOR_ALL = new Set(['rm', 'rmdir', 'unlink', 'mv', 'touch', 'mkdir', 'truncate', 'tee', 'patch', 'chmod', 'chown', 'chgrp']);
 const MUTATOR_DEST = new Set(['cp', 'ln', 'install', 'rsync']);
 const isMutator = (b) => MUTATOR_ALL.has(b) || MUTATOR_DEST.has(b) || b === 'sed';
 const SED_IN_PLACE = /^(?:-[A-Za-z]*i|--in-place)/;
-const INSTALL_DIR = /^(?:-[A-Za-z]*d|--directory)/;
-// coreutils `-t DIR`: a short bundle ENDING in t takes the next token (`-rvt DIR`), a bundle with
-// a glued remainder after the FIRST t is `-tDIR` (`-rt/x`, `-tother` → `other`, non-greedy).
-// rsync's `-t` is --times, never a target.
+// Option arity per mutator (review r4-3): short letters that TAKE A VALUE (glued remainder or
+// next token — `-Stmp` is a suffix, not `-t mp`), and long options that take a SEPARATE value
+// when not `=`-attached. `t` (cp/mv/ln/install) names the target DIRECTORY; `d` (install) means
+// "create directories", read only when it precedes any value-taking letter in the bundle.
 const TARGET_DIR_PROGS = new Set(['cp', 'mv', 'ln', 'install']);
-const GLUED_TARGET_DIR = /^-([A-Za-z]*?)t(.*)$/;
+const VALUE_SHORT = { cp: 'St', mv: 'St', ln: 'St', install: 'Stogm', touch: 'rdt', sed: 'ef', rsync: 'e', chmod: '', chown: '', chgrp: '' };
+const VALUE_LONG = {
+  cp: ['--suffix'], mv: ['--suffix'], ln: ['--suffix'], install: ['--suffix', '--owner', '--group', '--mode', '--context'],
+  touch: ['--reference', '--date', '--time'], sed: ['--expression', '--file', '--line-length'], rsync: ['--rsh', '--exclude', '--include', '--files-from', '--exclude-from', '--include-from'],
+  chown: ['--reference'], chgrp: ['--reference'], chmod: ['--reference'],
+};
 const isTargetDirLong = (name) => name.length >= 3 && '--target-directory'.startsWith(name);   // GNU unambiguous prefixes
 const isFlag = (t) => t.startsWith('-') && t.length > 1;
 const isGitWriteVerb = (v) => v === 'commit' || v === 'push';
@@ -967,11 +972,24 @@ const GIT_NON_WRITE_VERBS = new Set(['status', 'log', 'diff', 'show', 'rev-parse
   'bundle', 'count-objects', 'fsck', 'gc', 'prune', 'repack', 'notes', 'apply', 'am', 'format-patch', 'whatchanged',
   'bisect', 'clean', 'mailinfo', 'check-ref-format', 'verify-pack', 'verify-commit', 'verify-tag', 'show-branch']);
 
+// Walk one short bundle (`-rvt`, `-Stmp`, `-dm755`) letter by letter: the first value-taking
+// letter owns the rest (or the next token). Returns { dest, dirFlag, consumeNext }.
+function shortBundle(prog, t) {
+  const valueLetters = VALUE_SHORT[prog] ?? '';
+  let dirFlag = false;
+  for (let k = 1; k < t.length; k++) {
+    const ch = t[k];
+    if (ch === 't' && TARGET_DIR_PROGS.has(prog)) return { dest: t.slice(k + 1) || null, dirFlag, consumeNext: t.length === k + 1 };
+    if (valueLetters.includes(ch)) return { dest: null, dirFlag, consumeNext: t.length === k + 1 };
+    if (ch === 'd' && prog === 'install') dirFlag = true;
+  }
+  return { dest: null, dirFlag, consumeNext: false };
+}
+
 function mutatorOperands(prog, args) {
   if (prog === 'sed' && !args.some((t) => SED_IN_PLACE.test(t))) return [];
-  const all = MUTATOR_ALL.has(prog) || prog === 'sed' || (prog === 'install' && args.some((t) => INSTALL_DIR.test(t)));
   const operands = [];
-  let dest = null, dashdash = false;
+  let dest = null, dashdash = false, installDir = args.some((t) => t === '--directory');
   for (let i = 0; i < args.length; i++) {
     const t = args[i];
     // Redirections are the shell's, not the program's (`cp a E/x 2>/dev/null` — r3 N1): the
@@ -980,22 +998,38 @@ function mutatorOperands(prog, args) {
     if (r) { if (r.standalone) i += 1; continue; }
     if (!dashdash && t === '--') { dashdash = true; continue; }
     if (!dashdash && isFlag(t)) {
-      if (!TARGET_DIR_PROGS.has(prog)) continue;
-      const name = t.includes('=') ? t.slice(0, t.indexOf('=')) : t;
       if (t.startsWith('--')) {
-        if (!isTargetDirLong(name)) continue;
-        dest = t.includes('=') ? t.slice(t.indexOf('=') + 1) : (args[++i] ?? null);
+        if (t.includes('=')) {
+          if (TARGET_DIR_PROGS.has(prog) && isTargetDirLong(t.slice(0, t.indexOf('=')))) dest = t.slice(t.indexOf('=') + 1);
+          continue;
+        }
+        if (TARGET_DIR_PROGS.has(prog) && isTargetDirLong(t)) { dest = args[++i] ?? null; continue; }
+        if ((VALUE_LONG[prog] ?? []).some((opt) => t.length >= 3 && opt.startsWith(t))) i += 1;
         continue;
       }
-      const m = GLUED_TARGET_DIR.exec(t);
-      if (m) dest = m[2] !== '' ? m[2] : (args[++i] ?? null);
+      const b = shortBundle(prog, t);
+      if (b.dirFlag) installDir = true;
+      if (b.dest !== null) dest = b.dest;
+      else if (b.consumeNext) { const v = args[++i] ?? null; if (t.endsWith('t') && TARGET_DIR_PROGS.has(prog)) dest = v; }
       continue;
     }
     operands.push(t);
   }
+  const all = MUTATOR_ALL.has(prog) || prog === 'sed' || (prog === 'install' && installDir);
   if (all) return dest !== null ? [...operands, dest] : operands;
   if (dest !== null) return [dest];
   return operands.length >= 2 ? operands.slice(-1) : [];
+}
+
+// Tokens of a segment with the shell's redirections removed (`cd X 2>/dev/null` — r4-1).
+function withoutRedirections(toks) {
+  const out = [];
+  for (let i = 0; i < toks.length; i++) {
+    const r = redirToken(toks[i]);
+    if (r) { if (r.standalone) i += 1; continue; }
+    out.push(toks[i]);
+  }
+  return out;
 }
 
 // Targets of unquoted output redirections in a RAW segment. Quote-aware, so a `>` inside a quoted
@@ -1051,7 +1085,11 @@ function programStart(toks) {
     if (r) { i += r.standalone ? 2 : 1; continue; }
     break;
   }
-  if (i < toks.length && BUILTIN_RUNNERS.has(toks[i]) && i + 1 < toks.length) i += 1;
+  if (i < toks.length && BUILTIN_RUNNERS.has(toks[i])) {
+    i += 1;
+    while (i < toks.length && isFlag(toks[i])) i += 1;                  // `command -p rm`, `command -- rm` (r4-2)
+    if (i < toks.length && toks[i] === '--') i += 1;
+  }
   return i;
 }
 
@@ -1078,20 +1116,20 @@ function addFiles(out, paths, cwd) {
   }
 }
 
-function scanGitCall(rest, cwd, retarget, out) {
-  if (rest.some((t, k) => (k > 0 && ALIAS_WRITE_DEF.test(t) && (rest[k - 1] === '-c' || rest[k - 1] === '--config-env')) || /^--config-env=alias\.[^=]+=\s*(?:!|(?:git\s+)?(?:commit|push)\b)/i.test(t))) {
-    out.unknown ??= 'an argv-local git alias stands for commit/push';
-    return;
-  }
+function scanGitCall(argv, cwd, retarget, out) {
+  const rest = withoutRedirections(argv);                              // `git -C E 2>/dev/null push` (r4-5)
+  const aliased = rest.some((t, k) => (k > 0 && ALIAS_WRITE_DEF.test(t) && (rest[k - 1] === '-c' || rest[k - 1] === '--config-env')) || /^--config-env=alias\.[^=]+=\s*(?:!|(?:git\s+)?(?:commit|push)\b)/i.test(t));
   if (cwd === null || retarget) {
     // Only a commit/push here is a finding; `git status` after `cd "$D"` is not.
-    if (gitSubcommandIs(rest, 'commit') || gitSubcommandIs(rest, 'push')) {
+    if (aliased || gitSubcommandIs(rest, 'commit') || gitSubcommandIs(rest, 'push')) {
       out.unknown ??= retarget ? 'GIT_* environment retargets the repo' : 'the working directory at this git call cannot be resolved statically';
     }
     return;
   }
   const r = gitInvocationTarget(rest, cwd);
   if (r.terminal) return;                                              // --help/--version: git prints and exits
+  if (rest[r.index + 1] === '--help') return;                          // `git commit --help` likewise (r4-8)
+  if (aliased) { out.unknown ??= 'an argv-local git alias stands for commit/push'; return; }
   if (r.unknown) {
     if (r.verb === undefined || !GIT_NON_WRITE_VERBS.has(r.verb)) out.unknown ??= 'repo-redirecting git option (-C with an unexpanded value, --git-dir, --work-tree, …)';
     return;
@@ -1115,7 +1153,7 @@ function scanWriteTargets(command, baseDir, depth, out, envRetarget) {
     if (i >= toks.length) continue;
     const prog = basename(toks[i]);
     if (prog === 'cd') {
-      cwd = (++cdSeen === 1 && !hasUnquotedParen(seg)) ? cdTarget(cwd, toks.slice(i + 1)) : null;
+      cwd = (++cdSeen === 1 && !hasUnquotedParen(seg)) ? cdTarget(cwd, withoutRedirections(toks.slice(i + 1))) : null;
       continue;
     }
     if (EVAL_LIKE.has(prog) || CWD_SHIFTERS.has(prog)) {

@@ -135,6 +135,10 @@ test('shellWriteTargets: git commit/push targets follow -C chains, one literal c
     assert.deepEqual(gitOf(`cd -P ${B}/link/.. && git push`), [{ dir: ext, verb: 'push' }], 'cd -P is physical: link/.. is the TARGET\'s parent (r3 C1)');
     assert.equal(shellWriteTargets(`git --git-dir=${ext}/.git show-ref && git -C "$R" --version`, B).unknown, null, 'read verbs and terminal options beside a redirect global are not findings (r3 C3)');
     assert.ok(shellWriteTargets(`git -C ${ext} --shallow-file x push`, B).git.some((g) => g.verb === 'push'), '--shallow-file takes a value (r3 N7)');
+    assert.deepEqual(gitOf(`cd ${ext} 2>/dev/null && git commit -m x`), [{ dir: ext, verb: 'commit' }], 'a redirection on the cd segment is not an operand (r4-1)');
+    assert.deepEqual(gitOf(`git -C ${ext} 2>/dev/null push`), [{ dir: ext, verb: 'push' }], 'a redirection before the verb is not the verb (r4-5)');
+    assert.deepEqual(gitOf(`git -C ${ext} commit --help`), [], '`git commit --help` prints and exits (r4-8)');
+    assert.equal(shellWriteTargets('git -c alias.c=commit --version', B).unknown, null);
     assert.ok(isGitPush('git -C /x push') && !isGitPush('git log --grep push'));
   });
 });
@@ -172,6 +176,15 @@ test('shellWriteTargets: file mutators and output redirections name literal oper
     assert.deepEqual(filesOf(`command rm ${ext}/f && command cp a ${ext}/x`), [join(ext, 'f'), join(ext, 'x')], 'behind `command` (r3 N3)');
     assert.deepEqual(filesOf(`echo hi &> ${ext}/out.log`), [join(ext, 'out.log')], '&>word writes both streams to a file (r3 N5; the `>&word` spelling is a lexer residual)');
     assert.deepEqual(filesOf('echo hi >&2 && echo x >&-'), [], 'fd duplicate / close');
+    assert.deepEqual(filesOf(`command -p rm ${ext}/f`), [join(ext, 'f')], '`command -p` (r4-2)');
+    assert.deepEqual(filesOf(`cp -Stmp a ${ext}/x`), [join(ext, 'x')], '-S takes a glued value: not `-t mp` (r4-3)');
+    assert.deepEqual(filesOf(`cp --suffix .bak a ${ext}/x`), [join(ext, 'x')], '--suffix takes the next token');
+    assert.deepEqual(filesOf(`install -oroot -m755 a ${ext}/x`), [join(ext, 'x')]);
+    assert.deepEqual(filesOf(`install -tbuild a`), [join(B, 'build')], '-tbuild is a target dir, not `-d`');
+    assert.deepEqual(filesOf(`install -dm755 ${ext}/new`), [join(ext, 'new')], '-d before a value letter still creates directories');
+    assert.deepEqual(filesOf(`touch -r ${ext}/x ${B}/y`), [join(B, 'y')], 'touch -r is a reference, not a target');
+    assert.deepEqual(filesOf(`chmod +x ${ext}/script`), ['+x', join(ext, 'script')].map((p) => (p.startsWith('/') ? p : join(B, p))), 'chmod is a mutator (r4-6); the mode operand is harmless');
+    assert.deepEqual(filesOf(`cd ${ext} 2>/dev/null && rm f`), ['/dev/null', join(ext, 'f')], 'relative operand after a redirected cd (r4-1)');
   });
 });
 
