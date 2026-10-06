@@ -1,5 +1,6 @@
 name: harness-ci-archive-leak-backstop-30
-status: approved
+status: done
+completed: 2026-10-06
 version: 1
 task_id: "20261006-064500-30ci"
 # gh-loop worker Stage 2에 따라 이슈 #30 본문과 "세션에서 직접 결정함"(A — 검사 3종 CI) 댓글을 명세로 삼습니다.
