@@ -148,6 +148,8 @@ kickoff → startdev 흐름에서 자동으로 작동하는 장치들. 집행 �
 
 통합 경로(merge 자동커밋·cherry-pick·revert·rebase)는 **의도적으로 차단하지 않습니다** — 원 커밋 시점에 이미 게이트를 통과한 콘텐츠의 이동이고, 백스톱이 관측합니다. 잔여면(sparse-checkout·stash·`--no-verify`·관할 밖 레포)은 [`.omp/rules/harness-harness_integration_contract.md`](.omp/rules/harness-harness_integration_contract.md)에 열거돼 있습니다.
 
+**서버측 백스톱 (CI)**: 위 집행 지점은 모두 클라이언트측이라 `--no-verify`나 훅 비활성 리포의 push는 원격에서 걸러지지 않았습니다. 이 저장소는 `.github/workflows/harness-ci.yml`(GitHub-hosted 러너, `main` push + `pull_request`)로 검사 3종을 돌립니다 — 아카이브 유출(로컬 `.githooks/pre-push`를 커밋된 트리에 그대로 실행), 하네스 suite(`node --test .omp/extensions/harness/tests/*.test.mjs`), docs drift(`node scripts/docs-drift`). 소비 리포는 `templates/github-workflows/harness-ci.yml`을 1회 복사해 쓰며(sync는 `.github/`를 건드리지 않습니다) 안내와 조정 지점은 [`templates/github-workflows/README.md`](templates/github-workflows/README.md)에 있습니다. 이 워크플로는 보고만 하고 머지를 막지는 않습니다(필수 체크 지정은 브랜치 보호의 별도 결정).
+
 - **seed.yaml** — 킥오프 결과를 구조화 (목표, 제약, 수락 기준, 리스크)
 - **rubric** — 4차원 명확도 게이트 (HIGH/MED/LOW)
 - **audit log** — 이벤트 추적 (append-only JSONL)
