@@ -119,13 +119,15 @@ cd <기존-프로젝트>
 
 ## 하네스
 
-kickoff → startdev 흐름에서 자동으로 작동하는 장치들. 집행 지점은 두 곳입니다 — **커밋 게이트는 git 훅(`.githooks/pre-commit`)** 에서, 나머지는 OMP 확장 `index.ts`가 이벤트에 배선합니다. 게이트 CLI는 `.omp/extensions/harness/gates/` (22)에 있는 stdin-JSON 프로그램입니다:
+kickoff → startdev 흐름에서 자동으로 작동하는 장치들. 집행 지점은 두 곳입니다 — **커밋 게이트는 git 훅(`.githooks/pre-commit`)** 에서, 나머지는 OMP 확장 `index.ts`가 이벤트에 배선합니다. 게이트 CLI는 `.omp/extensions/harness/gates/` (24)에 있는 stdin-JSON 프로그램입니다:
 
 | OMP 이벤트 | 게이트 | 역할 |
 |-----------|--------|------|
+| `tool_call` (edit/write/ast_edit) | cross-repo guard (`index.ts` + `cross-repo.mjs`) | 세션 리포 밖 리포의 파일 수정을 그 리포의 규율 파일(AGENTS.md > CLAUDE.md > .cursorrules) read 증명 전까지 차단 (#15 ①) — 같은 리포의 링크드 워크트리는 외부가 아님(`repo-root.mjs`) |
 | `tool_call` (edit/write/ast_edit) | context-gate | 읽지 않은 파일 수정 차단 |
 | `tool_call` (bash) | destructive-guard | 위험 명령(rm -rf, 강제 푸시 등) 경고 |
 | `tool_call` (bash) | commit-tripwire (`index.ts`) | 커밋 게이트 **우회 선언** 차단 — `--no-verify`/`-n`, `core.hooksPath` 재지정, `--git-dir`/`--work-tree`, 리타게팅 `GIT_*` |
+| `tool_call` (bash) | cross-repo guard (`index.ts` + `cross-repo.mjs`) | 규율·하네스를 가진 외부 리포 대상 `git commit`/`git push` 차단(`git -C X`, `cd X &&`, bash -c; 해석 불가는 fail-closed) + 리터럴 경로 mutation(rm/mv/cp/tee/sed -i/리다이렉션)의 ① 판정 (#15 ②) — 규율·하네스 없는 리포(sum-vault)는 관할 밖 통과 |
 | `tool_call` (mcp__*) | mcp-gate | 파괴적 MCP 호출 경고 |
 | `tool_result` (read) | read-tracker | 읽은 파일 기록 |
 | `tool_result` (grep/ast_grep) | read-tracker | 검색이 `[path#TAG]` 앵커를 발급한 파일 기록 (배치 1회 스폰) |

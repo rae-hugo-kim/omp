@@ -58,8 +58,8 @@
 //     and `xargs echo git commit` are lookups/echoes, not commits, but report true.
 //   - Past MAX_DEPTH of nested `bash -c`, detection FAILS CLOSED (treats it as a commit).
 
-import { realpathSync } from 'fs';
-import { dirname, join } from 'path';
+import { realpathSync, statSync } from 'fs';
+import { dirname, join, resolve } from 'path';
 
 const MAX_DEPTH = 5;
 
@@ -75,7 +75,7 @@ const WRAPPER_TERMINAL_OPT = new Set(['--help', '--version', '-h', '-V']);
 
 // git global options that take a SEPARATE argument (consume the next token too).
 const GIT_OPT_WITH_ARG = new Set(['-C', '-c', '--config-env', '--git-dir', '--work-tree',
-  '--namespace', '--exec-path', '--super-prefix']);
+  '--namespace', '--exec-path', '--super-prefix', '--attr-source', '--shallow-file']);
 // Terminal/informational git global options: git prints and exits before any subcommand.
 const GIT_TERMINAL_OPT = new Set(['-h', '--help', '--version', '--html-path',
   '--man-path', '--info-path']);
@@ -249,7 +249,7 @@ function bashDashCPayload(toks) {
   return null;
 }
 
-function gitSubcommandIsCommit(toks) {
+function gitSubcommandIs(toks, verb) {
   let i = 1, subst = false;
   while (i < toks.length) {
     const t = toks[i];
@@ -262,14 +262,14 @@ function gitSubcommandIsCommit(toks) {
     }
     i += 1;                                              // --opt=value or boolean global flag
   }
-  if (toks[i] === 'commit') return true;
+  if (toks[i] === verb) return true;
   // A substitution swallowed as an option value hides the true subcommand position
-  // (`git -C $(pwd) commit`): fail closed if `commit` appears anywhere after it.
-  if (subst) { for (; i < toks.length; i++) if (toks[i] === 'commit') return true; }
+  // (`git -C $(pwd) commit`): fail closed if the verb appears anywhere after it.
+  if (subst) { for (; i < toks.length; i++) if (toks[i] === verb) return true; }
   return false;
 }
 
-function segmentIsGitCommit(seg, depth) {
+function segmentIsGitVerb(seg, depth, verb) {
   const toks = tokenize(seg);
   for (const pi of programCandidates(toks)) {
     const rest = toks.slice(pi);
@@ -278,24 +278,33 @@ function segmentIsGitCommit(seg, depth) {
       const inner = bashDashCPayload(rest);
       if (inner === null) continue;
       if (depth >= MAX_DEPTH) return true;               // fail CLOSED on pathological nesting
-      if (anySegmentIsCommit(inner, depth + 1)) return true;
+      if (anySegmentIsVerb(inner, depth + 1, verb)) return true;
       continue;
     }
-    if (b === 'git' && gitSubcommandIsCommit(rest)) return true;
+    if (b === 'git' && gitSubcommandIs(rest, verb)) return true;
   }
   return false;
 }
 
-function anySegmentIsCommit(cmd, depth) {
+function anySegmentIsVerb(cmd, depth, verb) {
   if (!cmd || typeof cmd !== 'string') return false;
   for (const seg of lexSegments(cmd)) {
-    if (segmentIsGitCommit(seg, depth)) return true;
+    if (segmentIsGitVerb(seg, depth, verb)) return true;
   }
   return false;
 }
 
+// Kept as a named helper: commitSegInfo's fallback reads as "is there a commit here at all".
+const segmentIsGitCommit = (seg, depth) => segmentIsGitVerb(seg, depth, 'commit');
+
 export function isGitCommit(command) {
-  return anySegmentIsCommit(command, 0);
+  return anySegmentIsVerb(command, 0, 'commit');
+}
+
+// Same detector for `git push` (the cross-repo guard, #15 ②, blocks a push into another
+// repo exactly like a commit; .githooks/pre-push is that repo's own boundary).
+export function isGitPush(command) {
+  return anySegmentIsVerb(command, 0, 'push');
 }
 
 // --- command-layer tripwire (AC3) --------------------------------------------
@@ -834,6 +843,36 @@ function chdir(from, v) {
   return cur;
 }
 
+// Walk ONE git invocation's global options from `baseDir` the way git does: `-C` chains (each
+// relative to the previous). Returns { target, verb } — verb is the subcommand token (undefined
+// when a terminal option like --help short-circuits, or nothing follows) — or { unknown:true, verb }
+// when a repo-redirecting global (--git-dir/--work-tree/--namespace/--bare/--config-env,
+// `-c core.worktree…`) makes the target unknowable; verb is still reported when the walk could
+// reach it, and is undefined after a `-C` value the shell would expand or a shredded substitution.
+function gitInvocationTarget(rest, baseDir) {
+  let i = 1, target = physical(baseDir), unknown = false;
+  while (i < rest.length) {
+    const t = rest[i];
+    if (!t.startsWith('-')) break;
+    if (GIT_TERMINAL_OPT.has(t) || t.startsWith('--list-cmds')) return { target, verb: undefined, terminal: true };
+    const nameOnly = t.includes('=') ? t.slice(0, t.indexOf('=')) : t;
+    if (t === '-C') {
+      const v = rest[i + 1];
+      // A value the shell would still expand: the target is unknowable, but a single `$VAR`
+      // token still leaves the verb readable (so `git -C "$D" init` is not mistaken for a
+      // commit); a shredded `$(…)` hides the verb position as well.
+      if (v === undefined || substShredValue(v)) return { unknown: true, verb: undefined };
+      if (UNEXPANDED.test(v)) unknown = true; else target = chdir(target, v);
+      i += 2; continue;
+    }
+    if (GIT_REPO_REDIRECT_OPT.has(nameOnly) || nameOnly === '--config-env') unknown = true;
+    if (t === '-c' && GIT_REPO_REDIRECT_CONFIG.test(rest[i + 1] || '')) unknown = true;
+    if (GIT_OPT_WITH_ARG.has(t)) { if (substShredValue(rest[i + 1] ?? '')) return { unknown: true, verb: undefined }; i += 2; continue; }
+    i += 1;
+  }
+  return unknown ? { unknown, verb: rest[i], index: i } : { target, verb: rest[i], index: i };
+}
+
 function scanCommitTarget(command, baseDir, depth) {
   if (depth > MAX_DEPTH) return { unknown: true };
   let dir = null;
@@ -860,25 +899,10 @@ function scanCommitTarget(command, baseDir, depth) {
         continue;
       }
       if (b !== 'git') continue;
-      let i = 1, target = physical(baseDir), terminal = false;
-      while (i < rest.length) {
-        const t = rest[i];
-        if (!t.startsWith('-')) break;
-        if (GIT_TERMINAL_OPT.has(t) || t.startsWith('--list-cmds')) { terminal = true; break; }
-        const nameOnly = t.includes('=') ? t.slice(0, t.indexOf('=')) : t;
-        if (t === '-C') {
-          const v = rest[i + 1];
-          if (v === undefined || UNEXPANDED.test(v)) return { unknown: true };
-          target = chdir(target, v);
-          i += 2; continue;
-        }
-        if (GIT_REPO_REDIRECT_OPT.has(nameOnly) || nameOnly === '--config-env') return { unknown: true };
-        if (t === '-c' && GIT_REPO_REDIRECT_CONFIG.test(rest[i + 1] || '')) return { unknown: true };
-        if (GIT_OPT_WITH_ARG.has(t)) { if (substShredValue(rest[i + 1] ?? '')) return { unknown: true }; i += 2; continue; }
-        i += 1;
-      }
-      if (terminal || rest[i] !== 'commit') continue;
-      if (!merge(target)) return { unknown: true };
+      const r = gitInvocationTarget(rest, baseDir);
+      if (r.unknown) return { unknown: true };
+      if (r.verb !== 'commit') continue;
+      if (!merge(r.target)) return { unknown: true };
     }
   }
   return dir === null ? null : { dir };
@@ -888,5 +912,287 @@ export function commitTargetDir(command, baseDir) {
   if (!command || typeof command !== 'string' || !baseDir) return null;
   const r = scanCommitTarget(command, baseDir, 0);
   return r && !r.unknown ? r.dir : null;
+}
+
+// --- shell write targets (cross-repo guard, #15 ①②) -------------------------------
+// What a command line WRITES, statically: the repos its `git commit` / `git push` invocations
+// target and the files its mutators name. Unlike commitTargetDir (which refuses any `cd`), the
+// running cwd is TRACKED through ONE literal `cd <dir>` segment — `cd ../other && git commit` is
+// the everyday cross-repo spelling the guard must attribute. The model is a single cwd, so every
+// form it cannot follow makes the cwd UNKNOWN from that segment on (fail-closed): a second `cd`
+// in the same line (`cd a || cd b`), a `cd` whose target does not exist (the shell stays put), a
+// `cd` beside an unquoted parenthesis (a subshell restores the cwd on exit), `cd "$D"`, bare
+// `cd`, `cd -`, `pushd`/`popd`, `eval`/`source`, a wrapper's own chdir, `GIT_DIR=…` in the line
+// or in the call's env. A git commit/push met in an unknown cwd, or behind an `eval`/`source`
+// whose arguments mention one, is reported in `unknown`; a relative file operand there is
+// dropped (absolute operands are still attributed). Over-collection is harmless — the guard
+// only compares repo identities.
+//
+//   shellWriteTargets(command, baseDir, env) -> { git: [{ dir, verb }], files: [abs], unknown }
+//
+// File mutators are a small fixed set — every operand of rm/rmdir/unlink/mv/touch/mkdir/
+// truncate/tee/patch (and `install -d`), the DESTINATION (last operand, `-t DIR`, `-tDIR`) of
+// cp/ln/install/rsync, every operand of an in-place `sed -i`, and the target of an unquoted
+// output redirection (`>`, `>>`, glued or spaced, with any fd prefix; `>&N` duplicates an fd).
+// Operands the shell would still expand (`$VAR`, globs, `~`) are not literal paths and are
+// dropped. Residuals: non-commit git writes (`git -C other add`), `>|` (the lexer splits on
+// `|`), a commit inside `$(…)` (isGitCommit's own limit), `git push <url-or-path>` (the target
+// is the cwd repo's remote, not a directory), and a `-C` after an unknown cwd (fails closed).
+const MUTATOR_ALL = new Set(['rm', 'rmdir', 'unlink', 'mv', 'touch', 'mkdir', 'truncate', 'tee', 'patch', 'chmod', 'chown', 'chgrp']);
+const MUTATOR_DEST = new Set(['cp', 'ln', 'install', 'rsync']);
+const isMutator = (b) => MUTATOR_ALL.has(b) || MUTATOR_DEST.has(b) || b === 'sed';
+const SED_IN_PLACE = /^(?:-[A-Za-z]*i|--in-place)/;
+// Option arity per mutator (review r4-3): short letters that TAKE A VALUE (glued remainder or
+// next token — `-Stmp` is a suffix, not `-t mp`), and long options that take a SEPARATE value
+// when not `=`-attached. `t` (cp/mv/ln/install) names the target DIRECTORY; `d` (install) means
+// "create directories", read only when it precedes any value-taking letter in the bundle.
+const TARGET_DIR_PROGS = new Set(['cp', 'mv', 'ln', 'install']);
+const VALUE_SHORT = { cp: 'St', mv: 'St', ln: 'St', install: 'Stogm', touch: 'rdt', sed: 'ef', rsync: 'e', chmod: '', chown: '', chgrp: '' };
+const VALUE_LONG = {
+  cp: ['--suffix'], mv: ['--suffix'], ln: ['--suffix'], install: ['--suffix', '--owner', '--group', '--mode', '--context'],
+  touch: ['--reference', '--date', '--time'], sed: ['--expression', '--file', '--line-length'], rsync: ['--rsh', '--exclude', '--include', '--files-from', '--exclude-from', '--include-from'],
+  chown: ['--reference'], chgrp: ['--reference'], chmod: ['--reference'],
+};
+const isTargetDirLong = (name) => name.length >= 3 && '--target-directory'.startsWith(name);   // GNU unambiguous prefixes
+const isFlag = (t) => t.startsWith('-') && t.length > 1;
+const isGitWriteVerb = (v) => v === 'commit' || v === 'push';
+const EVAL_LIKE = new Set(['eval', 'source', '.']);
+const EXPORTERS = new Set(['export', 'declare', 'typeset']);
+// An argv-local alias whose body is a commit/push (or a shell alias, opaque): `-c alias.c=commit`.
+const ALIAS_WRITE_DEF = /^alias\.[^=]+=\s*(?:!|(?:git\s+)?(?:commit|push)\b)/i;
+// git verbs that are certainly not a commit/push, so a repo-redirecting global beside them is
+// not a finding (`git --git-dir=/x status && git commit`). Anything else in the verb position —
+// including a value swallowed as a verb by an option the walk does not know — fails closed.
+const GIT_NON_WRITE_VERBS = new Set(['status', 'log', 'diff', 'show', 'rev-parse', 'ls-files', 'ls-tree',
+  'ls-remote', 'cat-file', 'blame', 'describe', 'branch', 'tag', 'remote', 'config', 'fetch', 'pull', 'clone',
+  'init', 'add', 'rm', 'mv', 'checkout', 'switch', 'restore', 'reset', 'stash', 'merge', 'rebase', 'cherry-pick',
+  'revert', 'worktree', 'submodule', 'grep', 'shortlog', 'reflog', 'for-each-ref', 'update-ref', 'write-tree',
+  'read-tree', 'hash-object', 'check-attr', 'var', 'version', 'help', 'range-diff', 'rev-list', 'name-rev',
+  'show-ref', 'symbolic-ref', 'merge-base', 'check-ignore', 'diff-tree', 'diff-index', 'diff-files', 'archive',
+  'bundle', 'count-objects', 'fsck', 'gc', 'prune', 'repack', 'notes', 'apply', 'am', 'format-patch', 'whatchanged',
+  'bisect', 'clean', 'mailinfo', 'check-ref-format', 'verify-pack', 'verify-commit', 'verify-tag', 'show-branch']);
+
+// Walk one short bundle (`-rvt`, `-Stmp`, `-dm755`) letter by letter: the first value-taking
+// letter owns the rest (or the next token). Returns { dest, dirFlag, consumeNext }.
+function shortBundle(prog, t) {
+  const valueLetters = VALUE_SHORT[prog] ?? '';
+  let dirFlag = false;
+  for (let k = 1; k < t.length; k++) {
+    const ch = t[k];
+    if (ch === 't' && TARGET_DIR_PROGS.has(prog)) return { dest: t.slice(k + 1) || null, dirFlag, consumeNext: t.length === k + 1 };
+    if (valueLetters.includes(ch)) return { dest: null, dirFlag, consumeNext: t.length === k + 1 };
+    if (ch === 'd' && prog === 'install') dirFlag = true;
+  }
+  return { dest: null, dirFlag, consumeNext: false };
+}
+
+function mutatorOperands(prog, args) {
+  if (prog === 'sed' && !args.some((t) => SED_IN_PLACE.test(t))) return [];
+  const operands = [];
+  let dest = null, dashdash = false, installDir = args.some((t) => t === '--directory');
+  for (let i = 0; i < args.length; i++) {
+    const t = args[i];
+    // Redirections are the shell's, not the program's (`cp a E/x 2>/dev/null` — r3 N1): the
+    // output ones were collected from the raw segment already.
+    const r = redirToken(t);
+    if (r) { if (r.standalone) i += 1; continue; }
+    if (!dashdash && t === '--') { dashdash = true; continue; }
+    if (!dashdash && isFlag(t)) {
+      if (t.startsWith('--')) {
+        if (t.includes('=')) {
+          if (TARGET_DIR_PROGS.has(prog) && isTargetDirLong(t.slice(0, t.indexOf('=')))) dest = t.slice(t.indexOf('=') + 1);
+          continue;
+        }
+        if (TARGET_DIR_PROGS.has(prog) && isTargetDirLong(t)) { dest = args[++i] ?? null; continue; }
+        if ((VALUE_LONG[prog] ?? []).some((opt) => t.length >= 3 && opt.startsWith(t))) i += 1;
+        continue;
+      }
+      const b = shortBundle(prog, t);
+      if (b.dirFlag) installDir = true;
+      if (b.dest !== null) dest = b.dest;
+      else if (b.consumeNext) { const v = args[++i] ?? null; if (t.endsWith('t') && TARGET_DIR_PROGS.has(prog)) dest = v; }
+      continue;
+    }
+    operands.push(t);
+  }
+  const all = MUTATOR_ALL.has(prog) || prog === 'sed' || (prog === 'install' && installDir);
+  if (all) return dest !== null ? [...operands, dest] : operands;
+  if (dest !== null) return [dest];
+  return operands.length >= 2 ? operands.slice(-1) : [];
+}
+
+// Tokens of a segment with the shell's redirections removed (`cd X 2>/dev/null` — r4-1).
+function withoutRedirections(toks) {
+  const out = [];
+  for (let i = 0; i < toks.length; i++) {
+    const r = redirToken(toks[i]);
+    if (r) { if (r.standalone) i += 1; continue; }
+    out.push(toks[i]);
+  }
+  return out;
+}
+
+// Targets of unquoted output redirections in a RAW segment. Quote-aware, so a `>` inside a quoted
+// commit message is not a redirection, and glued targets (`echo hi>/f`) are seen — tokenize()
+// would fold `hi>/f` into one word. `>&N` / `>&-` duplicate or close an fd and are skipped;
+// `>&word` (bash: both streams to a file) and `<>` count as writes.
+function outputRedirectTargets(seg) {
+  const targets = [];
+  const n = seg.length;
+  let i = 0, q = null;
+  while (i < n) {
+    const c = seg[i];
+    if (q) { if (c === '\\' && q === '"') i += 2; else { if (c === q) q = null; i += 1; } continue; }
+    if (c === '\\') { i += 2; continue; }
+    if (c === "'" || c === '"') { q = c; i += 1; continue; }
+    if (c !== '>') { i += 1; continue; }
+    let j = i + 1;
+    if (seg[j] === '>') j += 1;
+    if (seg[j] === '&') {
+      j += 1;
+      let k = j;
+      while (k < n && (seg[k] === ' ' || seg[k] === '\t')) k += 1;
+      if (k >= n || /[0-9-]/.test(seg[k])) { i = j; continue; }       // fd duplicate / close
+    }
+    while (j < n && (seg[j] === ' ' || seg[j] === '\t')) j += 1;
+    const word = tokenize(seg.slice(j))[0];
+    if (word !== undefined && word !== '') targets.push(word);
+    i = j;
+  }
+  return targets;
+}
+
+function hasUnquotedParen(seg) {
+  let q = null;
+  for (let i = 0; i < seg.length; i++) {
+    const c = seg[i];
+    if (q) { if (c === '\\' && q === '"') i += 1; else if (c === q) q = null; continue; }
+    if (c === '\\') { i += 1; continue; }
+    if (c === "'" || c === '"') { q = c; continue; }
+    if (c === '(' || c === ')') return true;
+  }
+  return false;
+}
+
+// Index of the program token: past assignments, reserved words, redirections and a builtin
+// runner (`command cd x`, `builtin cd x`). toks.length when the segment runs nothing.
+function programStart(toks) {
+  let i = 0;
+  while (i < toks.length) {
+    const t = toks[i];
+    if (isAssign(t) || RESERVED.has(t)) { i += 1; continue; }
+    const r = redirToken(t);
+    if (r) { i += r.standalone ? 2 : 1; continue; }
+    break;
+  }
+  if (i < toks.length && BUILTIN_RUNNERS.has(toks[i])) {
+    i += 1;
+    while (i < toks.length && isFlag(toks[i])) i += 1;                  // `command -p rm`, `command -- rm` (r4-2)
+    if (i < toks.length && toks[i] === '--') i += 1;
+  }
+  return i;
+}
+
+// The cwd after a `cd` segment, or null when it cannot be followed: unknown current cwd, flags
+// aside not exactly one literal operand, `cd -`, or a target that is not an existing directory
+// (the shell would stay where it was — and `cd missing || cd elsewhere` is two cds anyway).
+// Resolved LOGICALLY like bash's cd (`..` on the path as spelled) unless `-P` asks for the
+// physical walk git's `-C` uses (r3 C1).
+function cdTarget(cwd, args) {
+  const operands = args.filter((t) => !isFlag(t));
+  if (cwd === null || operands.length !== 1 || operands[0] === '-' || UNEXPANDED.test(operands[0])) return null;
+  const physicalWalk = args.some((t) => /^-[A-Za-z]*P/.test(t));
+  const dir = physicalWalk ? chdir(cwd, operands[0]) : resolve(cwd, operands[0]);
+  try { return statSync(dir).isDirectory() ? dir : null; } catch { return null; }
+}
+
+// Attributed as spelled: `cwd/p` is NOT normalized here, so a `link/..` inside `p` is resolved
+// component-wise (physically) by repo-root later, not collapsed lexically first (review r2 X3).
+function addFiles(out, paths, cwd) {
+  for (const p of paths) {
+    if (UNEXPANDED.test(p)) continue;
+    if (p.startsWith('/')) out.files.push(p);
+    else if (cwd !== null) out.files.push(`${cwd}/${p}`);
+  }
+}
+
+function scanGitCall(argv, cwd, retarget, out) {
+  const rest = withoutRedirections(argv);                              // `git -C E 2>/dev/null push` (r4-5)
+  const aliased = rest.some((t, k) => (k > 0 && ALIAS_WRITE_DEF.test(t) && (rest[k - 1] === '-c' || rest[k - 1] === '--config-env')) || /^--config-env=alias\.[^=]+=\s*(?:!|(?:git\s+)?(?:commit|push)\b)/i.test(t));
+  if (cwd === null || retarget) {
+    // Only a commit/push here is a finding; `git status` after `cd "$D"` is not.
+    if (aliased || gitSubcommandIs(rest, 'commit') || gitSubcommandIs(rest, 'push')) {
+      out.unknown ??= retarget ? 'GIT_* environment retargets the repo' : 'the working directory at this git call cannot be resolved statically';
+    }
+    return;
+  }
+  const r = gitInvocationTarget(rest, cwd);
+  if (r.terminal) return;                                              // --help/--version: git prints and exits
+  if (rest[r.index + 1] === '--help') return;                          // `git commit --help` likewise (r4-8)
+  if (aliased) { out.unknown ??= 'an argv-local git alias stands for commit/push'; return; }
+  if (r.unknown) {
+    if (r.verb === undefined || !GIT_NON_WRITE_VERBS.has(r.verb)) out.unknown ??= 'repo-redirecting git option (-C with an unexpanded value, --git-dir, --work-tree, …)';
+    return;
+  }
+  if (isGitWriteVerb(r.verb)) out.git.push({ dir: r.target, verb: r.verb });
+}
+
+function scanWriteTargets(command, baseDir, depth, out, envRetarget) {
+  if (depth > MAX_DEPTH) { out.unknown ??= 'bash -c nesting too deep'; return; }
+  let cwd = baseDir, cdSeen = 0, lineRetarget = envRetarget;
+  for (const seg of lexSegments(command)) {
+    const toks = tokenize(seg);
+    if (toks.length === 0) continue;
+    addFiles(out, outputRedirectTargets(seg), cwd);
+    const i = programStart(toks);
+    // A standalone `GIT_DIR=…` assignment, or `export`/`declare -x`/`typeset -x GIT_DIR=…`,
+    // retargets every later segment of the line (review r2 A2, r3 C2) — unlike a prefix
+    // assignment, which scopes to its own command. (`unset` is not modelled: conservative.)
+    if ((i >= toks.length && toks.some((t) => GIT_REPO_REDIRECT_ENV.test(t)))
+      || (i < toks.length && EXPORTERS.has(basename(toks[i])) && toks.slice(i + 1).some((t) => GIT_REPO_REDIRECT_ENV.test(t)))) lineRetarget = true;
+    if (i >= toks.length) continue;
+    const prog = basename(toks[i]);
+    if (prog === 'cd') {
+      cwd = (++cdSeen === 1 && !hasUnquotedParen(seg)) ? cdTarget(cwd, withoutRedirections(toks.slice(i + 1))) : null;
+      continue;
+    }
+    if (EVAL_LIKE.has(prog) || CWD_SHIFTERS.has(prog)) {
+      cwd = null;
+      if (toks.some((t) => /\bgit\b/.test(t)) && toks.some((t) => /\b(?:commit|push)\b/.test(t))) {
+        out.unknown ??= `a \`${prog}\` argument mentions a git commit/push`;
+      }
+      continue;
+    }
+    // A mutator at the program position (plain, or behind `command`/`builtin` which programStart
+    // already skipped — r3 N3).
+    if (isMutator(prog)) { addFiles(out, mutatorOperands(prog, toks.slice(i + 1)), cwd); continue; }
+    if (WRAPPER.has(prog)) {
+      // A mutator behind a wrapper (`sudo rm …`, `env VAR=1 tee …`) — programCandidates only
+      // enumerates shell programs there.
+      const k = toks.findIndex((t, idx) => idx > i && isMutator(basename(t)));
+      if (k >= 0) addFiles(out, mutatorOperands(basename(toks[k]), toks.slice(k + 1)), toks.slice(i, k).some((t) => WRAPPER_CHDIR.test(t)) ? null : cwd);
+    }
+    for (const pi of programCandidates(toks)) {
+      const before = toks.slice(0, pi);
+      const segCwd = before.some((t) => WRAPPER_CHDIR.test(t)) ? null : cwd;
+      const retarget = lineRetarget || before.some((t) => GIT_REPO_REDIRECT_ENV.test(t));
+      const rest = toks.slice(pi);
+      const b = basename(rest[0]);
+      if (b === 'bash' || b === 'sh') {
+        const inner = bashDashCPayload(rest);
+        if (inner !== null) scanWriteTargets(inner, segCwd, depth + 1, out, retarget);
+      } else if (b === 'git') {
+        scanGitCall(rest, segCwd, retarget, out);
+      }
+    }
+  }
+}
+
+export function shellWriteTargets(command, baseDir, env = {}) {
+  const out = { git: [], files: [], unknown: null };
+  if (!command || typeof command !== 'string' || !baseDir) return out;
+  const envRetarget = Boolean(env && typeof env === 'object' && Object.keys(env).some((k) => TRIPWIRE_RETARGET_ENV.test(k)));
+  scanWriteTargets(command, baseDir, 0, out, envRetarget);
+  return out;
 }
 

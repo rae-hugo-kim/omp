@@ -3,9 +3,11 @@
 // lived in `.claude/settings.json` (PreToolUse/PostToolUse/... hooks).
 //
 // Event mapping (Claude Code -> OMP):
-//   PreToolUse  Edit|Write   -> tool_call  edit|write            : context-gate (blocking; an
+//   PreToolUse  Edit|Write   -> tool_call  edit|write            : cross-repo guard (blocking, in-process — #15 ①:
+//     a target in another repo needs that repo's discipline file in the read ledger) then context-gate (blocking; an
 //     xd://ast_edit device write pre-gates the paths named in its JSON body — read-before-edit holds)
-//   PreToolUse  Bash         -> tool_call  bash                 : destructive-guard (advisory), commit-gates (blocking)
+//   PreToolUse  Bash         -> tool_call  bash                 : destructive-guard (advisory), commit-tripwire + cross-repo guard
+//     (blocking, in-process — #15 ②: commit/push into another discipline-bearing repo or an unresolvable target)
 //   PreToolUse  mcp__*       -> tool_call  mcp__*               : mcp-gate (advisory)
 //   PostToolUse Read         -> tool_result read                : read-tracker
 //   PostToolUse Grep         -> tool_result grep                 : read-tracker (batched; search-minted [path#TAG] anchors satisfy context-gate)
@@ -45,6 +47,7 @@ import { type FileHandle, open } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { commitBypassTripwire, commitTargetDir, isGitCommit, isWipCommit } from "./gates/git-commit-detect.mjs";
+import { crossRepoBashVerdict, crossRepoMutationVerdict } from "./gates/cross-repo.mjs";
 import { mutationCallTargets, mutationRoute, readTarget, searchTrackTargets } from "./gates/read-path.mjs";
 import { checkMermaidFile, MERMAID_SUPPORTED } from "./mermaid-check";
 
@@ -552,6 +555,14 @@ export default function harness(pi: HarnessExtensionApi): void {
 						].join("\n"),
 					};
 				}
+				// Cross-repo guard (#15 ①②): a commit/push into another discipline-bearing repo, an
+				// unresolvable commit target, or a literal-path mutation into another repo whose
+				// discipline was never read — judged from the command, the tool's cwd input and env.
+				const cwdInput = typeof event.input?.cwd === "string" ? event.input.cwd : "";
+				const toolCwd = !cwdInput ? ctx.cwd : isAbsolute(cwdInput) ? cwdInput : `${ctx.cwd}/${cwdInput}`;
+				const cross = crossRepoBashVerdict({ command, toolCwd, sessionCwd: ctx.cwd, env: toolEnv });
+				if (cross?.block) return { block: true, reason: cross.block };
+				if (cross?.warn) surface(ctx, { status: 0, stdout: "", stderr: cross.warn }, "cross-repo");
 				// Snapshot the target repo's HEAD so the result can tell a landed commit from a
 				// gate-blocked one (see HEAD_SNAPSHOTS). Only commit commands pay the rev-parse.
 				if (isGitCommit(command)) await snapshotHead(event, command, ctx.cwd);
@@ -565,6 +576,11 @@ export default function harness(pi: HarnessExtensionApi): void {
 			const session_state = { cwd: ctx.cwd };
 			if (isEditToolName(event.toolName)) {
 				for (const filePath of mutationCallTargets(event.toolName, event.input, ctx.cwd)) {
+					// Cross-repo guard (#15 ①) runs before read-before-edit: a file in another repo
+					// needs that repo's AGENTS.md in the read ledger, not just the file itself.
+					const cross = crossRepoMutationVerdict(filePath, ctx.cwd);
+					if (cross?.block) return { block: true, reason: cross.block };
+					if (cross?.warn) surface(ctx, { status: 0, stdout: "", stderr: cross.warn }, "cross-repo");
 					const run = await runGate("context-gate.mjs", { tool_name: "Edit", tool_input: { file_path: filePath }, session_state });
 					if (run.status === 2) return { block: true, reason: run.stderr.trim() || `HARNESS BLOCK: read '${filePath}' before editing it.` };
 					surface(ctx, run, "context-gate");

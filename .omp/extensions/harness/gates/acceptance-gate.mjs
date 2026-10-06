@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // acceptance-gate.mjs - PreToolUse hook for Bash(git commit*)
 // Purpose: Block commits if acceptance criteria not met
-// Logic: Pass if (all checkboxes checked) OR (acceptance-done flag exists)
+// Logic: Pass if (all checkboxes checked) OR (acceptance-done flag exists and is <24h old)
 // Exit 0 = allow, Exit 2 = block (uses stderr for messages)
 
-import { readFileSync, existsSync, appendFileSync, mkdirSync, writeFileSync } from 'fs';
+import { readFileSync, existsSync, appendFileSync, mkdirSync, writeFileSync, statSync } from 'fs';
 import { execFileSync } from 'child_process';
 import { join } from 'path';
 import { isGitCommit, isWipCommit, parseCommitForm } from './git-commit-detect.mjs';
@@ -138,8 +138,8 @@ function backstop(reason, opts = {}) {
     console.error('  1. thread-scope 열기: node .omp/extensions/harness/thread-scope.mjs open');
   }
   console.error(isHookMode
-    ? '  2. trivial이면 WIP 선언: `.omp/harness-state/commit-wip` 생성 또는 `OMP_COMMIT_WIP=1 git commit …` (pre-commit 시점에는 커밋 메시지를 볼 수 없어 `wip:` 접두사는 효력이 없습니다), 또는 docs/harness/acceptance-done 생성(override)'
-    : '  2. trivial이면 `wip:` 커밋, 또는 docs/harness/acceptance-done 생성(override)');
+    ? '  2. trivial이면 WIP 선언: `.omp/harness-state/commit-wip` 생성 또는 `OMP_COMMIT_WIP=1 git commit …` (pre-commit 시점에는 커밋 메시지를 볼 수 없어 `wip:` 접두사는 효력이 없습니다), 또는 docs/harness/acceptance-done 생성(override, mtime 기준 24h 유효)'
+    : '  2. trivial이면 `wip:` 커밋, 또는 docs/harness/acceptance-done 생성(override, mtime 기준 24h 유효)');
   process.exit(2);
 }
 
@@ -379,10 +379,21 @@ function closeoutState() {
   }
 }
 
-// Check 1: Flag file exists (manual override)
+// Check 1: Flag file exists (manual override) — valid for 24h from its mtime (#15 ③). A flag
+// left behind months earlier used to pass every later commit before the scope was even read
+// (blogger, 2026-03 flag observed 2026-07-15); a stale one is now ignored with a warning and
+// the normal checks run. The flag itself is not removed (it is the user's to re-arm: `touch`).
+const ACCEPTANCE_DONE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 if (existsSync(flagFilePath)) {
-  log('acceptance-done flag exists, allowing (manual override)');
-  process.exit(0);
+  let ageMs = null;
+  try { ageMs = Date.now() - statSync(flagFilePath).mtimeMs; } catch { /* unreadable: treat as stale */ }
+  if (ageMs !== null && ageMs < ACCEPTANCE_DONE_MAX_AGE_MS) {   // a future mtime (clock skew) counts as fresh
+    log('acceptance-done flag exists and is fresh, allowing (manual override)');
+    process.exit(0);
+  }
+  const ageText = ageMs === null ? 'unreadable mtime' : `${Math.floor(ageMs / 3600000)}h old`;
+  log(`acceptance-done flag is stale (${ageText}), ignoring`);
+  console.error(`HARNESS WARNING: docs/harness/acceptance-done is stale (${ageText}, limit 24h) — ignoring the override. Re-create it (touch docs/harness/acceptance-done) if the override is still intended.`);
 }
 
 // Check 2a: closeout landing is judged on the COMMIT'S content (HEAD approved -> committed done +
@@ -415,7 +426,7 @@ if (closeout?.falseCloseout) {
     ? `  1. Undo the staged closeout: \`git restore --staged --worktree -- ${closeout.undo.join(' ')}\` (only the paths this commit changed; they go back to HEAD, so an UNSTAGED edit in them — or an untracked next-task scope at that path — is lost as well; stash or move it first if you need it), keep seed.yaml \`status: approved\` (\`thread-scope open\` regenerates a missing scope), check off the met criteria in docs/harness/current-scope.md and COMMIT that first (the record must reach HEAD before the closeout), then redo the closeout`
     : '  1. Undo the staged closeout by hand (git could not list what this commit changed — `git status` and `git restore --staged --worktree -- <path>` for the seed/scope/audit paths it touched), keep seed.yaml `status: approved`, check off the met criteria in docs/harness/current-scope.md and COMMIT that first, then redo the closeout');
   console.error('  2. If the task is not complete, stop after that undo — keep `status: approved` and the scope; a closeout is not a checkpoint');
-  console.error('  3. Create docs/harness/acceptance-done to override');
+  console.error('  3. Create docs/harness/acceptance-done to override (valid 24h from its mtime)');
   process.exit(2);
 }
 
@@ -521,7 +532,7 @@ if (uncheckedItems.length > 3) {
 console.error('');
 console.error('Options:');
 console.error('  1. Check off completed criteria in docs/harness/current-scope.md');
-console.error('  2. Create docs/harness/acceptance-done to override');
+console.error('  2. Create docs/harness/acceptance-done to override (valid 24h from its mtime)');
 if (isHookMode) {
   console.error('  3. WIP checkpoint: create .omp/harness-state/commit-wip or run OMP_COMMIT_WIP=1 git commit …');
   console.error('     (a `wip:` message prefix cannot work here — pre-commit runs before the message exists)');

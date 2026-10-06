@@ -116,13 +116,15 @@ cd <existing-project>
 
 ## Harness
 
-Mechanisms that operate automatically in the kickoff → startdev flow. There are two enforcement points: **the commit gates run from a git hook (`.githooks/pre-commit`)**, everything else is wired to OMP events by the extension `index.ts`. The gate CLIs are stdin-JSON programs in `.omp/extensions/harness/gates/` (22):
+Mechanisms that operate automatically in the kickoff → startdev flow. There are two enforcement points: **the commit gates run from a git hook (`.githooks/pre-commit`)**, everything else is wired to OMP events by the extension `index.ts`. The gate CLIs are stdin-JSON programs in `.omp/extensions/harness/gates/` (24):
 
 | OMP event | Gate | Role |
 |-----------|------|------|
+| `tool_call` (edit/write/ast_edit) | cross-repo guard (`index.ts` + `cross-repo.mjs`) | Block mutations into another repo until that repo's discipline file (AGENTS.md > CLAUDE.md > .cursorrules) has been read (#15 ①) — a linked worktree of the session repo is not another repo (`repo-root.mjs`) |
 | `tool_call` (edit/write/ast_edit) | context-gate | Block edits to unread files |
 | `tool_call` (bash) | destructive-guard | Warn on dangerous commands (rm -rf, force push, ...) |
 | `tool_call` (bash) | commit-tripwire (`index.ts`) | Block a **declared bypass** of the commit gates — `--no-verify`/`-n`, `core.hooksPath` retargeting, `--git-dir`/`--work-tree`, retargeting `GIT_*` |
+| `tool_call` (bash) | cross-repo guard (`index.ts` + `cross-repo.mjs`) | Block `git commit`/`git push` into another discipline- or harness-bearing repo (`git -C X`, `cd X &&`, bash -c; unresolvable targets fail closed) and apply ① to literal-path mutations (rm/mv/cp/tee/sed -i/redirections) (#15 ②) — a repo with neither (sum-vault) stays out of jurisdiction |
 | `tool_call` (mcp__*) | mcp-gate | Warn on destructive MCP calls |
 | `tool_result` (read) | read-tracker | Record files read |
 | `tool_result` (grep/ast_grep) | read-tracker | Record files the search minted `[path#TAG]` anchors for (one batched spawn) |
