@@ -1,53 +1,44 @@
-name: agent-title-number-prefix-78
-status: done
-completed: 2026-10-06
+name: harness-ci-archive-leak-backstop-30
+status: approved
 version: 1
-task_id: "20261006-061306-5772"
-# gh-loop worker Stage 2에 따라 이슈 #78 본문(적용 지점 4개·주의 2개·AC 4개)과 "세션에서 직접 결정함" 댓글(본문 AC 4건 그대로 진행)을 명세로 삼습니다.
-# 직전 완료 seed(rules-liveness-audit-29)는 git 이력에 보존합니다.
+task_id: "20261006-064500-30ci"
+# gh-loop worker Stage 2에 따라 이슈 #30 본문과 "세션에서 직접 결정함"(A — 검사 3종 CI) 댓글을 명세로 삼습니다.
+# 직전 완료 seed(gh-loop-dispatch-closeout-record-79)는 git 이력에 보존합니다.
 goal: >
-  에이전트가 새로 만드는 이슈·PR 제목이 `#N <제목>`으로 시작하도록 gh-loop Stage 1·gh-fanout 추적 이슈·gh-loop Stage 3/compr PR의
-  생성 절차(SKILL 명령 예시)를 고치고, gh-loop-issue.mjs의 normalizeTitle이 선행 `#N ` 접두를 벗기고 비교하게 해
-  접두가 붙은 기존 열린 이슈와의 dedup이 깨지지 않게 합니다. 기존 이슈·PR 제목은 소급해서 바꾸지 않습니다.
+  omp에 GitHub Actions CI(harness-ci.yml)를 도입해 아카이브 유출 검사·하네스 suite·docs-drift를
+  push(main)와 pull_request에서 돌리고, 소비 리포에는 템플릿 1회 복사 방식으로 전파합니다.
 constraints:
-  - "이슈 제목은 번호를 생성 뒤에만 알 수 있어 `gh issue create` → `gh issue edit N --title \"#N <제목>\"` 2단계로 적습니다(gh-loop Stage 1, gh-fanout 추적 이슈)."
-  - "PR 제목의 N은 PR 자신의 번호가 아니라 닫는 이슈 번호이며 `Closes #N`은 본문에 그대로 유지합니다."
-  - "normalizeTitle은 `^#\\d+\\s+`에 해당하는 선행 접두만 벗기고(중간·단독 `#N`은 유지), 변경은 테스트로 고정합니다."
-  - "기존 이슈·PR 제목 소급 변경 금지. scripts/harness-version-bump.sh와 CHANGELOG 헤더는 #47 워커 소관이라 건드리지 않습니다(CHANGELOG 항목 추가만 허용)."
-  - "Stage 2의 체크 완료 seed·scope → 변경 → closeout 커밋 순서를 따르며, 구현 중 suite를 반복하지 않고 변경을 마친 뒤 최종 검증을 한 번 수행합니다."
+  - "GitHub-hosted 러너, on: push(main) + pull_request, 권한 contents: read, 비밀 값 없음."
+  - "아카이브 유출 검사는 로컬 게이트(.githooks/pre-push)를 그대로 실행해 재사용하고 경로 목록을 복제하지 않습니다."
+  - "하네스 sync는 .github/를 건드리지 않습니다 — 소비 리포는 templates/github-workflows/harness-ci.yml을 1회 복사합니다."
+  - "다른 브랜치가 작업 중인 파일(#47 harness-version-bump.sh·CHANGELOG 헤더, #78 gh-loop-issue.mjs·gh-loop/gh-fanout SKILL, #15 게이트 .mjs, #29 규칙 감사 문서)은 건드리지 않습니다."
 acceptance_criteria:
   - id: AC1
-    title: "gh-loop Stage 1·gh-fanout 추적 이슈·gh-loop PR(Stage 3/compr)의 생성 절차가 `#N ` 접두를 붙이고 SKILL.md 명령 예시가 이슈는 create→edit 2단계, PR은 닫는 이슈 번호 접두 1단계로 적혀 있습니다."
+    title: ".github/workflows/harness-ci.yml이 push(main)·pull_request에서 3 job(archive-leak·harness-suite·docs-drift)을 돌리고, 아카이브 유출 검사는 docs/sum·docs/reviews·docs/brainstorming을 커밋된 트리 기준으로 로컬 .githooks/pre-push 로직을 재사용해 검사합니다."
   - id: AC2
-    title: "gh-loop-issue.mjs의 normalizeTitle이 선행 `#N ` 접두를 무시하고 비교하며(마커 해시 포함) gh-loop-issue.test.mjs가 접두 있는 기존 제목 dedup과 접두 경계 케이스를 고정합니다."
+    title: "templates/github-workflows/harness-ci.yml이 라이브 워크플로와 바이트 동일하고, templates/github-workflows/README.md에 1회 복사 안내와 조정 지점(테스트 경로·브랜치명·Node 버전·docs-drift 소스 전용)이 있으며 루트 README에 CI 단락이 있습니다."
   - id: AC3
-    title: "기존 이슈·PR 제목은 변경하지 않습니다(소급 금지). SKILL 문구에도 명시하고 이 작업은 어떤 기존 제목도 편집하지 않습니다."
-  - id: AC4
-    title: "하네스 suite(node --test .omp/extensions/harness/tests/*.test.mjs) 전부 통과, node scripts/docs-drift 0 errors/0 warnings."
+    title: "하네스 suite와 node scripts/docs-drift가 통과하고, 통합 계약 harness-harness_integration_contract.md의 Known residual surfaces가 서버측 백스톱 도입·잔여를 서술하도록 갱신됩니다."
 out_of_scope:
-  - "기존 열린·닫힌 이슈·PR 제목의 소급 변경."
-  - "scripts/harness-version-bump.sh, CHANGELOG 헤더(#47 워커 소관)."
-  - "gh-loop-detect.mjs의 계획 로직 변경 — 제목은 헬퍼가 접두 없이 내고 접두는 SKILL의 생성 뒤 edit에서만 붙습니다."
-  - "PR 생성·교차검증 게시·head와 nonce 결정 요청은 커밋 뒤 후속 절차이며 AC 선체크 대상이 아닙니다."
+  - "self-hosted 러너, gh-loop option A 러너 활성화, 브랜치 보호 규칙(머지 차단)은 별도 결정입니다."
+  - "PR 생성·교차검증 게시·head와 nonce 결정 요청은 커밋 뒤 후속 절차입니다. 이슈 AC (c)(PR에서 Actions 3 job 녹색 + 실행 링크 기록)도 PR이 있어야 검증되므로 선체크하지 않고 PR 본문·댓글에 기록합니다."
 assumptions:
-  - "시작 HEAD는 PR #81이 머지된 0f205a7이고 작업트리는 깨끗했습니다."
-  - "코디네이터의 마커 댓글에 튜플이 이미 있어 워커는 ingest만 수행했습니다(gh_loop_dispatched #78 append)."
+  - "시작 HEAD는 main 0f205a7이고 작업트리는 깨끗했으며 .github/ 디렉터리는 없었습니다."
+  - "pull_request 이벤트는 PR 브랜치에 있는 워크플로 파일로 돌므로 PR 자체에서 AC3을 검증합니다."
 risks:
-  - "`^#\\d+ ` 제거는 제목이 우연히 `#12 …`로 시작하는 정당한 finding에도 적용돼 접두 없는 같은 제목과 중복 판정됩니다 — 에이전트 접두 규칙 하에서 의도된 동작입니다."
-  - "~/.claude/skills/compr 전역 미러는 closeout_contract §4에 따라 복사로 동기화합니다(리포 밖 파일)."
+  - "CI 러너 환경(Ubuntu, Node 22)에서 일부 하네스 테스트가 로컬(WSL, Node 24)과 다르게 실패할 수 있습니다 — 실행 결과를 보고 조정합니다."
+  - "워크플로가 PR 브랜치의 파일로 돌므로 악의적 PR이 검사를 제거할 수 있습니다 — 통합 계약 잔여면에 기록합니다."
 references:
-  - path: https://github.com/rae-hugo-kim/omp/issues/78
-    reason: "적용 지점·주의·AC의 원문입니다."
-  - path: .omp/extensions/harness/gh-loop-issue.mjs
-    reason: "normalizeTitle·dedupMarker·decideIssue를 가진 dedup 헬퍼입니다."
-  - path: .omp/skills/gh-loop/SKILL.md
-    reason: "Stage 1 생성 블록과 Stage 3 PR 절차를 가진 스킬입니다."
-  - path: .omp/skills/gh-fanout/SKILL.md
-    reason: "추적 이슈 생성 블록을 가진 스킬입니다."
-  - path: .omp/skills/compr/SKILL.md
-    reason: "gh pr create 제목 예시를 가진 스킬입니다."
+  - path: https://github.com/rae-hugo-kim/omp/issues/30
+    reason: "배경·선행 결정·세션 직접 결정(A)·AC 원문입니다."
+  - path: .githooks/pre-push
+    reason: "재사용하는 아카이브 유출 로컬 게이트입니다."
+  - path: templates/github-workflows/README.md
+    reason: "1회 복사 안내를 추가하는 템플릿 문서입니다."
+  - path: .omp/rules/harness-harness_integration_contract.md
+    reason: "Known residual surfaces에 서버측 백스톱 서술을 갱신합니다."
 estimate:
-  risk: low
+  risk: medium
   files: 5
   depth: low
   model: anthropic/claude-sonnet-5-5
