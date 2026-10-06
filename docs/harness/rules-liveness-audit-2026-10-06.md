@@ -25,10 +25,11 @@
 
 ### 1.3 처분 제안 (기준 판정 + §6 내용 중복 분석)
 
-- 생 → **유지**. 단 §6에서 고유 내용이 거의 없고 문서가 스스로 형제의 쌍둥이라 선언한 경우에만 조건을 달아요(조건부 유지).
-- 약 → 고유 내용이 있고 흡수 모체가 없으면 **유지(조건부)**, 모체가 있으면 **병합**.
+- 생 → **유지**.
+- 약 → 흡수 모체(§6)가 있으면 **병합**, 없으면 **유지**.
 - 사 → 모체가 있으면 **병합**(고유 절을 옮김), 없으면 **폐기**.
 - 병합 방향은 **살아 있는 쪽이 모체**예요(게이트 배선·외부 참조를 가진 파일이 남아요).
+- **"조건부" 꼬리표**는 기준 판정과 무관하게, §6에서 SSOT 중복이나 stale 절 정리 과제가 확인된 **유지** 규칙에 붙여요(§7.3 — 내용 개정이라 별도 이슈). 이번에는 `code_review_policy`(임계값 3중 중복·심각도 라벨 불일치), `commit_and_pr`(PR 본문 템플릿 3종), `mcp_policy`(본문 절반 stale) 3편이에요. `coding_standards`는 임계값 SSOT의 **목적지**라 과제가 없어요.
 
 한계: 이름 grep은 발동의 근사치예요. 문체·추측 금지처럼 매 턴 작동하는 규칙은 이름을 남기지 않고, 게이트가 집행하는 규칙은 이벤트 행으로만 남아요. 그래서 ③에는 이름 흔적과 집행 이벤트를 둘 다 적고, 흔적의 성격(적용/개정 vs 단순 언급)을 §5.3에서 하나씩 판정했어요. `docs/sum`·`docs/reviews`는 gitignore 로컬 전용이라 메인 체크아웃(`/home/rae/projects/workspace/omp`)의 사본을 읽기 전용으로 집계했어요 — 다른 머신에서는 그 두 열의 숫자가 달라요.
 
@@ -226,12 +227,12 @@ latest() { grep -oE '20[0-9]{2}-[0-9]{2}-[0-9]{2}' | sort | tail -1; }
 printf '%-29s %5s %3s %-10s %3s %-10s %3s %-10s %3s %-10s %3s %-10s\n' rule audit sum latest rev latest iss latest cmt latest git latest
 for f in .omp/rules/harness-*.md; do n=$(basename "$f" .md); s=${n#harness-}
   if [ "$s" = core ]; then p="harness-core"; else p="(^|[^a-z_])$s([^a-z_]|$)"; fi
-  a=$(grep -cE "$p" docs/harness/audit.jsonl)
+  a=$(git show 0f205a7:docs/harness/audit.jsonl | grep -cE "$p")          # 감사 기준 커밋에 고정
   sf=$(grep -lE "$p" $MAIN/docs/sum/*.md 2>/dev/null | xargs -rn1 basename); su=$(echo "$sf" | grep -c .); sl=$(echo "$sf" | latest)
   rf=$(grep -rlE "$p" $MAIN/docs/reviews 2>/dev/null | xargs -rn1 basename); rv=$(echo "$rf" | grep -c .); rl=$(echo "$rf" | latest)
   il=$(awk -v p="$p" '/^### issue#/{cur=$2; d=substr($NF,1,10)} $0 ~ p && cur!=""{seen[cur]=d} END{for(k in seen)print seen[k]}' /tmp/rules-audit-29/issues.md); is=$(echo "$il" | grep -c .); isl=$(echo "$il" | latest)
   cl=$(awk -v p="$p" '/^### comment/{cur=$3; d=substr($4,1,10)} $0 ~ p && cur!=""{seen[cur]=d} END{for(k in seen)print seen[k]}' /tmp/rules-audit-29/comments.md); cm=$(echo "$cl" | grep -c .); cml=$(echo "$cl" | latest)
-  gl=$(git log --format=%ad --date=short -E --grep="$p"); gc=$(echo "$gl" | grep -c .); gll=$(echo "$gl" | latest)
+  gl=$(git log 0f205a7 --format=%ad --date=short -E --grep="$p"); gc=$(echo "$gl" | grep -c .); gll=$(echo "$gl" | latest)
   printf '%-29s %5s %3s %-10s %3s %-10s %3s %-10s %3s %-10s %3s %-10s\n' "$s" "$a" "$su" "$sl" "$rv" "$rl" "$is" "$isl" "$cm" "$cml" "$gc" "$gll"
 done
 ```
@@ -276,8 +277,8 @@ writing_style                     0   4 2026-09-28   1 2026-10-02   5 2026-10-03
 ### 5.2 집행 이벤트 흔적 (이름 없이 남는 발동)
 
 ```bash
-for e in adversarial_review review_override review_remediation acceptance_wip scope_self_detect estimate_vs_actual gh_loop_dispatched gh_loop_closed thread_opened kickoff_completed policy_update; do
-  echo "$e: n=$(grep -c "\"event\":\"$e\"" docs/harness/audit.jsonl) last=$(grep "\"event\":\"$e\"" docs/harness/audit.jsonl | tail -1 | grep -oE '"ts":"[^"]+"' | head -1)"; done
+for e in adversarial_review review_override review_remediation acceptance_wip scope_self_detect estimate_vs_actual gh_loop_dispatched gh_loop_closed policy_update; do
+  echo "$e: n=$(git show 0f205a7:docs/harness/audit.jsonl | grep -c "\"event\":\"$e\"") last=$(git show 0f205a7:docs/harness/audit.jsonl | grep "\"event\":\"$e\"" | tail -1 | grep -oE '"ts":"[^"]+"' | head -1)"; done
 ```
 
 | 이벤트 | n | 최근 | 발동한 규칙 |
@@ -288,7 +289,7 @@ for e in adversarial_review review_override review_remediation acceptance_wip sc
 | `acceptance_wip` | 22 | 2026-10-01 | cycle_definition(acceptance-gate WIP 레인) |
 | `scope_self_detect` | 1 | 2026-07-30 | docs/rules/scope_self_detect_policy(harness-core 한 줄) |
 | `estimate_vs_actual` | 16 | 2026-10-03 | cycle_definition 예상 레코드·agent_routing 등급 원자료 |
-| `gh_loop_dispatched`/`gh_loop_closed` | 2/1 | 2026-10-06 | agent_routing(모델·에포트 기록) |
+| `gh_loop_dispatched`/`gh_loop_closed` | 1/1 | 2026-10-03 | agent_routing(모델·에포트 기록 — 이 브랜치가 #29 dispatch 행 1개를 더해요) |
 | `policy_update` | 1 | 2026-07-30 | adversarial_review 불변식 4 갱신(`rules/adversarial_review.md` 인용) |
 
 로컬 상태(메인 체크아웃 `.omp/harness-state/`): `session-log.jsonl` 2,068행(2026-10-03 — breadcrumb, `session_persistence` 집행), `read-log.txt` 2,994행(2026-10-03 — context-gate), `test-history.json` 797행(2026-10-01 — backpressure, `verification_tests_and_evals` 집행), `hook-debug.log` 4행(2026-09-22 — `HARNESS_DEBUG` 없이는 advisory 게이트의 발동이 기록되지 않아요). `docs/reviews` JSON 사이드카 35편은 `adversarial_review` 불변식 3의 발동 흔적이에요.
@@ -360,7 +361,7 @@ for e in adversarial_review review_override review_remediation acceptance_wip sc
 | M3 | `harness-context_management` (사) | `harness-session_persistence` (생) | 컴팩션 시점(:14-26), 보존 MUST(:30-39), `<remember>`/notepad(:56-85); `~/.claude/scripts` 절(:90-114)은 폐기 | `harness-session_persistence.md:6,10,77`(자기 정의 3곳), `harness-cycle_definition.md:189`, `scripts/harness-audit.sh:162-165,333-336`(+5 → 모체로 재배치), AGENTS.md Operational rails |
 | M4 | `harness-learning_policy` (약) | `harness-assetization` (생) | 좋은 학습 4기준(:19-24), 금지 3종(:36-38) | `templates/retro.md:26`, `harness-session_persistence.md:78`, AGENTS.md Operational rails |
 | M5 | `harness-quality_gates` (약) | `harness-verification_tests_and_evals` (생) | 6 게이트 정규 이름(:12-21), 트리거 표(:42-48), 억제 금지(:63-66) | `checklists/quality_gate.md`, `harness-adversarial_review.md`(Related), `scripts/harness-audit.sh:207-210`(+1 → 모체로 재배치), AGENTS.md Quality rails |
-| M6 | `harness-tdd_policy` (약) | `harness-verification_tests_and_evals` (생) | 커버리지 목표(:33-36), **TDD 생략 전 명시 승인(:72-77 3단계)**; e2e 포맷(:40-70)은 실사용 0건이라 폐기 | AGENTS.md Core Principles 4 "→ Detail"·Quality rails, `.omp/extensions/harness/tests/risk-assess.test.mjs:56,63,119`(픽스처 경로 — 다른 docs-only 경로로 교체) |
+| M6 | `harness-tdd_policy` (약) | `harness-verification_tests_and_evals` (생) | 커버리지 목표(:33-36), **TDD 생략 전 명시 승인(:72-77 3단계)**; e2e 포맷(:40-70)은 실사용 0건이라 폐기 | AGENTS.md Core Principles 4 "→ Detail"·Quality rails, `.omp/extensions/harness/tests/risk-assess.test.mjs:56,119,238,418,422`(현재 이름 픽스처 5곳 — 존재하는 다른 docs-only 경로로 교체; `:63`의 `rules/tdd_policy.MD`는 레거시 대소문자 분류 픽스처라 그대로 둬요) |
 | M7 | `harness-documentation_policy` (사) | `harness-writing_style` (생) | 한/영 독자 분리(:12-13), UTF-8 NO-BOM(:26), latest-only(:33-37) | `harness-writing_style.md:9,51,97`, `risk-assess.test.mjs:53`(픽스처), AGENTS.md Optional 목록 |
 | M8 | `harness-hook_recipes` (사) | `harness-harness_integration_contract` (생) | 이벤트 차단 가능 표(:17-24), 페이로드 스키마(:28-36), fail-open(:129); 레시피 5종은 폐기 | `harness-session_persistence.md:79`, AGENTS.md Tool rails |
 | M9 | `harness-agent_security` (사) | `harness-safety_security` (생) | MUST 3개(:14-49), 방어 블록·계정 분리·메모리 감사(:53-90), OWASP 표(:94-104); 관할 분리(:6)는 절 제목으로 | `harness-prompt_engineering.md:174,341`, `scripts/harness-audit.sh:293-296`(security_guardrails +2 → 모체 가중치로 재배치), AGENTS.md Core rails |
