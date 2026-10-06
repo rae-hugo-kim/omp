@@ -1,46 +1,43 @@
-name: harness-ci-archive-leak-backstop-30
-status: done
-completed: 2026-10-06
+name: changelog-unreleased-promotion-47
+status: approved
 version: 1
-task_id: "20261006-064500-30ci"
-# gh-loop worker Stage 2에 따라 이슈 #30 본문과 "세션에서 직접 결정함"(A — 검사 3종 CI) 댓글을 명세로 삼습니다.
+task_id: "20261006-060940-4a7c"
+# gh-loop worker Stage 2에 따라 이슈 #47 본문과 결정 댓글(2026-10-03 결정 1, 2026-10-06 결정 2·3)·AC (a)(b)(c)를 명세로 삼습니다.
 # 직전 완료 seed(gh-loop-dispatch-closeout-record-79)는 git 이력에 보존합니다.
 goal: >
-  omp에 GitHub Actions CI(harness-ci.yml)를 도입해 아카이브 유출 검사·하네스 suite·docs-drift를
-  push(main)와 pull_request에서 돌리고, 소비 리포에는 템플릿 1회 복사 방식으로 전파합니다.
+  scripts/harness-version-bump.sh가 범프 때 CHANGELOG.md의 [Unreleased] 항목을 "## [<v>] - <date>" 절로 승격하고
+  빈 [Unreleased] 절을 남기며, CHANGELOG 헤더 문구를 실제 규칙(앞으로 태그 기준 분할, 소급 없음)과 일치시킵니다.
 constraints:
-  - "GitHub-hosted 러너, on: push(main) + pull_request, 권한 contents: read, 비밀 값 없음."
-  - "아카이브 유출 검사는 로컬 게이트(.githooks/pre-push)를 그대로 실행해 재사용하고 경로 목록을 복제하지 않습니다."
-  - "하네스 sync는 .github/를 건드리지 않습니다 — 소비 리포는 templates/github-workflows/harness-ci.yml을 1회 복사합니다."
-  - "다른 브랜치가 작업 중인 파일(#47 harness-version-bump.sh·CHANGELOG 헤더, #78 gh-loop-issue.mjs·gh-loop/gh-fanout SKILL, #15 게이트 .mjs, #29 규칙 감사 문서)은 건드리지 않습니다."
+  - "소급 분할하지 않습니다: 2026.65~2026.85 누적분은 다음 범프에서 한 덩어리로 승격되도록 그대로 두고 과거 항목을 재배치하지 않습니다."
+  - "변경이 없으면 no-op이고 --dry-run은 트리·인덱스·태그·HEAD를 건드리지 않습니다."
+  - "실제 범프 실행·태그 발행·push는 이 작업의 범위가 아닙니다."
+  - "Stage 2의 체크 완료 seed·scope → 변경 → 리뷰 후속 → closeout 커밋 순서를 따릅니다."
 acceptance_criteria:
   - id: AC1
-    title: ".github/workflows/harness-ci.yml이 push(main)·pull_request에서 3 job(archive-leak·harness-suite·docs-drift)을 돌리고, 아카이브 유출 검사는 docs/sum·docs/reviews·docs/brainstorming을 커밋된 트리 기준으로 로컬 .githooks/pre-push 로직을 재사용해 검사합니다."
+    title: "harness-version-bump.sh가 [Unreleased] 항목을 ## [<새 버전>] - <날짜>로 승격하고 빈 [Unreleased]를 남기며(메타와 같은 범프 커밋), 항목이 없거나 CHANGELOG.md가 없거나 하네스 변경이 없으면 CHANGELOG를 건드리지 않고, --dry-run은 트리를 건드리지 않음을 격리 임시 리포 스모크·테스트로 실측합니다."
   - id: AC2
-    title: "templates/github-workflows/harness-ci.yml이 라이브 워크플로와 바이트 동일하고, templates/github-workflows/README.md에 1회 복사 안내와 조정 지점(테스트 경로·브랜치명·Node 버전·docs-drift 소스 전용)이 있으며 루트 README에 CI 단락이 있습니다."
+    title: "CHANGELOG 헤더 문구가 실제 규칙(범프 때 승격, 소급 분할 없음, 2026.65~2026.85는 한 덩어리)과 일치합니다."
   - id: AC3
-    title: "하네스 suite와 node scripts/docs-drift가 통과하고, 통합 계약 harness-harness_integration_contract.md의 Known residual surfaces가 서버측 백스톱 도입·잔여를 서술하도록 갱신됩니다."
+    title: "하네스 suite(node --test .omp/extensions/harness/tests/*.test.mjs)와 node scripts/docs-drift가 통과합니다."
 out_of_scope:
-  - "self-hosted 러너, gh-loop option A 러너 활성화, 브랜치 보호 규칙(머지 차단)은 별도 결정입니다."
-  - "PR 생성·교차검증 게시·head와 nonce 결정 요청은 커밋 뒤 후속 절차입니다. 이슈 AC (c)(PR에서 Actions 3 job 녹색 + 실행 링크 기록)도 PR이 있어야 검증되므로 선체크하지 않고 PR 본문·댓글에 기록합니다."
+  - "2026.65~2026.85 누적 항목의 소급 분할·재배치."
+  - "실제 범프(2026.86) 실행·태그 발행·push."
+  - "PR 생성·교차검증 게시·head와 nonce 결정 요청은 커밋 뒤 후속 절차이며 AC 선체크 대상이 아닙니다."
 assumptions:
-  - "시작 HEAD는 main 0f205a7이고 작업트리는 깨끗했으며 .github/ 디렉터리는 없었습니다."
-  - "pull_request 이벤트는 PR 브랜치에 있는 워크플로 파일로 돌므로 PR 자체에서 AC3을 검증합니다."
+  - "시작 HEAD는 main 0f205a7이고 코디네이터가 agent-working을 붙였습니다."
+  - "소비 리포는 CHANGELOG.md를 갖지 않으므로(init이 삭제) 파일이 없으면 승격을 건너뜁니다."
 risks:
-  - "CI 러너 환경(Ubuntu, Node 22)에서 일부 하네스 테스트가 로컬(WSL, Node 24)과 다르게 실패할 수 있습니다 — 실행 결과를 보고 조정합니다."
-  - "워크플로가 PR 브랜치의 파일로 돌므로 악의적 PR이 검사를 제거할 수 있습니다 — 통합 계약 잔여면에 기록합니다."
+  - "범프 커밋이 pathspec으로 CHANGELOG.md를 받으므로 커밋되지 않은 수정이 쓸려 들어갈 수 있어, 그 경우 아무것도 바꾸기 전에 중단합니다."
 references:
-  - path: https://github.com/rae-hugo-kim/omp/issues/30
-    reason: "배경·선행 결정·세션 직접 결정(A)·AC 원문입니다."
-  - path: .githooks/pre-push
-    reason: "재사용하는 아카이브 유출 로컬 게이트입니다."
-  - path: templates/github-workflows/README.md
-    reason: "1회 복사 안내를 추가하는 템플릿 문서입니다."
-  - path: .omp/rules/harness-harness_integration_contract.md
-    reason: "Known residual surfaces에 서버측 백스톱 서술을 갱신합니다."
+  - path: https://github.com/rae-hugo-kim/omp/issues/47
+    reason: "결정 1·2·3과 AC (a)(b)(c)의 원문입니다."
+  - path: scripts/harness-version-bump.sh
+    reason: "승격을 추가하는 스크립트입니다."
+  - path: docs/decisions/003-harness-release-cadence.md
+    reason: "범프 시점(발행 기준)을 정한 ADR이며 이번 변경은 시점을 바꾸지 않습니다."
 estimate:
-  risk: medium
-  files: 5
+  risk: low
+  files: 3
   depth: low
   model: anthropic/claude-sonnet-5-5
   effort: high
