@@ -1,5 +1,6 @@
 name: rules-merge-plan-86
-status: approved
+status: done
+completed: 2026-10-06
 version: 1
 task_id: "20261006-094329-349d"
 # gh-loop worker Stage 2에 따라 이슈 #86 본문(연구할 것 5·산출물·AC 4)과 "세션에서 직접 결정함" 댓글(본문 범위·AC대로 연구 문서만, 규칙·스크립트 수정 없음)을 명세로 삼습니다.
