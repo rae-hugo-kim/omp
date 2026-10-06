@@ -171,10 +171,15 @@ gh repo view --json nameWithOwner -q .nameWithOwner
      ```bash
      label_args=()
      while IFS= read -r l; do label_args+=(--label "$l"); done < "$GHLOOP_OUT/labels"
-     gh issue create --title "$(cat "$GHLOOP_OUT/title")" \
-       --body-file "$GHLOOP_OUT/body.md" "${label_args[@]}"
+     ISSUE_URL=$(gh issue create --title "$(cat "$GHLOOP_OUT/title")" \
+       --body-file "$GHLOOP_OUT/body.md" "${label_args[@]}") || { echo "gh issue create failed — abort"; exit 1; }
+     ISSUE_NUM=${ISSUE_URL##*/}   # gh가 돌려주는 이슈 URL 끝의 번호 — 번호는 생성 뒤에만 알 수 있어 제목 접두는 2단계다(#78)
+     gh issue edit "$ISSUE_NUM" --title "#$ISSUE_NUM $(cat "$GHLOOP_OUT/title")" \
+       || echo "제목 접두 부착 실패 — 이슈는 생성됐으니 재생성하지 말고 제목만 수동으로 '#$ISSUE_NUM <제목>'으로 고친다"
      ```
      `"$(cat …/title)"` 전개 결과는 재스캔되지 않아 finding의 `$(...)`/백틱이 무력화되고, `--body-file`은 본문을 명령줄 밖으로 빼며, 배열은 각 라벨을 한 인자로 안전 전달한다. `body.md`엔 dedup 마커가 박힌다.
+
+     **제목 `#N ` 접두(#78, 사용자 결정 2026-10-03 — 목록·카드·알림에서 번호로 찾기 위함)**: 에이전트가 만드는 이슈·PR 제목은 `#N <제목>`으로 시작한다. 이슈는 번호를 생성 뒤에만 알 수 있어 `gh issue create` → `gh issue edit N --title "#N <제목>"` 2단계로 만든다(gh-fanout 추적 이슈, 코디네이터가 직접 만드는 이슈도 같다). 헬퍼의 `payload.title`·`$GHLOOP_OUT/title`은 접두 없는 제목 그대로이고, 접두는 생성 뒤 edit에서만 붙는다. dedup은 `normalizeTitle`이 비교 전에 선행 `#N `을 벗기므로(마커 해시도 같다) 이미 접두가 붙은 열린 이슈와 접두 없는 새 finding이 계속 중복으로 잡힌다. 제목의 `#N`은 GitHub 자동 링크일 뿐 close 키워드가 아니므로 `Closes #N`은 본문에 그대로 둔다. **소급 금지**: 이미 있는 이슈·PR 제목은 바꾸지 않는다.
      상태 라벨은 이슈 생성 분류(상태 라벨 절)를 따른다 — 루프가 고칠 finding은 백로그라 붙이지 않고(dispatch가 곧 `agent-working`을 붙인다), 사용자 결정이 필요한 이슈는 `needs-decision`(`--kind decision`이면 헬퍼가 붙인다), 확인만 필요한 이슈는 `--label needs-review`를 더한다.
 
 ### Stage 2 — Issue → Fix (재사용, 신규 구현 없음)
@@ -196,7 +201,7 @@ node .omp/extensions/harness/gh-loop-record.mjs close --issue N --files-changed 
 
 ### Stage 3 — Fix → PR
 
-`compr` 스킬 절차로 브랜치·커밋·PR을 만든다 (`gh pr create`, `.omp/skills/compr/SKILL.md`). PR 본문에 `Closes #<issue>`를 넣어 이슈와 연결한다. compr가 PR에 `needs-review`를 붙이고, `gh-loop` 라벨은 PR에 붙이지 않는다(상태 라벨 절). 이슈는 워커가 Stage 4·5를 이어 가므로 `agent-working`을 유지한다.
+`compr` 스킬 절차로 브랜치·커밋·PR을 만든다 (`gh pr create`, `.omp/skills/compr/SKILL.md`). PR 제목은 `#<issue> <제목>`으로 시작한다 — 접두는 PR 자신의 번호가 아니라 **닫는 이슈 번호**라 PR 번호를 기다리지 않고 `gh pr create --title "#<issue> <제목>"` 한 번에 만든다(#78). PR 본문에 `Closes #<issue>`를 넣어 이슈와 연결한다(제목의 `#N`은 close 키워드가 아니다). compr가 PR에 `needs-review`를 붙이고, `gh-loop` 라벨은 PR에 붙이지 않는다(상태 라벨 절). 이슈는 워커가 Stage 4·5를 이어 가므로 `agent-working`을 유지한다.
 
 ### Stage 4 — PR → Cross-verify (**advisory**)
 

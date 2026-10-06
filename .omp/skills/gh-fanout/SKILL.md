@@ -43,8 +43,12 @@ orca status --json
 gh-loop Stage 1의 라벨 블록으로 `gh-loop`와 상태 라벨 3개를 보장합니다. 인자가 트래킹 이슈 번호이면 그 이슈를 읽어 같은 리포의 gh-fanout 집계인지 확인하고 `TRACKING`에 번호를 보관합니다. label/filter 호출이면 기존 열린 트래킹 이슈에서 같은 배치를 찾아 재사용하며, 후보가 여럿이면 사용자에게 번호를 묻습니다. 없으면 배치 필터·cap·빈 워커 표를 담은 본문 파일(`TRACKING_BODY`)과 제목(`TRACKING_TITLE`)을 준비해 생성합니다.
 
 ```bash
-gh issue create --title "$TRACKING_TITLE" --body-file "$TRACKING_BODY" --label needs-review
+TRACKING_URL=$(gh issue create --title "$TRACKING_TITLE" --body-file "$TRACKING_BODY" --label needs-review) || exit 1
+TRACKING=${TRACKING_URL##*/}   # 번호는 생성 뒤에만 알 수 있어 제목 접두는 2단계입니다(#78)
+gh issue edit "$TRACKING" --title "#$TRACKING $TRACKING_TITLE" || echo "제목 접두 부착 실패 — 이슈는 생성됐으니 재생성하지 말고 제목만 수동으로 '#$TRACKING <제목>'으로 고칩니다"
 ```
+
+제목은 `#N <제목>`으로 시작합니다(사용자 결정 2026-10-03 — gh-loop Stage 1 "제목 `#N ` 접두"와 같은 규칙). `TRACKING_TITLE`은 접두 없는 제목이고 접두는 생성 뒤 edit에서만 붙습니다. 이미 있는 트래킹 이슈의 제목은 소급해서 바꾸지 않습니다.
 
 반환 URL의 이슈 번호를 `TRACKING`에 보관하고 읽기·갱신 가능 여부를 확인한 뒤 진행합니다. 트래킹 이슈는 집계 보고이므로 `needs-review`로 만들고 **`gh-loop`를 붙이지 않습니다**(자기 자신을 백로그로 할당하지 않습니다). 생성 응답 유실이면 기존 이슈를 단발 조회해 확인하며, 확인할 수 없으면 재생성·클레임 없이 보고합니다. 재호출은 이 번호로 하며 §6의 재개 대기·기동 실패 기록을 §1 신규 후보보다 먼저 처리합니다.
 

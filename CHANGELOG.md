@@ -4,6 +4,7 @@
 
 ## [Unreleased]
 
+- **feat(gh-loop)**: #78 — 에이전트가 만드는 이슈·PR 제목을 `#N <제목>`으로 시작합니다(사용자 결정 2026-10-03). gh-loop Stage 1과 gh-fanout 추적 이슈는 번호를 생성 뒤에만 알 수 있어 `gh issue create` → `gh issue edit N --title "#N <제목>"` 2단계로, gh-loop Stage 3·compr PR은 PR 번호가 아니라 **닫는 이슈 번호**를 `gh pr create --title "#<N> <제목>"`에 바로 넣습니다(`Closes #N`은 본문에 유지). `gh-loop-issue.mjs`의 `normalizeTitle`이 비교 전에 선행 `#N `을 벗겨 이미 접두가 붙은 열린 이슈가 접두 없는 새 finding의 dedup에서 계속 중복으로 잡히며(마커 해시도 동일), 접두 케이스 테스트를 `gh-loop-issue.test.mjs`에 추가했습니다. 기존 이슈·PR 제목은 소급 변경하지 않습니다.
 - **fix(rules)**: #49 — `harness-core`에 언어 지시 한 줄을 추가합니다. 사용자의 언어로 답하고 도구 호출 사이의 진행 서술도 최종 답과 같은 언어로 쓰며, 코드·식별자·경로·명령·오류 문자열은 영어를 유지합니다. 하네스가 있는 리포는 clone과 `harness-check`만으로 이 지시를 받아 사용자 디렉터리 파일에 의존하지 않습니다. `harness-writing_style`이 가리키던 존재하지 않는 "글로벌 규칙"은 `rule://harness-core`로 정정합니다. `.omp/RULES.md` 생성, bootstrap의 사용자 레벨 파일 설치, PERSONALITY 템플릿, AGENTS.md는 범위 밖입니다.
 - **fix(gh-loop)**: #71의 승인된 A+C에 따라 `.gitattributes`에서 `docs/harness/audit.jsonl` 한 경로만 `merge=union`으로 지정합니다. gh-fanout·gh-loop는 순차 PR 처리, 소유 워커의 최신 base·청결·원격 SHA·원 범위 확인, 로그 보존·JSON·테스트·새 head 리뷰 검증, PR별 rebase 승인과 예상 SHA를 지정한 `--force-with-lease`, 변경된 head의 별도 머지 승인·`--match-head-commit`을 안내합니다. union은 로컬 순수 append 충돌 완화일 뿐 GitHub 자동 해결이나 JSON·append-only 보증이 아닙니다. 소비 리포의 `.gitattributes`는 기존 sync 범위 밖에 두고 별도 승인 후 한 줄만 적용합니다.
 - **docs(rules)**: #71의 순차 PR 절차와 기존 통합 계약의 적용 경계를 명시합니다. `harness-harness_integration_contract`의 과거 수동 union·웹 편집 사례는 gh-loop/gh-fanout의 자동 fallback이 아니며, 소유 워커의 PR별 승인·rebase·로그 검증·새 head 승인 절차를 따릅니다.

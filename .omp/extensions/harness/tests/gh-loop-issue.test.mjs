@@ -86,6 +86,37 @@ test('normalizeTitle + dedupMarker are stable and kind-keyed', () => {
   assert.notEqual(dedupMarker('finding', 'A'), dedupMarker('decision', 'A'), 'kind-keyed');
 });
 
+test('normalizeTitle ignores a leading "#N " prefix only (#78)', () => {
+  assert.equal(normalizeTitle('#78 Flaky  retry'), 'flaky retry');
+  assert.equal(normalizeTitle('  #78   Flaky retry '), 'flaky retry', 'extra whitespace around the prefix');
+  assert.equal(normalizeTitle('Flaky retry #78 again'), 'flaky retry #78 again', 'mid-title #N stays');
+  assert.equal(normalizeTitle('#78'), '#78', 'a bare number with no title after it is not a prefix');
+  assert.equal(normalizeTitle('#abc Flaky'), '#abc flaky', 'non-numeric tag is not a prefix');
+  assert.equal(normalizeTitle('##78 Flaky'), '##78 flaky', 'only one # then digits');
+  assert.equal(normalizeTitle('#78 #79 Flaky'), '#79 flaky', 'only the leading prefix is stripped');
+});
+
+test('dedup: bare finding title matches an open issue already renamed to "#N <title>" -> skip (#78)', () => {
+  const existing = [{ number: 78, title: '#78 Flaky retry in worker', labels: ['gh-loop'], body: 'x' }];
+  const d = decideIssue({ kind: 'finding', title: 'Flaky retry in worker', existing });
+  assert.equal(d.action, 'skip');
+  assert.match(d.reason, /#78/);
+  assert.equal(d.dup, 78);
+});
+
+test('dedup: prefixed candidate title also matches a bare open issue; kind scope still applies (#78)', () => {
+  const bare = [{ number: 5, title: 'Flaky retry in worker', body: 'x' }];
+  assert.equal(decideIssue({ kind: 'finding', title: '#9 Flaky retry in worker', existing: bare }).action, 'skip');
+  const decisionIssue = [{ number: 6, title: '#6 Flaky retry in worker', body: '<!-- gh-loop:decision:abc -->' }];
+  assert.equal(decideIssue({ kind: 'finding', title: 'Flaky retry in worker', existing: decisionIssue }).action, 'create',
+    'a prefixed decision issue must not dedup a finding of the same title');
+});
+
+test('dedupMarker is identical with or without the "#N " prefix (#78)', () => {
+  assert.equal(dedupMarker('finding', '#78 Flaky retry'), dedupMarker('finding', 'Flaky retry'));
+  assert.equal(decideIssue({ title: '#78 Flaky retry', existing: [] }).marker, decideIssue({ title: 'Flaky retry', existing: [] }).marker);
+});
+
 test('throttle backstop: OPEN-issue count reaching cap blocks even when created=0', () => {
   const existing = [{ title: 'a', body: 'x' }, { title: 'b', body: 'y' }];
   const d = decideIssue({ title: 'brand new finding', cap: 2, created: 0, existing });
