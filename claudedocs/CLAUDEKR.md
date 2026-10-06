@@ -53,6 +53,7 @@ source_commit_hash: 90d46603206703907dbdfb12aec1e0d5a6010de5
 |무엇|어떻게|위치|
 |---|---|---|
 |편집 전 파일 읽기|`context-gate` + `read-tracker` + `write-tracker` 게이트|`.omp/extensions/harness/gates/`|
+|크로스리포 규율(#15): 다른 리포 파일 변경은 그 리포의 규율 파일(`AGENTS.md` > `CLAUDE.md` > `.cursorrules`) read 뒤에만, 규율·하네스를 가진 다른 리포 대상 commit/push는 차단(대상 리포 세션 안내), 해석 불가 대상은 fail-closed|cross-repo guard(`index.ts` 인프로세스) + `cross-repo.mjs` + `repo-root.mjs`(동일성 = common git dir, 링크드 워크트리는 같은 리포)|`.omp/extensions/harness/gates/`|
 |커밋 완료 기준|`acceptance-gate`(`commit-gates` 디스패처 경유, `.githooks/pre-commit`이 실행)|`.omp/extensions/harness/gates/`, `.githooks/`|
 |실패 시 backpressure|`backpressure-gate` + 트래커|`.omp/extensions/harness/gates/`|
 |위험 리뷰 임계|`review-gate`(`commit-gates` 디스패처 경유, `.githooks/pre-commit`이 실행)|`.omp/extensions/harness/gates/`, `.githooks/`|

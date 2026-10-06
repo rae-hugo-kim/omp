@@ -42,6 +42,7 @@ This repo ships its own enforcement layer as an **OMP extension**. The following
 |What|How|Location|
 |---|---|---|
 |Pre-edit file read|`context-gate` + `read-tracker` + `write-tracker` gates|`.omp/extensions/harness/gates/`|
+|Cross-repo discipline (#15): mutation into another repo needs that repo's discipline file (`AGENTS.md` > `CLAUDE.md` > `.cursorrules`) read first; commit/push into another discipline- or harness-bearing repo is blocked (target-session hint); unresolvable targets fail closed|cross-repo guard (`index.ts`, in-process) + `cross-repo.mjs` + `repo-root.mjs` (identity = common git dir; linked worktrees are the same repo)|`.omp/extensions/harness/gates/`|
 |Commit acceptance criteria|`acceptance-gate` (via `commit-gates` dispatcher, run by `.githooks/pre-commit`)|`.omp/extensions/harness/gates/`, `.githooks/`|
 |Backpressure on failures|`backpressure-gate` + trackers|`.omp/extensions/harness/gates/`|
 |Risky review threshold|`review-gate` (via `commit-gates` dispatcher, run by `.githooks/pre-commit`)|`.omp/extensions/harness/gates/`, `.githooks/`|

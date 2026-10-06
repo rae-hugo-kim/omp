@@ -14,7 +14,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -130,6 +130,31 @@ test('not a git commit -> allow', () => {
 test('acceptance-done flag overrides a blocking active task', () => {
   withDir({ 'seed.yaml': `status: approved\n${AC_BLOCK}`, 'current-scope.md': UNCHECKED_SCOPE, 'acceptance-done': '' }, (dir) => {
     assert.equal(runGate(dir).status, 0);
+  });
+});
+
+// #15 ③: the flag is an override for the commit at hand, not a standing exemption — a flag
+// left behind for months used to pass every later commit before the scope was read.
+test('acceptance-done flag older than 24h is ignored with a warning and left in place (#15 ③)', () => {
+  withDir({ 'seed.yaml': `status: approved\n${AC_BLOCK}`, 'current-scope.md': UNCHECKED_SCOPE, 'acceptance-done': '' }, (dir) => {
+    const flag = join(dir, 'docs', 'harness', 'acceptance-done');
+    const twoDaysAgo = (Date.now() - 48 * 3600 * 1000) / 1000;
+    utimesSync(flag, twoDaysAgo, twoDaysAgo);
+    const r = runGate(dir);
+    assert.equal(r.status, 2, 'the unchecked AC block again');
+    assert.match(r.stderr, /HARNESS WARNING: docs\/harness\/acceptance-done is stale \(48h old, limit 24h\)/);
+    assert.ok(existsSync(flag), 'the stale flag is reported, not removed');
+  });
+});
+
+test('acceptance-done flag within 24h still overrides (boundary: 23h old)', () => {
+  withDir({ 'seed.yaml': `status: approved\n${AC_BLOCK}`, 'current-scope.md': UNCHECKED_SCOPE, 'acceptance-done': '' }, (dir) => {
+    const flag = join(dir, 'docs', 'harness', 'acceptance-done');
+    const recent = (Date.now() - 23 * 3600 * 1000) / 1000;
+    utimesSync(flag, recent, recent);
+    const r = runGate(dir);
+    assert.equal(r.status, 0);
+    assert.doesNotMatch(r.stderr, /stale/);
   });
 });
 
