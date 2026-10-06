@@ -1,5 +1,6 @@
 name: rules-liveness-audit-29
-status: approved
+status: done
+completed: 2026-10-06
 version: 1
 task_id: "20261006-063757-c02e"
 # gh-loop worker Stage 2에 따라 이슈 #29 본문(제안·비범위)과 "세션에서 직접 결정함" 댓글(결정 A — 기준 3개 그대로, 대상 harness-* 29편, 이 사이클은 제안만)을 명세로 삼습니다.

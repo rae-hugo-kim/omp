@@ -270,7 +270,7 @@ verification_tests_and_evals      0   2 2026-09-26   0              4 2026-10-02
 writing_style                     0   4 2026-09-28   1 2026-10-02   5 2026-10-03   3 2026-10-03   3 2026-10-03
 ```
 
-스냅샷 규모: `docs/sum` 45파일(2026-06~10, 최근 `session_2026-10-02_ghloop-dispatch-labels-session-decision.md`), `docs/reviews` 94파일(JSON 사이드카 35, 최근 `review-2026-10-03-151425.json`), `audit.jsonl`은 main `0f205a7` 기준 186행(`^{"ts"` 월별: 2026-06 35 · 07 73 · 08 1 · 09 54 · 10 23 — 이 브랜치가 `gh_loop_dispatched`·`thread_opened` 2행을 더했어요), 이슈+PR 84 · 댓글 131.
+스냅샷 규모: `docs/sum` 45파일(2026-06~10, 최근 `session_2026-10-02_ghloop-dispatch-labels-session-decision.md`), `docs/reviews` 94파일(JSON 사이드카 35, 최근 `review-2026-10-03-151425.json`), `audit.jsonl`은 main `0f205a7` 기준 186행(`^{"ts"` 월별: 2026-06 35 · 07 73 · 08 1 · 09 54 · 10 23 — 이 브랜치는 #29의 `gh_loop_dispatched`·`thread_opened`·`gh_loop_closed`·`thread_closed`·`task_closed` 5행을 더해요), 이슈+PR 84 · 댓글 131.
 
 일괄 언급 소스(③에서 ◐로 셈): 커밋 `edb9b0a`(2026-08-26, Context7 폐기 — "배선 9파일 동기"로 여러 규칙 링크를 한꺼번에 고침), 커밋 `e97b8f8`(2026-09-26, `rules/` 잔존 서술 제거), `docs/sum/session_2026-09-26_policy-retier-cycles-*.md`(29편 이동 목록), `session_2026-08-26_…context7-vision.md:101`(사망 후보 4편 목록).
 
@@ -289,7 +289,7 @@ for e in adversarial_review review_override review_remediation acceptance_wip sc
 | `acceptance_wip` | 22 | 2026-10-01 | cycle_definition(acceptance-gate WIP 레인) |
 | `scope_self_detect` | 1 | 2026-07-30 | docs/rules/scope_self_detect_policy(harness-core 한 줄) |
 | `estimate_vs_actual` | 16 | 2026-10-03 | cycle_definition 예상 레코드·agent_routing 등급 원자료 |
-| `gh_loop_dispatched`/`gh_loop_closed` | 1/1 | 2026-10-03 | agent_routing(모델·에포트 기록 — 이 브랜치가 #29 dispatch 행 1개를 더해요) |
+| `gh_loop_dispatched`/`gh_loop_closed` | 1/1 | 2026-10-03 | agent_routing(모델·에포트 기록 — 이 브랜치가 #29의 dispatch·closed 행을 더해요) |
 | `policy_update` | 1 | 2026-07-30 | adversarial_review 불변식 4 갱신(`rules/adversarial_review.md` 인용) |
 
 로컬 상태(메인 체크아웃 `.omp/harness-state/`): `session-log.jsonl` 2,068행(2026-10-03 — breadcrumb, `session_persistence` 집행), `read-log.txt` 2,994행(2026-10-03 — context-gate), `test-history.json` 797행(2026-10-01 — backpressure, `verification_tests_and_evals` 집행), `hook-debug.log` 4행(2026-09-22 — `HARNESS_DEBUG` 없이는 advisory 게이트의 발동이 기록되지 않아요). `docs/reviews` JSON 사이드카 35편은 `adversarial_review` 불변식 3의 발동 흔적이에요.
@@ -352,7 +352,7 @@ for e in adversarial_review review_override review_remediation acceptance_wip sc
 
 ## 7. 삭제·병합 제안 목록 (후속 사이클용 — 이 사이클에서는 실행하지 않아요)
 
-### 7.1 병합 제안 (9편 → 모체 7편)
+### 7.1 병합 제안 (9편 → 모체 8편, `verification_tests_and_evals`가 M5·M6 둘을 받아요)
 
 | # | 흡수되는 규칙 (기준 판정) | 모체 (기준 판정) | 옮길 절 | 링크·점수 갱신 대상 |
 |---|---|---|---|---|
