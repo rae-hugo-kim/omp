@@ -1,47 +1,51 @@
-name: audit-score-review-87
-status: done
-completed: 2026-10-06
+name: rules-merge-plan-86
+status: approved
 version: 1
-task_id: "20261006-092853-c626"
-# gh-loop worker Stage 2에 따라 이슈 #87 본문(연구할 것 4·산출물·AC 4)과 "세션에서 직접 결정함" 댓글(본문 범위·AC대로 연구 문서만, 규칙·스크립트 수정 없음)을 명세로 삼습니다.
-# 직전 완료 seed(rules-liveness-audit-29)는 git 이력에 보존합니다.
+task_id: "20261006-094329-349d"
+# gh-loop worker Stage 2에 따라 이슈 #86 본문(연구할 것 5·산출물·AC 4)과 "세션에서 직접 결정함" 댓글(본문 범위·AC대로 연구 문서만, 규칙·스크립트 수정 없음)을 명세로 삼습니다.
+# 직전 완료 seed(audit-score-review-87)는 git 이력에 보존합니다.
 goal: >
-  scripts/harness-audit.sh의 점수 항목 전수(카테고리·가중치·판정 방식)와 점수 이력(범프 점수 행·docs/sum·이슈·PR)을
-  실측해 점수가 결정에 쓰인 사례 유무를 명령·출력으로 기록하고, 선택지 (a) 폐지 / (b) 행동 지표 재설계 / (c) 존재 점수만 제거의
-  영향 범위와 추천 1개를 docs/harness/audit-score-review-2026-10-06.md에 담습니다 — 스크립트·규칙·게이트는 수정하지 않습니다.
+  #29 감사(PR #85)의 병합 제안 M1–M9를 실제 규칙 본문으로 재대조해 병합 실행 사이클의 명세
+  (절 단위 이동표·손실 목록·file:line 근거·소비 리포 마이그레이션 노트·점수/테스트 결합·
+  번호 붙인 PR 분할안과 확인 문장)를 docs/harness/rules-merge-plan-2026-10-06.md 하나로 남깁니다 —
+  규칙 파일·스크립트·게이트는 수정하지 않습니다.
 constraints:
-  - "판정 방식 분류(파일 존재 / 패턴 grep / 파일 개수 / 실제 동작)는 스크립트의 헬퍼 호출을 근거로 항목마다 코드 줄 번호를 인용합니다."
-  - "점수 이력·결정 사례 탐색은 실행한 명령과 출력을 문서에 그대로 기록해 재현 가능하게 하고, 없으면 '없음'을 명령 결과로 남깁니다."
-  - "이 사이클에서는 scripts/harness-audit.sh·scripts/test-harness-audit.sh·.omp/rules·게이트·스킬을 수정하지 않습니다 — 연구 문서 1파일만 추가합니다."
-  - "같은 시각 별도 브랜치에서 작업 중인 파일(게이트 .mjs #15, #78/#30/#47 rebase 중인 스크립트·CI·CHANGELOG)은 건드리지 않습니다."
+  - "연구 사이클입니다: .omp/rules/harness-*.md·scripts/·.omp/extensions/harness/는 한 줄도 바꾸지 않습니다(이슈 본문 산출물 절 + 세션 직접 결정)."
+  - "file:line 인용은 이 워크트리의 실측값이어야 하고, 감사 §6·§7.1과 다른 곳은 정정으로 표시합니다."
+  - "소비 리포 탐색은 이 리포와 /home/rae/orca/workspaces 아래 접근 가능한 리포를 읽기 전용으로만 봅니다."
+  - "병합 실행은 #87(점수 처분) 결론에 의존하므로 분할안에 그 선행 조건을 명시하고, 점수 처분별 변형을 적습니다."
+  - "같은 시각 별도 브랜치에서 작업 중인 파일(게이트 .mjs — #15, #78/#30/#47 rebase 대상)은 건드리지 않습니다."
   - "Stage 2의 체크 완료 seed·scope → 변경 → 리뷰 후속 → closeout 커밋 순서를 따릅니다."
 acceptance_criteria:
   - id: AC1
-    title: "docs/harness/audit-score-review-2026-10-06.md에 점수 항목 전수표가 있습니다: 32개 award 항목마다 카테고리·가중치·판정 방식(파일 존재/패턴 grep/파일 개수/실제 동작)·현재 득점·코드 줄 번호를 한 행씩 적고, 방식별 집계를 둡니다."
+    title: "M1–M9 전부에 이동표(절 → 모체 위치)·손실 목록·file:line 근거가 docs/harness/rules-merge-plan-2026-10-06.md에 있고, 폐기가 맞는 쌍은 그 근거(고유 내용이 타처에 있음)와 함께 판정됩니다."
   - id: AC2
-    title: "점수가 결정에 쓰인 사례 탐색 결과가 명령·출력으로 있습니다: 범프 점수 행(.omp/state/harness-scores.jsonl)·docs/harness/audit.jsonl·docs/sum·이슈·PR 검색의 명령과 결과를 적고, 사례가 없으면 그 사실을 명시합니다."
+    title: "소비 리포 참조 깨짐 탐색 명령과 결과(이 리포 + 접근 가능한 소비 리포 1곳 이상)가 문서에 기록되고, 마이그레이션 노트 초안(개명표)이 있습니다."
   - id: AC3
-    title: "(a)(b)(c) 각각의 영향 범위(파일·문서·이슈 AC 목록)와 추천 1개·근거가 문서에 있습니다."
+    title: "실행 사이클 분할안이 번호(PR-1…)와 확인 문장을 갖고, #87 결론 선행 조건과 결정 사항(D1…)이 번호로 적혀 사용자가 번호로 승인할 수 있습니다."
   - id: AC4
-    title: "#86(병합 연구)과의 의존이 문서에 명시되고(점수 처분 전에는 병합 실행 사이클을 열지 않음), 스크립트·규칙·게이트는 변경되지 않습니다(git diff --stat main -- scripts .omp/rules .omp/extensions 가 비어 있음)."
-  - id: AC5
-    title: "node scripts/docs-drift 0 errors/0 warnings, 하네스 suite(node --test .omp/extensions/harness/tests/*.test.mjs) 전부 통과, 그리고 이 이슈의 dispatch 튜플이 ingest되어 audit.jsonl에 gh_loop_dispatched(issue 87) 행이 있습니다."
+    title: "하네스 suite(node --test .omp/extensions/harness/tests/*.test.mjs) 전부 통과, node scripts/docs-drift 0 errors/0 warnings, git diff --stat main -- .omp/rules scripts .omp/extensions 가 비어 있고, 이 이슈의 dispatch 튜플이 ingest되어 audit.jsonl에 gh_loop_dispatched(issue 86) 행이 있습니다."
 out_of_scope:
-  - "스크립트 폐지·재설계·수정 실행 — 선택지와 추천까지만이고 실행은 사용자가 (a)(b)(c)를 고른 뒤의 별도 사이클입니다."
-  - "harness-sync 화이트리스트·범프 스크립트·README·ADR 수정 — 실행 사이클의 몫입니다."
+  - "병합·폐기 실행, 규칙 본문 개정, harness-audit.sh·harness-sync.sh 수정 — 분할안의 후속 PR 몫입니다."
+  - "#87의 점수 처분 결정 자체 — 이 문서는 그 결론별 변형만 적습니다."
   - "PR 생성·교차검증 게시·head와 nonce 결정 요청은 커밋 뒤 후속 절차이며 AC 선체크 대상이 아닙니다."
 assumptions:
-  - "시작 HEAD는 PR #85가 머지된 e3563c3이고 작업트리는 깨끗했습니다."
-  - "점수 행 파일(.omp/state/harness-scores.jsonl)과 docs/sum은 gitignore 로컬 전용이라 메인 체크아웃(/home/rae/projects/workspace/omp)의 사본을 읽기 전용으로 집계합니다 — 다른 머신에서는 그 부분의 숫자가 다를 수 있습니다."
+  - "시작 HEAD는 PR #85가 머지된 e3563c3이고 작업트리는 깨끗했습니다(ingest가 더한 audit.jsonl 1행 제외)."
+  - "접근 가능한 소비 리포는 /home/rae/orca/workspaces/game-design/trigger-happy(하네스 2026.75, 레거시 rules/ 레이아웃) 하나였고, 현행 .omp/rules/harness-* 레이아웃의 소비 리포는 지정 범위 안에 없었습니다."
 risks:
-  - "이슈 검색(gh --search)은 본문·댓글 전문 검색이라 경로 언급만 있는 이슈도 걸립니다 — 문서에서 '점수 값을 읽고 결정한 사례'와 '경로 언급'을 구분해 셉니다."
+  - "줄 번호는 이 HEAD 기준이라 모체가 다른 PR로 바뀌면 어긋납니다 — 실행 PR은 재측정 단계를 둡니다(문서 §2 M3 순서 반례)."
+  - "병합 PR 커밋에 .sh/.mjs 변경을 섞으면 risk-assess가 high로 분류해 review-gate 증거를 요구합니다 — 문서 §7.2가 코드 커밋 분리를 요구합니다."
 references:
+  - path: https://github.com/rae-hugo-kim/omp/issues/86
+    reason: "연구할 것 5·산출물·AC 4·세션 직접 결정·모델 마커의 원문입니다."
   - path: https://github.com/rae-hugo-kim/omp/issues/87
-    reason: "배경·연구할 것·산출물·AC와 세션 직접 결정·dispatch 튜플의 원문입니다."
+    reason: "점수 처분(a/b/c) 결정 — 병합 실행 사이클의 선행 조건입니다."
   - path: docs/harness/rules-liveness-audit-2026-10-06.md
-    reason: "§4.1이 존재 점수 목록을, §7-1·§7-4가 점수 재배치 전제를 이미 정리한 선행 감사입니다."
-  - path: scripts/harness-audit.sh
-    reason: "검토 대상 스크립트 — 읽기만 합니다."
+    reason: "입력 자료 — §6 내용 중복 분석과 §7 M1–M9 제안, §7.4 공통 체크입니다."
+  - path: scripts/harness-sync.sh
+    reason: "글롭 prune(:340-358)과 레거시 rules/ 은퇴(7c)가 삭제를 소비 리포에 전파하는 방식입니다."
+  - path: .omp/extensions/harness/gates/risk-assess.mjs
+    reason: "docs-only/코드 분류와 diffSize 계산 — 분할안의 커밋 구조 근거입니다."
   - path: docs/rules/closeout_contract.md
     reason: "AC 착지·seed 종료·scope 은퇴·감사 append 순서를 정의합니다."
 estimate:
