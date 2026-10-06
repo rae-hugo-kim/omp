@@ -48,6 +48,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history: two suite tests run scripts/docs-drift against the real repo, and it reads
+          # `git log` for AGENTS.md (a shallow clone stamps the wrong source_commit_hash — measured red
+          # on the first PR run, #30).
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
