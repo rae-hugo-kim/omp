@@ -149,7 +149,7 @@ OMP 이벤트가 아니라 **수동/CLI로 실행**한다 (`.githooks/post-commi
 
 | 스크립트 | 트리거 | 역할 |
 |----------|--------|------|
-| **harness-version-bump.sh** | 수동 (발행 기준 충족 시 1회, ADR 003) | 마지막 `harness/*` 태그 이후 하네스 변경 시 1회 버전 범프 + 태그 (멱등, `--dry-run` 지원) |
+| **harness-version-bump.sh** | 수동 (발행 기준 충족 시 1회, ADR 003) | 마지막 `harness/*` 태그 이후 하네스 변경 시 1회 버전 범프 + 태그, `CHANGELOG.md`의 `[Unreleased]` 항목을 `## [<버전>] - <날짜>` 절로 승격 (멱등, `--dry-run` 지원) |
 | **harness-sync.sh** | /skill:harness-check 수동 | 리모트에서 최신 하네스 오버라이트 |
 
 ## 3. 상태 흐름도 (전체 세션 라이프사이클)

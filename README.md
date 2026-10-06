@@ -169,8 +169,8 @@ Claude Code 원본과 달리, 실패한 bash 검증도 기록됩니다 — 어�
 `.omp/rules/harness-*.md`, `checklists/`, `.omp/`, `AGENTS.md`, `scripts/harness-*.sh`, `templates/` 등 하네스 자산 변경은 main에 머지돼도 바로 범프하지 않고, 소비 리포가 받아야 할 이유가 생겼을 때 한 번 올립니다. 동작 변경(게이트·sync·훅·스킬)과 안전 수정은 바로, 구조 변경은 단독 버전으로 올립니다. 문서만 바뀐 변경은 다음 범프에 함께 싣되 7일을 넘기지 않고, 범프는 하루 한 번을 넘기지 않습니다(근거와 기각한 대안: [`docs/decisions/003-harness-release-cadence.md`](docs/decisions/003-harness-release-cadence.md)).
 
 ```bash
-bash scripts/harness-version-bump.sh --dry-run   # 무엇이 .N+1로 올라갈지 미리 보기
-bash scripts/harness-version-bump.sh             # 마지막 harness/* 태그 이후 변경분에 대해 1회 bump + 태그
+bash scripts/harness-version-bump.sh --dry-run   # 무엇이 .N+1로 올라갈지, CHANGELOG [Unreleased]가 승격될지 미리 보기 (트리 불변)
+bash scripts/harness-version-bump.sh             # 마지막 harness/* 태그 이후 변경분에 대해 1회 bump + 태그 + CHANGELOG [Unreleased] → ## [<버전>] 승격
 git push --follow-tags
 ```
 
