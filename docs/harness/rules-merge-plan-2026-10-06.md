@@ -10,39 +10,39 @@
 
 | # | 흡수 규칙 (줄 수·줄끝) | 모체 (줄 수·줄끝) | 판정 | 옮기는 고유 내용 | 모체 예상 줄 수 | `description` | 점수 영향 (`harness-audit.sh`) |
 |---|---|---|---|---|---|---|---|
-| M1 | `cost_awareness` (39, CRLF) | `agent_routing` (56, LF) + `session_persistence`(재독 1줄, M3 뒤) | 병합(2줄) — 폐기는 D1 선택지 | 티어 승격 원칙(:18) 1줄, 재독 회피 SHOULD(:32) 1줄; 나머지는 타처 보유·stale | 57 | 불변 | `:321-324` cost_efficiency **+3 소실** |
+| M1 | `cost_awareness` (39, CRLF) | `agent_routing` (56, LF) + `session_persistence`(SHOULD 소절 2줄, M3 뒤) | 병합(MUST 1줄 + SHOULD 소절) — 폐기는 D1 선택지 | 티어 승격 MUST(:10+:18) 1줄, 재독 회피 SHOULD(:30+:32) 소절; 나머지는 타처 보유·stale | 57 | 불변 | `:321-325` cost_efficiency **+3 소실** |
 | M2 | `information_discovery` (36, LF) | `anti_hallucination` (46, CRLF) | 병합 | 경로 vs 클래스 판별(:12-17), 3단 스윕(:23-25), 위임 1줄 | ≈58 | 교체(106 B) | 없음 |
-| M3 | `context_management` (127, CRLF) | `session_persistence` (89, CRLF) | 병합 | 시점 표(:14-26), 보존 MUST(:30-39), 드롭 목록(:43-54, 감사 누락), front-loading(:73) | ≈126 | 교체(99 B) | `:162-166` +3, `:333-337` +2 **소실(5)** |
+| M3 | `context_management` (127, CRLF) | `session_persistence` (89, CRLF) | 병합 | 시점 표(:14-26), 보존 MUST(:30-39), 드롭 목록(:43-54, 감사 누락), front-loading(:73) | ≈128 (M1 소절 포함) | 교체(99 B) | `:162-166` +3, `:333-337` +2 **소실(5)** |
 | M4 | `learning_policy` (44, CRLF) | `assetization` (61, LF) | 병합 | 4기준(:21-24), 트리거 3종(:14-16), 금지 축약(:36,:38), 저장지 1줄 | ≈74 | 교체(103 B) | 없음 |
 | M5 | `quality_gates` (98, CRLF) | `verification_tests_and_evals` (168, LF) | 병합 | 게이트 정의 표(:8-21), 트리거 표(:41-48), 억제 조건(:64-66), Self-Check 1항 | ≈193 (M5만) | 교체 | `:207-211` quality_gates **+1 소실** |
 | M6 | `tdd_policy` (77, CRLF) | `verification_tests_and_evals` | 병합 | TDD MUST 요지(:6-8), 커버리지(:32-36), 생략 전 승인(:77) | ≈202 (M5+M6) | 교체(103 B, 합산) | 없음 |
 | M7 | `documentation_policy` (41, CRLF) | `writing_style` (98, LF) | 병합 | 한/영 독자 분리(:12-13), UTF-8 NO-BOM(:27) — 약 4줄 | ≈104 | 교체 권고(98 B) | 없음 |
-| M8 | `hook_recipes` (141, LF) | `harness_integration_contract` (198, LF) | 병합 | 이벤트 표(:16-25), 페이로드 필드(:27-38 축약), fail-open 단서(:137) — 약 10줄 | ≈209 | 불변(이미 122 B) | 없음 |
+| M8 | `hook_recipes` (141, LF) | `harness_integration_contract` (198, LF) | 병합 | 이벤트 표(:16-25), 페이로드 필드(:27-38 축약), fail-open 단서(:137) — 약 10줄 | ≈210 | 불변(이미 122 B) | 없음 |
 | M9 | `agent_security` (110, CRLF) | `safety_security` (30, CRLF) | 병합 | MUST 3개(:14-48), SHOULD 3개(:52-84), OWASP 표(:88-98), Self-Check(:102-110) — 전부 **그대로**(축약 없음) | ≈125 | 교체(104 B) | `:293-297` security_guardrails **+2 소실** |
 
-합계: 29편 → **20편**(9편 감소 — 감사 §7.1과 같은 수). 존재 점수 소실은 네 블록 **11점**(M1 3 · M3 5 · M5 1 · M9 2)이고, 현재 `bash scripts/harness-audit.sh --terse` → `TOTAL: 51/70`이에요(§6). `description` 바이트 수는 `printf %s | wc -c` 실측이고, 기준으로 삼은 114 B는 ADR 002 `:89`의 **관측 평균**(규칙집 28행 3,192 B)이지 상한이 아니에요 — 요청당 노출 비용을 평균 근처로 유지하자는 뜻이에요.
+합계: 29편 → **20편**(9편 감소 — 감사 §7.1과 같은 수). 존재 점수 소실은 네 블록 **11점**(M1 3 · M3 5 · M5 1 · M9 2)이고, 현재 `bash scripts/harness-audit.sh --terse` → `TOTAL: 51/70`이에요(§6). `description` 바이트 수는 `printf %s | wc -c` 실측이에요. **규칙집 예산**: ADR 002 `:89`는 "규칙집 설명은 평균 114 B/행을 상한으로 유지한다"고 정했고 그 행은 이름+설명이 합산된 규칙집 한 줄(28행 3,192 B)이에요 — 개별 `description` 바이트와 직접 비교하는 값이 아니에요. `이름: 설명` 근사로 재면 현재 29행 3,122 B(평균 107 B)이고, 9편을 빼고 모체 6편의 설명을 위 제안으로 바꾸면 20행 2,292 B(평균 114 B)예요(§9). 총량은 **−830 B/요청**으로 줄지만(감사 §7.1 "약 1.0 KB" 추정과 같은 방향) **행 평균은 상한에 닿아요** — 짧은 설명의 규칙이 빠지고 모체 설명이 길어지기 때문이에요. 실행 PR은 설명 제안을 그대로 쓰지 말고 각 모체의 설명을 현행 길이 +10 B 안으로 다듬거나(권고), ADR의 지표를 총량으로 바꾸는 결정을 받아요(§7 D7).
 
 ## 2. 연구 1·2 — M1–M9 이동표·손실·폐기 판정
 
 줄 번호는 모두 이 워크트리의 `grep -n`/`read` 실측값이에요. 감사 §6·§7.1의 인용과 다른 곳은 §4에 모아 정정했어요. "모체 목표 위치"는 **현재** 모체 줄 번호이고, 같은 모체에 두 번 넣는 경우(M5·M6, M3 뒤 M4·M8)는 §7의 순서 의존을 따라요.
 
-### M1. `harness-cost_awareness` → `harness-agent_routing` (+ `session_persistence` 1줄) — 병합(2줄)
+### M1. `harness-cost_awareness` → `harness-agent_routing` (+ `session_persistence` SHOULD 소절) — 병합(MUST 1줄 + SHOULD 소절)
 
 | 흡수 규칙 절 (file:line) | 판정 | 모체 목표 위치 | 옮길 형태 · 근거 |
 |---|---|---|---|
 | ECC 주석 `~/.omp/metrics/costs.jsonl`·벤더 단가 (`:6-8`) | stale → 폐기 | — | 생성 코드 0건: `grep -rn "costs\.jsonl\|metrics/costs\|cost-tracker" .` → 이 파일 :6,8과 감사 :341뿐 |
 | MUST 제목 + Haiku/Sonnet/Opus 표 (`:10-16`) | 겹침 → 폐기 | — | 벤더명 고정 표는 `harness-agent_routing.md:41-43`(롤 체계 `@advisor`/`@slow`/`modelRoles.*`), `.omp/extensions/harness/gh-loop-record.mjs:33-34`(`TIERS`)·`:105-115`(`recommendTier` 규칙표)가 대체하고, `agent_routing:43`이 "기준은 `estimate-report.mjs` 실측으로 갱신"이라 정적 표를 두지 않아요 |
-| **티어 승격 원칙** (`:18` "Escalate to a higher tier only when the lower tier demonstrably cannot handle the task.") | **고유 → 옮김 1줄** | `harness-agent_routing.md:43` 뒤 | 원문 그대로. `grep -rniE "cheapest|lower tier|escalat|lowest tier"` → `agent_routing`·`gh-loop-record.mjs`에 0건이라 일반 원칙은 이 줄뿐이에요. `gh-loop-record.mjs:4`의 "사용자가 매번 고른다"는 **선택 주체**에 관한 결정이고 이 줄은 **권고 기준**이라 충돌하지 않아요(리뷰 r1 지적으로 정정) |
+| **티어 승격 MUST** (`:10` `## MUST: model selection — use the cheapest model that can do the job` + `:18` "Escalate to a higher tier only when the lower tier demonstrably cannot handle the task.") | **고유 → 옮김 1줄(MUST 표지 유지)** | `harness-agent_routing.md:43` 뒤 | `- **MUST**: Use the cheapest tier that can do the job; escalate to a higher tier only when the lower tier demonstrably cannot handle the task.` — `:10` 제목의 MUST 강도를 불릿 접두로 보존해요(리뷰 r2 지적). `grep -rniE "cheapest|lower tier|escalat|lowest tier"` → `agent_routing`·`gh-loop-record.mjs`에 0건이라 일반 원칙은 이 줄뿐이에요. `gh-loop-record.mjs:4`의 "사용자가 매번 고른다"는 **선택 주체**에 관한 결정이고 이 줄은 **권고 기준**이라 충돌하지 않아요(리뷰 r1 지적으로 정정) |
 | SHOULD eval 토큰·비용 기재 (`:20-23`) | 겹침 → 폐기 | — | 동일 문장 `harness-verification_tests_and_evals.md:163` "Do not ignore cost per eval run — track tokens and estimated cost."; `templates/eval_report.md:45-50` `## Cost`(토큰·USD); `templates/session_retro.md:32-35` `## Cost/efficiency notes` |
 | SHOULD 병렬 호출 (`:25-28`) | 폐기 | — | 리포 규칙·스킬·에이전트에 0건; omp 런타임 시스템 프롬프트 Tool Policy("parallelize independent calls")가 매 세션 주입 — [INFERENCE] 이 세션 프롬프트로만 관측 |
-| **SHOULD 재독 회피** (`:32` "If a file was read earlier in the session, use that content rather than re-reading.") | **고유 → 옮김 1줄** | `harness-session_persistence.md`의 M3 `### Safe to drop` 블록 끝(M3 뒤 — `context_management:47` "the path is sufficient; re-read if needed"는 **버릴 수 있는 것**의 목록이지 재독 금지가 아니라 겹치지 않아요) | 원문 그대로 |
+| **재독 회피 SHOULD** (`:30` `## SHOULD: avoid re-reading files already in context` + `:32` "If a file was read earlier in the session, use that content rather than re-reading.") | **고유 → 옮김 소절 2줄(SHOULD 표지 유지)** | `harness-session_persistence.md`의 M3 `### Safe to drop` 블록 **뒤에 별도 소절** `### SHOULD: avoid re-reading files already in context`(M3 뒤) | 제목 1줄 + `:32` 원문 1줄. `Safe to drop`의 `context_management:47` "the path is sufficient; re-read if needed"는 **버릴 수 있는 것**의 목록이라 조건이 다르므로 같은 블록에 섞지 않고 소절로 분리해요(리뷰 r2 지적) |
 | SHOULD 큰 출력 요약 (`:33`) | 겹침 → 폐기 | — | `harness-context_management.md:49` "Verbose command output (keep the summary…)"(M3로 모체에 남음) |
-| Self-Check 3항 (`:35-39`) | 폐기 | — | `:37`은 표에, `:38`은 옮긴 재독 1줄에, `:39`는 폐기된 병렬 절에 종속돼요 |
+| Self-Check 3항 (`:35-39`) | 폐기 | — | `:37`은 표에, `:38`은 옮긴 재독 SHOULD 소절에, `:39`는 폐기된 병렬 절에 종속돼요 |
 
 - **손실 목록**: `:6-8`(stale), `:10-16`(표 — 롤 체계·규칙표가 대체), `:20-23`(3곳 보유), `:25-28`(런타임 보유), `:33`(모체 보유), `:35-39`. 감사 §6 B "잃는 것: eval 비용 기재(:20-23), 병렬 SHOULD(:25-28)"는 둘 다 타처 보유라 **정정**이고, 감사가 겹침으로 본 `:18`·`:32`는 반대로 **고유**예요.
 - **폐기 판정**: 이름 인용은 `.omp/skills/**`·`.omp/agents/*`·`checklists/`·`templates/`·게이트 코드 모두 0건. 옮길 고유 문장이 2줄이라 **병합(2줄)**이 맞고, 폐기(D1)는 그 2줄을 의도적으로 버리는 결정이에요 — 감사 §7.2의 "모두 고유 절이 있다"는 전제는 이 규칙에서도 2줄만큼은 성립해요.
-- **모체 영향**: `agent_routing` 56 → 57(1줄). `description` 불변(이미 "model and effort tiers" 포함). `session_persistence`는 M3 합계에 +1. 감사 §6 "재독 회피는 context-gate/read-tracker가 기계 집행"은 **정정** — 두 게이트는 편집 전 읽기만 강제하고 재독을 막지 않아요(`gates/context-gate.mjs:48-51`, `gates/write-tracker.mjs:10`만 자기 쓰기 재독 제거).
-- **갱신 대상**: `AGENTS.md:157`(Operational rails), `claudedocs/CLAUDEKR.md:157`(보충), `README.md:224`·`README.en.md:221`(규칙 분류표 "운영"/"Ops" 행 — 보충), `scripts/harness-audit.sh:321-324`(§6).
+- **모체 영향**: `agent_routing` 56 → 57(MUST 불릿 1줄). `description` 불변(이미 "model and effort tiers" 포함). `session_persistence`는 M3 합계에 +2(소절). 감사 §6 "재독 회피는 context-gate/read-tracker가 기계 집행"은 **정정** — 두 게이트는 편집 전 읽기만 강제하고 재독을 막지 않아요(`gates/context-gate.mjs:48-51`, `gates/write-tracker.mjs:10`만 자기 쓰기 재독 제거).
+- **갱신 대상**: `AGENTS.md:157`(Operational rails), `claudedocs/CLAUDEKR.md:157`(보충), `README.md:224`·`README.en.md:221`(규칙 분류표 "운영"/"Ops" 행 — 보충), `scripts/harness-audit.sh:321-325`(§6).
 
 ### M2. `harness-information_discovery` → `harness-anti_hallucination` — 병합
 
@@ -76,7 +76,7 @@
 
 - **손실**: `:62-67` `<remember>`/`priority` 구문, `:75-85` notepad, `:89-91`, `:93-113`, `:122-124`, `:6`.
 - **폐기 판정**: 시점 표·보존 MUST·드롭 목록은 `.omp/skills/sum/SKILL.md`(컴팩션·보존 목록 없음 — `:4`, `:236`뿐)·`docs/architecture/harness-architecture.md:285-289`(파일 보존만)에 없어요. **병합 유지** — 폐기하면 `index.ts:402`·`cycle-boundary-wiring.test.mjs:8` 주석이 가리키는 규칙이 사라져요.
-- **모체 영향**: 89 + ≈38 − 1(`:77` 삭제) + 1(M1 재독 1줄) ≈ **127**. `description` 교체 제안(99 B): `"When to compact, what must survive, and where session state persists across compaction and sessions"`. 초점 HOW/WHERE → WHEN/WHAT+HOW/WHERE. 자기 정의 3곳(`:6,:10,:77`) 모두 삭제. 모체 stale `.omp/contexts/*` 절은 **`:47-71`**(감사 `:52-70` 정정; `glob .omp/contexts/**` 부재) — 삽입 절과 충돌 없이 아래로 밀리고, 삭제 여부는 범위 결정(§7 D6).
+- **모체 영향**: 89 + ≈38 − 1(`:77` 삭제) + 2(M1 재독 SHOULD 소절) ≈ **128**. `description` 교체 제안(99 B): `"When to compact, what must survive, and where session state persists across compaction and sessions"`. 초점 HOW/WHERE → WHEN/WHAT+HOW/WHERE. 자기 정의 3곳(`:6,:10,:77`) 모두 삭제. 모체 stale `.omp/contexts/*` 절은 **`:47-71`**(감사 `:52-70` 정정; `glob .omp/contexts/**` 부재) — 삽입 절과 충돌 없이 아래로 밀리고, 삭제 여부는 범위 결정(§7 D6).
 - **갱신 대상**: `AGENTS.md:157`, `claudedocs/CLAUDEKR.md:157`(보충), `README.md:224`·`README.en.md:221`(보충), `.omp/rules/harness-session_persistence.md:6,10,77`, `.omp/rules/harness-cycle_definition.md:189`, `.omp/extensions/harness/index.ts:402`(주석 — 보충), `.omp/extensions/harness/tests/cycle-boundary-wiring.test.mjs:8`(주석 — 보충), `scripts/harness-audit.sh:162-166,333-337`(§6; 감사 `:162-165,333-336` 블록 정정).
 - **순서 반례**: 감사 `:369` "M4·M8은 M3 뒤에 해도 `session_persistence:78-79` 유지"는 **틀려요**. M3가 `:77`을 지우는 것만으로 `:78→:77`, `:79→:78`이고, 새 절이 `:14` 앞에 들어가면 Relationship 절(`:75`)이 약 `:110`으로 밀려요. M4·M8의 모체 갱신 대상은 줄 번호가 아니라 불릿 텍스트(`- **\`harness-learning_policy.md\`**: …`, `- **\`harness-hook_recipes.md\`**: …`)로 특정하고 M3 뒤 `grep -n 'harness-learning_policy\|harness-hook_recipes' .omp/rules/harness-session_persistence.md`로 재측정해요.
 
@@ -162,7 +162,7 @@
 
 - **손실**: `:42-127` 레시피(의도적 폐기 — §7.2 승인 범위), `:131-136`, `:29-36` 코드블록(SSOT는 `index.ts:66-76`), `:139,:141,:6,:10`.
 - **폐기 판정**: 이벤트별 차단 가능 여부·확장 어댑터 층의 fail-open 원칙은 규칙 층에 고유(`contract:29`는 pre-commit fail-closed만). **병합 유지**(약 10줄). 대안으로 "표 대신 `index.ts:389-392` 포인터 1줄"도 정보 손실은 없어요(§7 D4). `harness-check`/`harness-sync` 절(`contract:108-109`)과 겹침 0(`hook_recipes`에 `sync` 0건).
-- **모체 영향**: 198 + ≈12 ≈ **210**. `description` **불변** — 이미 122 B로 평균(114 B)을 넘어 있어 더 늘리지 않아요. `(gates, hooks, evidence, residual risks)` → `(gates, events, evidence, residuals)`로 줄여도 118 B라 평균 아래로는 내려가지 않으므로 축약은 선택 사항이에요. 모체 stale(`:27`, `:117-126`, `:145`, `:171-181` — 감사 §8)은 삽입 위치와 무관.
+- **모체 영향**: 198 + ≈12 ≈ **210**. `description` **불변** — 이미 122 B(설명만)로 29편 중 가장 길어 더 늘리지 않아요. `(gates, hooks, evidence, residual risks)` → `(gates, events, evidence, residuals)`로 줄이면 118 B(−4 B)라 §1 규칙집 예산(D7)에 거의 기여하지 않으므로 축약은 선택 사항이에요. 모체 stale(`:27`, `:117-126`, `:145`, `:171-181` — 감사 §8)은 삽입 위치와 무관.
 - **갱신 대상**: `AGENTS.md:155`(Tool rails → `harness-mcp_policy` 하나 남음), `claudedocs/CLAUDEKR.md:155`(보충), `README.md:221`·`README.en.md:218`(보충; 같은 행의 `context7_policy`는 이미 삭제된 규칙 — 표 전체 stale), `.omp/rules/harness-session_persistence.md:79`(M3 뒤 재측정; 제안 "- **`harness-harness_integration_contract.md`** (Event model): provides the extension/gate mechanism; …"). 아웃바운드 `hook_recipes:44`→`coding_standards` 링크 소실로 `coding_standards`의 ① 교차 링크가 1 줄지만 판정은 ◐ 그대로.
 
 ### M9. `harness-agent_security` → `harness-safety_security` — 병합
@@ -172,11 +172,11 @@
 | ECC 주석 "Complements harness-safety_security.md (operational safety) with adversarial…" (`:6`) | 절 제목으로 변환 | `safety_security:26` 뒤 `## Adversarial threats (agent-specific)` 신설, 기존 `:6-26`은 `## Operational safety` 아래 | 제목만 |
 | Purpose (`:8-10`) | 옮김 | 신설 절 도입 | 그대로 2줄 |
 | **MUST 외부 링크 감사** (`:14-24`), **MUST 숨은 문자 탐지** (`:28-37`), **MUST MCP 공급망** (`:41-48`) — 감사 "`:14-49`" → **`:14-48`** | **고유 → 옮김** — `grep -rniE "zero-width|typosquat|OWASP|prompt injection|memory poisoning|supply.chain"` 규칙 층 이 파일뿐; `review-gate.mjs:134-135` 제로폭 제거는 모델명 검증 한정, `harness-mcp_policy.md`·`bootstrap/SKILL.md`에 pin/typosquat 0건 | 소절 1-3 | **그대로**(mutable-source 검사·인라인 대안, 숨은 문자 종류·`grep -P` 스캔 명령, MCP tool-description·권한 점검 전부 보존). 유일한 편집은 `:45` 괄호의 `context7` 예시 삭제(2026-08-26 폐기, `mcp_policy:92`) |
-| SHOULD 방어 블록 (`:52-58`), 계정 분리 (`:62-70`), 메모리 감사 (`:74-84`) — 감사 "`:53-90`" → **`:52-84`** | 고유 → 옮김 | 소절 4-6 | **그대로**, 단 메모리 감사 대상 목록의 stale 2줄만 손봐요: `:78` `MEMORY.md`·`~/.claude/projects/*/memory/`(감사 `:84` 정정; `glob` 0건, OMC 경로) 삭제, `:80` `.omp/notepads/`(감사 `:86` 정정; 부재) 삭제; `:79` `~/.omp/agent/sessions/`는 `session_persistence:19` 실존이라 유지하고 "세션 시작에 읽히는 정책 파일(`.omp/rules/*.md`, `AGENTS.md`)" 1줄을 추가해요 |
+| SHOULD 방어 블록 (`:52-58`), 계정 분리 (`:62-70`), 메모리 감사 (`:74-84`) — 감사 "`:53-90`" → **`:52-84`** | 고유 → 옮김 | 소절 4-6 | **그대로**, 단 메모리 감사 대상 목록(`:78-80`)의 stale **경로 토큰**만 손봐요: `:78` "`MEMORY.md` and auto-memory files (`~/.claude/projects/*/memory/` — OMC memory)"에서 `MEMORY.md`(감사 `:84` 정정; `glob` 0건)와 OMC 경로만 빼고 **auto-memory 감사 요구는 유지**해요(`session_persistence:20,78,88`이 auto-memory를 현행 교차 세션 저장소로 쓰므로 활성 위협 표면 — 리뷰 r2 지적) → "auto-memory (the cross-session memory `harness-session_persistence.md` relies on)"; `:79` `~/.omp/agent/sessions/`는 `session_persistence:19` 실존이라 그대로; `:80` `.omp/notepads/`(감사 `:86` 정정; 부재)는 "policy files read at session start (`.omp/rules/*.md`, `AGENTS.md`)"로 교체 |
 | OWASP 표 (**`:88-98`**; 감사 `:94-104` 정정) | 고유 → 옮김 | 소절 7 | **표 9줄 그대로**(ID·이름·위협 요약 3열 보존) |
-| Self-Check (`:102-110`) | 옮김 | 신설 절 끝 | **그대로 5항**, stale 경로 참조(`MEMORY.md`·notepad)만 위 목록과 같게 손봐요 |
+| Self-Check (`:102-110`) | 옮김 | 신설 절 끝 | **그대로 5항** — 경로 참조가 없어(`:110` "Persistence files reviewed recently for unexpected content?"가 일반 항목) 손볼 곳이 없어요(r1 반영분 "stale 경로 손봄"은 r2 지적으로 정정) |
 
-- **손실**: `:6`(출처 주석 — 절 제목으로 대체), `:45` 괄호 예시(`context7`), `:78`·`:80`(stale 경로 2줄), 구분선 8줄(`:12,26,39,50,60,72,86,100`). 보안 요건 본문은 축약 없이 전부 옮기므로 실행자가 임의로 뺄 여지가 없어요 — 리뷰 r1 지적으로 "그대로 또는 축약"을 "그대로"로 확정했어요.
+- **손실**: `:6`(출처 주석 — 절 제목으로 대체), `:45` 괄호 예시(`context7`), `:78`의 `MEMORY.md`·OMC 경로 토큰과 `:80` notepad 항목(정책 파일 항목으로 교체 — auto-memory·세션 파일 감사는 유지), 구분선 8줄(`:12,26,39,50,60,72,86,100`). 보안 요건 본문은 축약 없이 전부 옮기므로 실행자가 임의로 뺄 여지가 없어요 — 리뷰 r1 지적으로 "그대로 또는 축약"을 "그대로"로, r2 지적으로 auto-memory 감사 유지를 확정했어요.
 - **폐기 판정**: **병합 유지** — `harness-prompt_engineering.md:173-174` "에이전트 환경 자체의 방어(설정 주입·공급망·메모리 오염)는 … 관할"이 명시 위임, `:341` Related. 모체 집행 범위는 `destructive-guard.mjs:66-75`(advisory; rm -rf/git reset --hard/sed -i 등)가 `safety_security:10-14` 일부만 — 흡수되는 MUST 3개는 어느 게이트도 집행하지 않지만 모체 `:16-26`도 같은 "선언만" 상태예요.
 - **모체 영향**: 30(실본문 26) + 110 − 폐기 약 14(frontmatter·제목 4, 주석 1, 구분선 8, stale 2) + 제목 2 ≈ **125**(모체가 가장 작은 파일에서 중간 크기로 커져요). `description` **교체 필요**(104 B): `"Hard rails: explicit approval for secrets/destructive ops/prod; injection, supply-chain, memory defenses"` — 현재 문구는 운영 안전만 가리켜 규칙집 노출로 주입·공급망 내용을 찾을 수 없어요. `harness-core.md:8`은 승인 레일만 요약하므로 불변. 모체 CRLF → LF 통일 시 diff가 전 줄에 걸려요(§7 D5).
 - **갱신 대상**: `AGENTS.md:153`, `claudedocs/CLAUDEKR.md:153`(보충), `README.md:219`·`README.en.md:216`(보충), `.omp/rules/harness-prompt_engineering.md:173-174,341`(제안: "…`harness-safety_security.md`의 Adversarial threats 절 관할"), `scripts/harness-audit.sh:293-297`(§6; 감사 `:293-296` 블록 정정).
@@ -187,7 +187,7 @@
 |---|---|---|---|
 | `AGENTS.md` | `:153-158` Linked Modules(Core/Quality/Tool/Operational/Optional rails), `:111` | 이름 제거 | 감사 §7.1 확인 |
 | `claudedocs/CLAUDEKR.md` | `:112,153-158` | AGENTS.md 한국어 미러 | **보충** — `AGENTS.md:119-120` 규약상 같은 PR 갱신 또는 stale 표기 후 후속 커밋에서 `status: synced` 재스탬프 |
-| `README.md` / `README.en.md` | `:219-224` / `:216-221` 규칙 분류표 | 맨 이름(`harness-` 접두 없음)으로 9편 전부 열거; 같은 표에 이미 삭제된 `context7_policy` 잔존 | **보충** — 감사 §3의 `harness-<name>` grep에 안 잡힌 이유가 접두 없는 표기예요 |
+| `README.md` / `README.en.md` | `:219-224` / `:216-221` 규칙 분류표 | 맨 이름(`harness-` 접두 없음)으로 `information_discovery`를 뺀 8편 열거; 같은 표에 이미 삭제된 `context7_policy` 잔존 | **보충** — 감사 §3의 `harness-<name>` grep에 안 잡힌 이유가 접두 없는 표기예요 |
 | `scripts/harness-sync.sh:184` | 글롭 `.omp/rules/harness-*.md` | **불변** | §5 |
 | 치환하지 않는 곳 | `claudedocs/CLAUDE_original.md`, `claudedocs/ecc_harness_analysis.md`, `docs/harness/rules-liveness-audit-2026-10-06.md`, 이 문서, `docs/harness/archive/*`, `docs/handoff/*` | 시점 기록·스냅샷 | `harness-doc_standards.md:52` R6 |
 
@@ -240,7 +240,7 @@ grep -rnoE "(^|[^a-z_/])(harness-)?($NAMES)(\.md)?|rule://harness-($NAMES)|rules
 
 **이 리포(소스)** — `.omp/rules/harness-<name>.md` 자기 파일·감사 문서·이 문서를 뺀 결과는 §2 각 쌍의 "갱신 대상"과 §3에 그대로 있어요. 요약: 하네스 소유 갱신 대상은 `AGENTS.md` 6줄(`:111,153,154,155,157,158`), `claudedocs/CLAUDEKR.md` 6줄(`:112,153,154,155,157,158`), README 2종 분류표 각 5행, 모체·형제 규칙 12줄(`writing_style` 3, `session_persistence` 5, `prompt_engineering` 2, `adversarial_review` 1, `cycle_definition` 1), `templates/retro.md:26`, `checklists/quality_gate.md:3`, `EXAMPLES.md:140`, `index.ts:402`, 테스트 주석·픽스처 8줄(`cycle-boundary-wiring.test.mjs:8`, `risk-assess.test.mjs:53,54,56,119,238,418,422`), `harness-audit.sh` 4블록이에요. 치환하지 않는 스냅샷은 `claudedocs/CLAUDE_original.md:468-488`, `claudedocs/ecc_harness_analysis.md:18-91`, 감사 문서(`docs/harness/rules-liveness-audit-2026-10-06.md`)와 이 문서예요.
 
-**`game-design/trigger-happy`** (하네스 2026.75를 2026-09-07에 동기, `docs/harness/audit.jsonl:2` `harness_sync` tag `refs/harness/2026.75`; 레거시 `rules/*.md` 29편, `.omp/rules/` 없음; 작업 트리 깨끗) — 위 명령 출력(발췌):
+**`game-design/trigger-happy`** (하네스 2026.75를 2026-09-07에 동기, `docs/harness/audit.jsonl:2` `harness_sync` tag `refs/harness/2026.75`; 레거시 `rules/*.md` 27편 + `rules/INDEX.md`(2026.75 시점 규칙 수라 현재 29편과 달라요), `.omp/rules/` 없음; 작업 트리 깨끗) — 위 명령 출력(발췌 — 하네스 소유라 교체되는 `AGENTS.md`(22건)·`scripts/harness-manifest.json`(9건)·`templates/retro.md`·`checklists/quality_gate.md`와 스냅샷 `claudedocs/CLAUDE_original.md`(10건)는 생략했어요):
 
 ```text
 rules/INDEX.md:27,30,37,39,46,57,59,60,64        # 레거시 하네스 사본 — 7c가 blob 일치 시 삭제
@@ -329,24 +329,25 @@ tests/{risk-assess,cycle-boundary-wiring}.test.mjs:159,8  # 옛 템플릿이 남
 
 - **P0 — #87 결론**: 점수 처분(a/b/c/현상 유지)이 정해져야 PR-1부터 열어요. 현상 유지면 점수 블록이 걸린 PR(PR-2·3·4·5)에 코드 커밋(6.1 재배치)이 붙고, 아니면 붙지 않아요.
 - 결정 사항(사용자가 번호로 답하면 돼요):
-  - **D1** M1 처분: 고유 2줄(`:18` 티어 승격 원칙 → `agent_routing`, `:32` 재독 회피 → `session_persistence`)만 옮기고 삭제하는 병합을 권고해요 / 그 2줄도 버리는 폐기를 택할 수 있어요(손실로 기록).
+  - **D1** M1 처분: 고유 2문장(`:10+:18` 티어 승격 MUST → `agent_routing` 불릿, `:30+:32` 재독 회피 SHOULD → `session_persistence` 소절)만 옮기고 삭제하는 병합을 권고해요 / 그 2문장도 버리는 폐기를 택할 수 있어요(손실로 기록).
   - **D2** TDD 지위(M6): "test-first 기본 + 생략 시 명시 승인"으로 봉합하는 쪽을 권고해요(`change_control:43-46`과 정합) / MUST를 유지할 수 있어요 / SHOULD로 내릴 수 있어요.
   - **D3** 이모지 금지(M7): "if adopted" 조건부 MUST를 무조건 MUST로 올리는 쪽을 권고해요(`writing_style:51-52`가 이미 그렇게 인용) / 조건부를 유지할 수 있어요.
   - **D4** M8 이벤트 표: 표 6줄을 옮기는 쪽을 권고해요 / `index.ts:389-392` 포인터 1줄로 대신할 수 있어요.
   - **D5** CRLF → LF 통일: 병합 커밋과 **분리한 별도 커밋**(PR-6)을 권고해요 — 리뷰 diff 가독성 때문이에요 / 같은 커밋에 넣을 수 있어요.
   - **D6** 모체 stale 절 정리(`verification:6-15` oh-my-claudecode, `session_persistence:47-71` `.omp/contexts/*`, `contract:27,117-126,145`): 별도 이슈를 권고해요 — 내용 개정은 감사 §7.3과 같은 범주예요 / 같은 PR의 별도 AC로 넣을 수 있어요.
-- 공통 절차: 각 PR은 gh-loop 워커 1개, Stage 2 커밋 순서(seed+scope → 변경 → 리뷰 후속 → closeout), `순차 PR 갱신` 절차로 하나씩 머지. 모든 PR이 `AGENTS.md:153-158`·`claudedocs/CLAUDEKR.md`·`README*` 분류표를 건드리므로 **병렬 PR은 충돌**해요 — 순차가 맞아요.
+  - **D7** 규칙집 행 평균(§1): 모체 설명을 현행 길이 +10 B 안으로 다듬어 평균 114 B 상한을 지키는 쪽을 권고해요(제안 문구는 초안) / ADR 002의 지표를 "총량 −830 B/요청"으로 바꾸고 제안 문구를 그대로 쓸 수 있어요(ADR 개정 1줄).
+- 공통 절차: 각 PR은 gh-loop 워커 1개, Stage 2 커밋 순서(seed+scope → 변경 → 리뷰 후속 → closeout), `순차 PR 갱신` 절차로 하나씩 머지. 모든 PR이 `AGENTS.md:153-158`·`claudedocs/CLAUDEKR.md`·`CHANGELOG.md`를, PR-1을 뺀 모든 PR이 `README*` 분류표를 건드리므로 **병렬 PR은 충돌**해요 — 순차가 맞아요.
 - 공통 확인(모든 PR): ① `grep -rnE "(harness-|rule://harness-|rules/)<삭제 이름>"` 결과가 스냅샷 3종(§3)뿐 ② `node scripts/docs-drift` 0 errors ③ `node --test .omp/extensions/harness/tests/*.test.mjs` 전부 통과 ④ `git diff --stat main -- .omp/rules`에 삭제 파일과 모체만 ⑤ omp 세션에서 `rule://harness-<모체>`를 열어 옮긴 절이 보이고 `description`이 바뀌어 있음(감사 §7.4-4의 규칙집 렌더 확인).
 
 ### 7.1 PR 목록 (제안 순서)
 
 | # | 쌍 | 변경 파일(문서) | 코드 커밋(있을 때 — "현상 유지 시"는 #87이 점수를 그대로 둘 때만) | 위험 | 의존 | 확인 문장 |
 |---|---|---|---|---|---|---|
-| **PR-1** | M2 | 삭제 1편; `anti_hallucination` 새 절+description; `AGENTS.md:153`; CLAUDEKR | — | low | P0 | "`harness-information_discovery`가 삭제되고 `rule://harness-anti_hallucination`에 'search broadly…' 절(판별 불릿 2·스윕 3단계·scout 위임)이 있으며, 그 이름의 참조가 스냅샷 밖 0건이에요." |
-| **PR-2** | M3 | 삭제 1편; `session_persistence` 새 절 2개+`:6,10,77` 정리+description; `cycle_definition:189`; `AGENTS.md:157`; CLAUDEKR; README 2종 | `index.ts:402`·`cycle-boundary-wiring.test.mjs:8` 주석(코드 파일이라 **항상** medium 커밋 1), 현상 유지 시 `harness-audit.sh:162-166,333-337` | low + medium 커밋 1 | P0 | "`harness-context_management`가 삭제되고 `rule://harness-session_persistence`에 'When to compact'(표 5행)·'What to preserve (MUST)'(+Safe to drop) 절이 있으며, 모체 안에 `context_management` 언급이 0건이고 `index.ts`·테스트 주석이 새 파일명을 가리켜요." |
-| **PR-3** | M1 + M4 + M8 | 삭제 3편; `agent_routing:43` 뒤 1줄; `session_persistence` Safe to drop 끝 1줄 + Relationship 불릿 2개(텍스트로 특정, M3 뒤 재측정); `assetization` Learning criteria; `contract` Event model; `templates/retro.md:26`; `AGENTS.md:155,157`; CLAUDEKR; README 2종 | 현상 유지 시 `harness-audit.sh:321-325`; 픽스처 `risk-assess.test.mjs:54` 선택(택하면 medium) | low(코드 커밋 시 medium) | PR-2 머지 뒤, D1, D4 | "`harness-cost_awareness`·`harness-learning_policy`·`harness-hook_recipes`가 삭제되고 `rule://harness-agent_routing`에 티어 승격 원칙 1줄, `rule://harness-session_persistence`에 재독 회피 1줄과 새 Relationship 불릿, `rule://harness-assetization`에 4기준+트리거 3종, `rule://harness-harness_integration_contract`에 Event model(표 4행 + fail-open/bash fail-closed 단서)이 있으며, `templates/retro.md:26`이 새 위치를 가리켜요." |
-| **PR-4** | M5 + M6 | 삭제 2편; `verification_tests_and_evals` Test-first 소절+Named gates 절+커버리지 불릿+Self-Check+description; `checklists/quality_gate.md:3`; `adversarial_review:11`; `AGENTS.md:111,154`; `EXAMPLES.md:140`; CLAUDEKR; README 2종; 결정 로그(D2) | 현상 유지 시 `harness-audit.sh:207-211`; 픽스처 `:56,119,238,418,422` 선택(택하면 medium) | low(코드 커밋 시 medium) | P0, D2 | "`harness-quality_gates`·`harness-tdd_policy`가 삭제되고 `rule://harness-verification_tests_and_evals`에 'Named gates and trigger levels'(정의 표 6행·트리거 표 4행·억제 조건)과 'Test-first default'(요지 3줄·승인 1줄·커버리지)가 있으며, `checklists/quality_gate.md`가 그 절을 가리키고 D2 결정이 `docs/decisions/`에 기록돼요." |
-| **PR-5** | M7 + M9 | 삭제 2편; `writing_style` R9+`:8-9,51-52,97`+description; `safety_security` 2단 구조+Adversarial threats 절(원문 그대로)+description; `prompt_engineering:173-174,341`; `AGENTS.md:153,158`; CLAUDEKR; README 2종 | 현상 유지 시 `harness-audit.sh:293-297` | low(코드 커밋 시 medium) | P0, D3 | "`harness-documentation_policy`·`harness-agent_security`가 삭제되고 `rule://harness-writing_style`에 R9(한/영 분리·UTF-8 NO-BOM), `rule://harness-safety_security`에 Operational/Adversarial 2단 절(MUST 3·SHOULD 3·OWASP 표 9줄·Self-Check 5항이 원문 그대로)이 있으며, `prompt_engineering`의 위임이 새 절을 가리켜요." |
+| **PR-1** | M2 | 삭제 1편; `anti_hallucination` 새 절+description; `AGENTS.md:153`; CLAUDEKR; CHANGELOG(5.3 개명표 전체) | — | low | P0, D7 | "`harness-information_discovery`가 삭제되고 `rule://harness-anti_hallucination`에 'search broadly…' 절(판별 불릿 2·스윕 3단계·scout 위임)이 있으며, 그 이름의 참조가 스냅샷 밖 0건이에요." |
+| **PR-2** | M3 | 삭제 1편; `session_persistence` 새 절 2개+`:6,10,77` 정리+description; `cycle_definition:189`; `AGENTS.md:157`; CLAUDEKR; README 2종(20편 기준 재작성); CHANGELOG | `index.ts:402`·`cycle-boundary-wiring.test.mjs:8` 주석(코드 파일이라 **항상** medium 커밋 1), 현상 유지 시 `harness-audit.sh:162-166,333-337` | low + medium 커밋 1 | P0, D6, D7 | "`harness-context_management`가 삭제되고 `rule://harness-session_persistence`에 'When to compact'(표 5행)·'What to preserve (MUST)'(+Safe to drop) 절이 있으며, 모체 안에 `context_management` 언급이 0건이고 `index.ts`·테스트 주석이 새 파일명을 가리켜요." |
+| **PR-3** | M1 + M4 + M8 | 삭제 3편; `agent_routing:43` 뒤 MUST 불릿 1줄; `session_persistence` Safe to drop 뒤 SHOULD 소절 2줄 + Relationship 불릿 2개(텍스트로 특정, M3 뒤 재측정); `assetization` Learning criteria; `contract` Event model; `templates/retro.md:26`; `AGENTS.md:155,157`; CLAUDEKR; README 2종; CHANGELOG | 현상 유지 시 `harness-audit.sh:321-325`; 픽스처 `risk-assess.test.mjs:54` 선택(택하면 medium) | low(코드 커밋 시 medium) | PR-2 머지 뒤, D1, D4, D7 | "`harness-cost_awareness`·`harness-learning_policy`·`harness-hook_recipes`가 삭제되고 `rule://harness-agent_routing`에 티어 승격 MUST 1줄, `rule://harness-session_persistence`에 재독 회피 SHOULD 소절과 새 Relationship 불릿, `rule://harness-assetization`에 4기준+트리거 3종, `rule://harness-harness_integration_contract`에 Event model(표 4행 + fail-open/bash fail-closed 단서)이 있으며, `templates/retro.md:26`이 새 위치를 가리켜요." |
+| **PR-4** | M5 + M6 | 삭제 2편; `verification_tests_and_evals` Test-first 소절+Named gates 절+커버리지 불릿+Self-Check+description; `checklists/quality_gate.md:3`; `adversarial_review:11`; `AGENTS.md:111,154`; `EXAMPLES.md:140`; CLAUDEKR; README 2종; CHANGELOG; 결정 로그(D2) | 현상 유지 시 `harness-audit.sh:207-211`; 픽스처 `:56,119,238,418,422` 선택(택하면 medium) | low(코드 커밋 시 medium) | P0, D2, D7 | "`harness-quality_gates`·`harness-tdd_policy`가 삭제되고 `rule://harness-verification_tests_and_evals`에 'Named gates and trigger levels'(정의 표 6행·트리거 표 4행·억제 조건)과 'Test-first default'(요지 3줄·승인 1줄·커버리지)가 있으며, `checklists/quality_gate.md`가 그 절을 가리키고 D2 결정이 `docs/decisions/`에 기록돼요." |
+| **PR-5** | M7 + M9 | 삭제 2편; `writing_style` R9+`:8-9,51-52,97`+description; `safety_security` 2단 구조+Adversarial threats 절(원문 그대로, auto-memory 감사 유지)+description; `prompt_engineering:173-174,341`; `AGENTS.md:153,158`; CLAUDEKR; README 2종; CHANGELOG | 현상 유지 시 `harness-audit.sh:293-297` | low(코드 커밋 시 medium) | P0, D3, D7 | "`harness-documentation_policy`·`harness-agent_security`가 삭제되고 `rule://harness-writing_style`에 R9(한/영 분리·UTF-8 NO-BOM), `rule://harness-safety_security`에 Operational/Adversarial 2단 절(MUST 3·SHOULD 3·OWASP 표 9줄·Self-Check 5항이 원문 그대로, 메모리 감사 목록에 auto-memory 포함)이 있으며, `prompt_engineering`의 위임이 새 절을 가리켜요." |
 | **PR-6**(선택, D5) | CRLF→LF | 모체 중 CRLF인 `anti_hallucination`·`session_persistence`·`safety_security`(+ 유지 규칙 12편) | — | low | PR-1~5 뒤 | "`file .omp/rules/harness-*.md`에 CRLF가 0건이고 `git diff -w`가 비어 있어요." |
 
 규모 근거: PR당 삭제 1–3편 + 모체 1–3편 + 공통 4파일 ≈ 6–12파일이고, 코드 커밋을 분리하면 문서 커밋은 `risk-assess`로 low예요. 한 PR에 **같은 모체**(PR-4)나 **M3 뒤 `session_persistence`를 함께 건드리는 소형 쌍**(PR-3)만 묶었고, 가장 큰 M3는 단독이에요. 순서는 소형 독립(PR-1) → M3(PR-2) → M3 의존(PR-3) → 같은 모체 쌍(PR-4) → 나머지(PR-5)이며 PR-1·4·5는 서로 독립이라 사용자가 순서를 바꿔도 돼요(단 PR-3은 PR-2 뒤).
@@ -385,6 +386,9 @@ grep -rnoE "(^|[^a-z_/])(harness-)?($NAMES)(\.md)?|rule://harness-($NAMES)|rules
 bash scripts/harness-audit.sh --terse | tail -1          # TOTAL: 51/70
 node --test .omp/extensions/harness/tests/*.test.mjs     # 671/671 (2026-10-06)
 node scripts/docs-drift                                   # closeout 전에는 "Closeout pending" 구조 경고 1건이 정상이고, closeout 커밋 뒤 0 errors/0 warnings
+# 규칙집 행 평균 (§1 — `이름: 설명` 근사; ADR 002 :89의 실측 포맷과는 상수 차이가 있어요)
+tot=0; n=0; for f in .omp/rules/harness-*.md; do nm=$(basename $f .md); d=$(grep -m1 '^description:' $f | sed -E 's/^description: *"?//; s/"?\r?$//'); tot=$((tot+$(printf '%s: %s' "$nm" "$d" | wc -c))); n=$((n+1)); done; echo "rows=$n total=$tot avg=$((tot/n))"   # rows=29 total=3122 avg=107
+# 병합 뒤 예상(9편 제외, 모체 6편 설명을 §1 제안으로 교체): rows=20 total=2292 avg=114
 grep -nE 'harness-[a-z_]+\.md' scripts/harness-audit.sh
 grep -nE "($NAMES)" .omp/extensions/harness/tests/*.test.mjs .omp/extensions/harness/index.ts
 # 소비 리포 (§5.2) — 읽기 전용
