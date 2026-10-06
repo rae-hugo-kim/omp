@@ -1,5 +1,6 @@
 name: changelog-unreleased-promotion-47
-status: approved
+status: done
+completed: 2026-10-06
 version: 1
 task_id: "20261006-060940-4a7c"
 # gh-loop worker Stage 2에 따라 이슈 #47 본문과 결정 댓글(2026-10-03 결정 1, 2026-10-06 결정 2·3)·AC (a)(b)(c)를 명세로 삼습니다.
