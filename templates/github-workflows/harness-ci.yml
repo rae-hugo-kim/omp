@@ -29,8 +29,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: harness-ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Cancel superseded PR runs only; every push to main keeps its own record.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   archive-leak:
@@ -41,6 +42,10 @@ jobs:
           # Full history: pre-push also runs scripts/docs-drift when it exists (source repo),
           # and docs-drift reads `git log` for AGENTS.md.
           fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          # pre-push runs scripts/docs-drift with node when it exists.
+          node-version: 22
       - name: Tracked local-archive files (same logic as the local pre-push gate)
         run: bash .githooks/pre-push
 

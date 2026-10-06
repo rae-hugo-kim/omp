@@ -67,7 +67,8 @@ on your runner** — the harness cannot live-verify it. Do a dry exercise on a t
 # harness-ci — server-side checks (instantiate-once)
 
 `harness-ci.yml` is the **server-side backstop** for the local gates: a client-side hook can be skipped with
-`--no-verify` or never activated (`core.hooksPath` is not carried by sync — #26), but a workflow on the remote
+`--no-verify`, disabled later, or inactive in a clone (local git config does not travel with a clone, and #26
+measured 9 of 10 consumers with hooks off before sync started activating them), but a workflow on the remote
 still runs on every push to `main` and every pull request. It is byte-identical to the live
 `.github/workflows/harness-ci.yml` of the omp source repo. Three jobs, all on GitHub-hosted runners with
 read-only permissions and no secrets:
