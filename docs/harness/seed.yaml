@@ -1,5 +1,6 @@
 name: cross-repo-guard-15
-status: approved
+status: done
+completed: 2026-10-07
 version: 1
 task_id: "20261006-064353-6223"
 # gh-loop worker Stage 2에 따라 이슈 #15 본문(관측 사건·코드 근거·4부 제안·AC)과 "세션에서 직접 결정함" 댓글(A — ①②③만, ④ 제외)을 명세로 삼습니다.

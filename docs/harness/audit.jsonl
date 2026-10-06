@@ -216,3 +216,6 @@
 {"ts":"2026-10-06T10:23:16Z","event":"task_closed","actor":"assistant","meta":{"task_id":"20261006-094329-349d","name":"rules-merge-plan-86"}}
 {"ts":"2026-10-06T06:32:57.333Z","event":"gh_loop_dispatched","actor":"assistant","meta":{"issue":15,"risk":"high","files":8,"depth":"high","ac_count":6,"model":"anthropic/claude-fable-5-1","effort":"xhigh","dispatched_at":"2026-10-06T06:31:00Z"}}
 {"ts":"2026-10-06T06:44:39.340Z","event":"thread_opened","actor":"assistant","meta":{"thread_id":"T-20261006064439-84a2","seed_task_id":"20261006-064353-6223","seed_version":1,"ac_targeted":["AC1","AC2","AC3","AC4","AC5","AC6"]}}
+{"ts":"2026-10-06T16:28:22.140Z","event":"gh_loop_closed","actor":"assistant","meta":{"issue":15,"pr":null,"model":"anthropic/claude-fable-5-1","effort":"xhigh","risk":"high","depth":"high","files_predicted":8,"files_changed":16,"insertions":1007,"deletions":88,"review_rounds":4,"verifier":"PASS WITH NOTES","decisions":0,"dispatched_at":"2026-10-06T06:31:00Z","duration_min":597}}
+{"ts":"2026-10-06T16:28:22.190Z","event":"thread_closed","actor":"assistant","meta":{"thread_id":"T-20261006064439-84a2","verdict":"PASS"}}
+{"ts":"2026-10-06T16:28:30.294Z","event":"task_closed","actor":"assistant","meta":{"task_id":"20261006-064353-6223","name":"cross-repo-guard-15"}}
