@@ -19,7 +19,7 @@
 
 ## 1. 범위와 방법
 
-- 연구할 것 1(항목 전수표): `scripts/harness-audit.sh` 381줄을 전부 읽고 `award` 호출 32건을 표로 옮겼어요. 판정 방식은 헬퍼 기준으로 분류했어요 — **E** = `exists`/`compgen -G`(파일·디렉터리 존재), **P** = `has_pattern`/`grep -qF`(고정 문자열 일치), **C** = `count_files`(파일 개수), **B** = 실제 동작(게이트 실행·이벤트·결과). 
+- 연구할 것 1(항목 전수표): `scripts/harness-audit.sh` 381줄을 전부 읽고 채점 항목 32개를 표로 옮겼어요(`award` 호출은 #1·#3의 폴백 티어 2건을 포함해 34건이고, 폴백은 표의 항목 열에 괄호로 적었어요). 판정 방식은 헬퍼 기준으로 분류했어요 — **E** = `exists`/`compgen -G`(파일·디렉터리 존재), **P** = `has_pattern`/`grep -qF`(고정 문자열 일치), **C** = `count_files`(파일 개수), **B** = 실제 동작(게이트 실행·이벤트·결과).
 - 연구할 것 2(이력·결정 사례): 점수 행 파일, `docs/harness/audit.jsonl`, `docs/sum`·`docs/reviews`(메인 체크아웃, gitignored), 이슈·PR 검색(`gh … --search`), 스크립트 git 이력을 명령과 출력으로 기록했어요(§3).
 - 연구할 것 3·4: 선택지별 영향 파일을 `grep`·`gh`로 열거하고(§4), 추천을 §0에 두었어요.
 - 참고: `docs/harness/audit.jsonl`의 `rubric_evaluated`(10행)는 **kickoff 루브릭**(seed 명료성·coverage) 이벤트이고 이 스크립트와 무관해요. 같은 "rubric" 단어라 혼동하기 쉬워 적어 두어요.
@@ -204,7 +204,7 @@ by_cat 동일 × 31행: tool 8 / ctx 5 / qg 10 / mem 5 / eval 8 / sec 10 / cost 
 4. 소비 리포 안내: 릴리스 노트(범프 CHANGELOG)에 "`scripts/harness-audit.sh`·`scripts/test-harness-audit.sh`는 삭제해도 됩니다" 1줄.
 5. 실행 순서: #15(게이트 `.mjs`)가 머지된 뒤에 열어요 — `risk-assess.mjs`가 같은 디렉터리예요.
 
-#86은 이 결정이 나면 "점수가 내려가지 않음" AC 없이 M1–M9 이동표를 확정할 수 있어요.
+#86은 이 결정이 나면 "점수가 내려가지 않음" AC 없이 M1–M9 이동표를 확정할 수 있어요. 점수 처분이 정해지기 전에는 병합 **실행** 사이클을 열지 않아요(이슈 #87 AC4).
 
 ## 6. 검증
 
@@ -212,4 +212,4 @@ by_cat 동일 × 31행: tool 8 / ctx 5 / qg 10 / mem 5 / eval 8 / sec 10 / cost 
 - §2.4 임시 디렉터리 실험 → `TOTAL: 67/70`(위 출력 그대로).
 - `wc -l`·`node -e` 집계 → 31행 전부 `total: 51`.
 - `gh issue list`/`gh pr list --search` → §3.2 표의 번호·인용 줄.
-- 이 문서는 `docs/harness/` 신규 1파일이고, 스크립트·규칙·게이트·스킬은 수정하지 않았어요(`git status --porcelain` → `?? docs/harness/audit-score-review-2026-10-06.md`; 추적 파일 변경 없음, `git diff --stat main -- scripts .omp/rules .omp/extensions` 비어 있음).
+- 이 문서는 `docs/harness/` 신규 1파일이고, 스크립트·규칙·게이트·스킬은 수정하지 않았어요(문서 커밋 `f116a43` 기준 브랜치 변경은 `docs/harness/` 4파일뿐이고, `git diff --stat main -- scripts .omp/rules .omp/extensions`는 비어 있어요).
