@@ -840,7 +840,7 @@ function physical(p) {
   try { return realpathSync.native(p); } catch { return p; }
 }
 function chdir(from, v) {
-  const { root } = path.parse(v);                  // '' when relative; '/', 'C:\', '\\srv\share\' when absolute
+  const { root } = path.parse(v);                  // '' when relative; '/', 'C:\', '\\srv\share\' when absolute ('C:' for a drive-relative `C:foo` — unmodelled, walked lexically)
   let cur = root || physical(from);
   for (const part of v.slice(root.length).split(SEPARATORS)) {
     if (part === '' || part === '.') continue;

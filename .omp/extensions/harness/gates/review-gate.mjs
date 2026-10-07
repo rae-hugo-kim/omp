@@ -548,7 +548,9 @@ const inWindow = (f) => (f.startsWith(`review-${today}`) || f.startsWith(`review
 // produces, so sidecars written that way keep matching; hashing in-process removes the
 // `shasum` dependency that made every high/critical commit fail closed on Windows (#93).
 // maxBuffer is lifted because the whole diff is now captured (the pipe used to leave only
-// the digest line in stdout); both diff commands are constant (no user input on the line).
+// the digest line in stdout — the cost is O(diff) memory for the gate's lifetime); both diff
+// commands are constant (no user input on the line). A failing git now throws here (→ null →
+// fail-closed); the old `sh` pipe had no pipefail, so a git error hashed EMPTY stdout instead.
 let currentHash = null;
 const diffCmd = form.all ? 'git diff HEAD' : 'git diff --cached';
 if (form.verifiable) {

@@ -442,6 +442,11 @@ const HAS_SHASUM = spawnSync('shasum', ['--version'], { encoding: 'utf-8' }).sta
 test('diff hash == `git diff --cached | shasum -a 256` (sidecars written that way keep matching)',
   { skip: HAS_SHASUM ? false : 'shasum is not on PATH on this host (the gate no longer needs it)' }, () => {
   withRepo(HIGH, (dir) => {
+    // Stage CRLF text and non-UTF-8 bytes too: a future decode/re-encode of the diff output
+    // (an `encoding` option, a text pipe) would diverge from shasum exactly there.
+    writeFileSync(join(dir, 'src', 'crlf.txt'), 'a\r\nb\r\n');
+    writeFileSync(join(dir, 'src', 'raw.bin'), Buffer.from([0x00, 0xff, 0xfe, 0x80, 0x0d, 0x0a, 0xc3]));
+    execSync('git add -A', { cwd: dir });
     const viaShasum = stagedHash(dir);
     const viaCrypto = createHash('sha256').update(execSync('git diff --cached', { cwd: dir })).digest('hex');
     assert.equal(viaCrypto, viaShasum, 'Node crypto over the raw stdout bytes is the shasum value');
@@ -455,9 +460,10 @@ test('diff hash == `git diff --cached | shasum -a 256` (sidecars written that wa
 
 test('high risk + diff hash uncomputable -> BLOCK (fail-closed)', () => {
   withRepo(HIGH, (dir) => {
-    // A today sidecar exists, but with the bare `git diff --cached` (the gate's hash command,
-    // exactly 2 args) stubbed to fail the gate cannot verify coverage -> unverified ->
-    // high/critical must fail closed. risk-assess's `git diff … --name-only` keeps working.
+    // A today sidecar exists, but with the gate's bare hash command stubbed to fail (`git diff
+    // --cached` / `git diff HEAD` — any 2-arg `git diff X`; risk-assess's `--no-renames
+    // --name-only` queries keep working) the gate cannot verify coverage -> unverified ->
+    // high/critical must fail closed.
     writeReview(dir, `review-${TODAY}-120000.json`, evidence('0'.repeat(64)));
     const binDir = mkdtempSync(join(tmpdir(), 'rv-nobin-'));
     const realGit = execSync('command -v git', { encoding: 'utf-8' }).trim();
