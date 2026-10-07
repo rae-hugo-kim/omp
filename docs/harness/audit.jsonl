@@ -224,3 +224,5 @@
 {"ts":"2026-10-07T18:12:43.178Z","event":"gh_loop_closed","actor":"assistant","meta":{"issue":91,"pr":null,"model":"anthropic/claude-sonnet-5-5","effort":"high","risk":"low","depth":"low","files_predicted":3,"files_changed":8,"insertions":149,"deletions":53,"review_rounds":0,"verifier":"PASS WITH NOTES","decisions":0,"dispatched_at":"2026-10-07T17:53:09Z","duration_min":20}}
 {"ts":"2026-10-07T18:12:48.470Z","event":"thread_closed","actor":"assistant","meta":{"thread_id":"T-20261007175846-a114","verdict":"PASS"}}
 {"ts":"2026-10-07T18:12:48.000Z","event":"task_closed","actor":"assistant","meta":{"task_id":"20261008-021500-9a1c","name":"macos-test-portability-91"}}
+{"ts":"2026-10-07T17:55:08.222Z","event":"gh_loop_dispatched","actor":"assistant","meta":{"issue":93,"risk":"medium","files":4,"depth":"high","ac_count":4,"model":"anthropic/claude-fable-5-1","effort":"high","dispatched_at":"2026-10-07T17:53:14Z"}}
+{"ts":"2026-10-07T18:01:28.885Z","event":"thread_opened","actor":"assistant","meta":{"thread_id":"T-20261007180128-1dee","seed_task_id":"20261008-030013-1286","seed_version":1,"ac_targeted":["AC1","AC2","AC3","AC4"]}}
