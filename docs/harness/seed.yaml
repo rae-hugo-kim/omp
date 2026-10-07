@@ -1,5 +1,6 @@
 name: windows-runtime-defects-93
-status: approved
+status: done
+completed: 2026-10-08
 version: 1
 task_id: "20261008-030013-1286"
 # gh-loop worker Stage 2에 따라 이슈 #93 본문(결함 2건·AC 4건)과 "세션에서 직접 결정함" 댓글(본문 AC 4건대로, 리뷰 3-pass 필수)을 명세로 삼습니다. 배경은 #92 1차 분류와 지원 범위 결정(Linux·WSL·macOS 공식, Windows 네이티브는 런타임 결함만 수정)입니다.
