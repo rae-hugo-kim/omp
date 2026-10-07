@@ -19,9 +19,9 @@ import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync, appendFileSync, symlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, posix, win32 } from 'node:path';
 import { repoIdentity, repoToplevel } from '../gates/repo-root.mjs';
-import { shellWriteTargets, isGitPush } from '../gates/git-commit-detect.mjs';
+import { absolutize, shellWriteTargets, isGitPush } from '../gates/git-commit-detect.mjs';
 import { crossRepoBashVerdict, crossRepoMutationVerdict } from '../gates/cross-repo.mjs';
 import { loadHarness, ctxFor } from './helpers/harness-handlers.mjs';
 import { mkdtempReal } from './helpers/real-tmpdir.mjs';
@@ -295,4 +295,19 @@ test('wiring: tool_call blocks an edit/write and a commit into another disciplin
     const commitAfter = await toolCall({ toolName: 'bash', toolCallId: 'b3', input: { command: `git -C ${external} commit -m x` } }, ctx);
     assert.equal(commitAfter?.block, true, 'the commit stays blocked after the read');
   });
+});
+
+// ① target attribution is `path.isAbsolute`, not `startsWith('/')` (#93): a Windows absolute
+// path must not be glued under the session cwd. Pure — the platform `path` is injected so the
+// win32 rule runs on any host; nothing is normalized (`link/..` stays for repo-root's physical walk).
+test('absolutize: Windows-style absolute paths stay absolute, relatives join with the platform separator, nothing is collapsed', () => {
+  for (const abs of ['C:\\repo\\x.ts', 'C:/repo/x.ts', '\\\\srv\\share\\x.ts', 'c:\\link\\..\\x.ts']) {
+    assert.equal(absolutize(abs, 'C:\\session', win32), abs, `${abs} is absolute on win32 (was treated as relative)`);
+  }
+  assert.equal(absolutize('src\\x.ts', 'C:\\session', win32), 'C:\\session\\src\\x.ts');
+  assert.equal(absolutize('link/../x.ts', 'C:\\session', win32), 'C:\\session\\link/../x.ts', 'not normalized on win32 either');
+  assert.equal(absolutize('C:\\repo\\x.ts', '/session', posix), '/session/C:\\repo\\x.ts', 'on POSIX `C:\\…` is a relative file name');
+  assert.equal(absolutize('/abs/x.ts', '/session', posix), '/abs/x.ts');
+  assert.equal(absolutize('link/../x.ts', '/session', posix), '/session/link/../x.ts', '`link/..` is preserved for the physical walk (r2 X3)');
+  assert.equal(absolutize('link/../x.ts', '/session'), `/session${process.platform === 'win32' ? '\\' : '/'}link/../x.ts`, 'default is the host platform');
 });

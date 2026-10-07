@@ -22,6 +22,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync, execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync, chmodSync, readFileSync, existsSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -434,16 +435,34 @@ test('hash mismatch: valid tuple for a DIFFERENT diff -> BLOCK, message teaches 
   });
 });
 
-// --- fail-closed: hash cannot be computed (e.g. shasum missing) ---
+// --- the hash is sha256 of the raw diff bytes, computed in-process (no `shasum`, #93) ---
+
+const HAS_SHASUM = spawnSync('shasum', ['--version'], { encoding: 'utf-8' }).status === 0;
+
+test('diff hash == `git diff --cached | shasum -a 256` (sidecars written that way keep matching)',
+  { skip: HAS_SHASUM ? false : 'shasum is not on PATH on this host (the gate no longer needs it)' }, () => {
+  withRepo(HIGH, (dir) => {
+    const viaShasum = stagedHash(dir);
+    const viaCrypto = createHash('sha256').update(execSync('git diff --cached', { cwd: dir })).digest('hex');
+    assert.equal(viaCrypto, viaShasum, 'Node crypto over the raw stdout bytes is the shasum value');
+    const r = runGate(dir);                                     // no evidence -> BLOCK, message prints the gate's hash
+    assert.equal(r.status, 2);
+    assert.ok(r.stderr.includes(viaShasum), 'the gate computed the shasum-identical hash');
+  });
+});
+
+// --- fail-closed: hash cannot be computed (git diff fails) ---
 
 test('high risk + diff hash uncomputable -> BLOCK (fail-closed)', () => {
   withRepo(HIGH, (dir) => {
-    // A today sidecar exists, but with shasum stubbed to fail the gate cannot
-    // verify coverage -> unverified -> high/critical must fail closed.
+    // A today sidecar exists, but with the bare `git diff --cached` (the gate's hash command,
+    // exactly 2 args) stubbed to fail the gate cannot verify coverage -> unverified ->
+    // high/critical must fail closed. risk-assess's `git diff … --name-only` keeps working.
     writeReview(dir, `review-${TODAY}-120000.json`, evidence('0'.repeat(64)));
     const binDir = mkdtempSync(join(tmpdir(), 'rv-nobin-'));
-    writeFileSync(join(binDir, 'shasum'), '#!/bin/sh\nexit 127\n');
-    chmodSync(join(binDir, 'shasum'), 0o755);
+    const realGit = execSync('command -v git', { encoding: 'utf-8' }).trim();
+    writeFileSync(join(binDir, 'git'), `#!/bin/sh\nif [ "$#" -eq 2 ] && [ "$1" = diff ]; then exit 1; fi\nexec "${realGit}" "$@"\n`);
+    chmodSync(join(binDir, 'git'), 0o755);
     try {
       const r = spawnSync('node', [GATE], {
         input: JSON.stringify({ tool_input: { command: 'git commit -m x' }, session_state: { cwd: dir } }),
@@ -452,6 +471,7 @@ test('high risk + diff hash uncomputable -> BLOCK (fail-closed)', () => {
         env: { ...process.env, PATH: `${binDir}:${process.env.PATH}` },
       });
       assert.equal(r.status, 2);
+      assert.match(r.stderr, /could not compute the diff hash \(git diff failed\)/);
     } finally {
       rmSync(binDir, { recursive: true, force: true });
     }
