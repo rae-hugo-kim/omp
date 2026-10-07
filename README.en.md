@@ -27,8 +27,23 @@ One improvement over the original: failed bash verifications are recorded as FAI
 ## Requirements
 
 - [OMP (Oh My Pi)](https://github.com/oh-my-pi) — the coding agent harness
-- Node.js — gates are spawned with `node` (must be on PATH)
+- Node.js ≥ 20 — gates are spawned with `node` (must be on PATH; CI runs on 22 only). The harness test suite's wiring tests use built-in TypeScript stripping, so running the suite needs 22.18+
 - (Optional) oh-my-claudecode — if installed under `~/.claude`, OMP auto-discovers OMC agents/skills
+
+## Supported platforms
+
+| Platform | Status |
+|---|---|
+| Linux · WSL · macOS | **Officially supported** — a fully green harness test run is the baseline |
+| Windows native | **Targeted, with some tests skipped** — only tests that need an OS feature (symlinks, FIFOs) the host lacks are skipped, with the reason printed. The full suite has not been run on a real Windows host, and until the runtime fixes in [#93](https://github.com/rae-hugo-kim/omp/issues/93) land, review-gate fails closed there because `shasum` is missing |
+
+Windows-native prerequisites:
+
+- **bash** — the bash that Git for Windows installs runs `.githooks/*` and `scripts/*.sh`.
+- **`node` must be on that bash's PATH.** Otherwise the pre-commit hook fails closed; for nvm-style setups point `OMP_NODE_BIN` at the binary.
+- **Symlink tests** — they run only with Windows Developer Mode (or an elevated shell). Without it they are skipped with a `host cannot create symlinks …` reason; a host that can create symlinks skips nothing. FIFO tests (which need `mkfifo`) are skipped the same way.
+- **Line endings (CRLF)** — the repo's `.gitattributes` pins `*.sh` and `.githooks/*` to LF, so a `core.autocrlf=true` checkout still gives bash readable scripts. `.gitattributes` is not part of the `/skill:harness-check` sync, so existing consumer repos must add the two lines `*.sh text eol=lf` and `.githooks/* text eol=lf` themselves, then convert already-CRLF files with `git add --renormalize .` or a fresh checkout.
+- **Recommended verification path** — on Windows, open the same checkout in WSL and run `node --test .omp/extensions/harness/tests/*.test.mjs`. Full Windows-native operation needs a harness that includes the runtime fixes from [#93](https://github.com/rae-hugo-kim/omp/issues/93) (no `shasum` dependency in review-gate, absolute-path detection in cross-repo).
 
 ## Getting Started
 

@@ -27,6 +27,8 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync, chmodSync, readFileSync,
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gitDiffSha256 } from './helpers/diff-hash.mjs';
+import { skipUnless, mkfifoSync } from './helpers/capabilities.mjs';
 
 const GATE = join(dirname(fileURLToPath(import.meta.url)), '..', 'gates', 'review-gate.mjs');
 // Match the gate's LOCAL-date naming (it does not use UTC), so sidecar names line up
@@ -70,7 +72,7 @@ function makeRepo(files) {
 
 // The same hash the gate computes from the staged diff.
 function stagedHash(dir) {
-  return execSync('git diff --cached | shasum -a 256', { cwd: dir, encoding: 'utf-8' }).trim().split(/\s+/)[0];
+  return gitDiffSha256(dir, ['diff', '--cached']);
 }
 
 // Write an (untracked) review sidecar/report so it does not perturb the staged diff.
@@ -521,8 +523,7 @@ function committedRepo() {
 }
 
 // Hash exactly as the gate/reviewer do, for an arbitrary diff selector.
-const diffHash = (dir, sel) =>
-  execSync(`git diff ${sel} | shasum -a 256`, { cwd: dir, encoding: 'utf-8' }).trim().split(/\s+/)[0];
+const diffHash = (dir, sel) => gitDiffSha256(dir, ['diff', ...sel.split(' ')]);
 
 function withCommitted(fn) {
   const { dir, git } = committedRepo();
@@ -796,7 +797,7 @@ test('INTEGRATION: override + plain commit -> gate allows and the REAL committed
     assert.equal(existsSync(skipPath(dir)), false, 'flag consumed');
     // Run the REAL commit the gate just allowed.
     git(['commit', '-q', '-m', 'x']);
-    const committed = execSync('git diff HEAD~1 HEAD | shasum -a 256', { cwd: dir, encoding: 'utf-8' }).trim().split(/\s+/)[0];
+    const committed = gitDiffSha256(dir, ['diff', 'HEAD~1', 'HEAD']);
     assert.equal(committed, approved, 'committed diff is exactly the approved staged diff');
     // The gate's audit append stayed OUT of the commit (it is an unstaged change to the tracked file).
     assert.match(execSync('git status --porcelain', { cwd: dir, encoding: 'utf-8' }), /^ M docs\/harness\/audit\.jsonl$/m);
@@ -814,7 +815,7 @@ test('INTEGRATION: override + git commit -a with UNTRACKED audit/flag -> allowed
     assert.equal(runGate(dir, 'git commit -am x').status, 0, 'no tracked sweep target -> -a override stays consumable');
     assert.equal(existsSync(skipPath(dir)), false, 'flag consumed');
     git(['commit', '-q', '-am', 'x']);
-    const committed = execSync('git diff HEAD~1 HEAD | shasum -a 256', { cwd: dir, encoding: 'utf-8' }).trim().split(/\s+/)[0];
+    const committed = gitDiffSha256(dir, ['diff', 'HEAD~1', 'HEAD']);
     assert.equal(committed, approved, '-a commit captures exactly the approved diff (untracked files not swept)');
     assert.match(readFileSync(auditPath(dir), 'utf-8'), /review_override/);
   });
@@ -1113,41 +1114,52 @@ test('CRITICAL-1: a deeply nested sub-64KiB sidecar must be REJECTED, never cras
   });
 });
 
-test('CRITICAL-2: FIFO / symlink sidecars are rejected without blocking (open is O_NOFOLLOW|O_NONBLOCK)', () => {
+test('CRITICAL-2: a FIFO sidecar is rejected without blocking (open is O_NOFOLLOW|O_NONBLOCK)', { skip: skipUnless('fifo') }, () => {
   withRepo(HIGH, (dir) => {
     const rd = join(dir, 'docs', 'reviews');
     mkdirSync(rd, { recursive: true });
-    // (a) a FIFO named like a sidecar must not hang the gate to the dispatcher's 3s kill.
-    execSync(`mkfifo ${join(rd, `review-${TODAY}-120000.json`)}`);
-    let start = Date.now();
-    let r = runGate(dir);
+    // a FIFO named like a sidecar must not hang the gate to the dispatcher's 3s kill.
+    mkfifoSync(join(rd, `review-${TODAY}-120000.json`));
+    const start = Date.now();
+    const r = runGate(dir);
     assert.equal(r.status, 2, `FIFO must be rejected, got status=${r.status} signal=${r.signal}`);
     assert.ok(Date.now() - start < 5000, 'gate must not block on the FIFO');
     assert.match(r.stderr, /not a regular file/);
-    // (b) symlink -> FIFO (isFile() on a followed stat would chase it; O_NOFOLLOW must not).
-    execSync(`mkfifo ${join(dir, 'target.fifo')}`);
+  });
+});
+
+test('CRITICAL-2: a symlink -> FIFO sidecar is rejected without blocking', { skip: skipUnless('fifo', 'symlink') }, () => {
+  withRepo(HIGH, (dir) => {
+    const rd = join(dir, 'docs', 'reviews');
+    mkdirSync(rd, { recursive: true });
+    // symlink -> FIFO (isFile() on a followed stat would chase it; O_NOFOLLOW must not).
+    mkfifoSync(join(dir, 'target.fifo'));
     symlinkSync(join(dir, 'target.fifo'), join(rd, `review-${TODAY}-120001.json`));
-    start = Date.now();
-    r = runGate(dir);
+    const start = Date.now();
+    const r = runGate(dir);
     assert.equal(r.status, 2);
     assert.ok(Date.now() - start < 5000, 'gate must not block on the symlinked FIFO');
-    // (c) even a symlink to a VALID evidence file is rejected — evidence is a plain regular file.
+  });
+});
+
+test('CRITICAL-2: a symlink to a VALID evidence file is rejected — evidence is a plain regular file', { skip: skipUnless('symlink') }, () => {
+  withRepo(HIGH, (dir) => {
+    const rd = join(dir, 'docs', 'reviews');
+    mkdirSync(rd, { recursive: true });
     const hash = stagedHash(dir);
-    rmSync(join(rd, `review-${TODAY}-120000.json`));
-    rmSync(join(rd, `review-${TODAY}-120001.json`));
     writeFileSync(join(dir, 'valid.json'), evidence(hash));
     symlinkSync(join(dir, 'valid.json'), join(rd, `review-${TODAY}-120002.json`));
-    r = runGate(dir);
+    const r = runGate(dir);
     assert.equal(r.status, 2, 'a symlinked sidecar grants nothing');
     assert.match(r.stderr, /symlink/);
   });
 });
 
-test('CRITICAL-2: a FIFO review-skip flag is rejected without blocking', () => {
+test('CRITICAL-2: a FIFO review-skip flag is rejected without blocking', { skip: skipUnless('fifo') }, () => {
   withRepo(HIGH, (dir) => {
     const hd = join(dir, 'docs', 'harness');
     mkdirSync(hd, { recursive: true });
-    execSync(`mkfifo ${skipPath(dir)}`);
+    mkfifoSync(skipPath(dir));
     const start = Date.now();
     const r = runGate(dir);
     assert.equal(r.status, 2, `FIFO flag must fail closed, got status=${r.status} signal=${r.signal}`);

@@ -1,1 +1,5 @@
 docs/harness/audit.jsonl merge=union
+# bash cannot run CRLF scripts ($'\r': command not found): pin every shell entry point to LF so a
+# core.autocrlf=true checkout (Windows default) still works. Extensionless hooks need their own line (#92/#94).
+*.sh text eol=lf
+.githooks/* text eol=lf
