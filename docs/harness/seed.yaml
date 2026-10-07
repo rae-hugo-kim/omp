@@ -1,5 +1,6 @@
 name: test-portability-platform-docs-94
-status: approved
+status: done
+completed: 2026-10-08
 version: 1
 task_id: "20261007-180736-e342"
 # gh-loop worker Stage 2에 따라 이슈 #94 본문(범위 1~4·AC 5건)과 "세션에서 직접 결정함" 댓글(본문 범위대로 진행, #91 헬퍼 공유, 일괄 skip 금지)을 명세로 삼습니다.
@@ -38,7 +39,7 @@ assumptions:
   - "#91 PR은 아직 열리지 않았고(형제 워크트리 gh-loop-issue-91은 변경 없음) 공유할 realpath 헬퍼가 없어 만들지 않았습니다 — 이 PR의 경로 수정은 realpath가 필요 없는 expected-value 계산(join/resolve)뿐입니다."
 risks:
   - "Windows 호스트에서 실행해 보지 못했으므로 join/resolve 기대값과 capability 프로브의 Windows 동작은 코드 읽기(git-commit-detect chdir·read-path resolve)와 시뮬레이션으로만 검증했습니다 — 실측은 Windows 보고자 확인이 필요합니다."
-  - "retire 테스트와 ADR002 symlinked-rules 테스트는 심볼릭 링크가 본질이 아닌 단계를 포함한 채 통째로 skip됩니다(재설계가 범위 밖) — Windows 개발자 모드 없는 호스트에서 그 테스트의 비링크 단언도 함께 건너뜁니다."
+  - "hook-gates I5/I6(shimBin이 링크로 bare PATH를 만들어 통째 symlink-gated)와 ADR002 symlinked-rules 2건은 링크가 fixture/공격 자체라 통째로 skip됩니다 — 그 밖의 retire·디렉터리 충돌 케이스는 능력별 테스트로 분리돼 항상 실행됩니다(리뷰 r1 지적 반영). risk-assess의 index/HEAD guard 2건은 git update-index로 링크 없이도 만들 수 있으나 이번 범위 밖(재설계 비범위)입니다."
 references:
   - path: https://github.com/rae-hugo-kim/omp/issues/94
     reason: "범위 1~4·AC 5건·세션 직접 결정·모델 마커의 원문입니다."
