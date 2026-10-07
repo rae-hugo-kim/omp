@@ -42,7 +42,7 @@ Windows 네이티브 전제:
 - **bash** — Git for Windows가 설치한 bash가 `.githooks/*`와 `scripts/*.sh`를 실행합니다.
 - **`node`가 그 bash의 PATH에 있어야 합니다.** 없으면 pre-commit 훅이 fail-closed로 막고, nvm 같은 환경은 `OMP_NODE_BIN`으로 경로를 지정합니다.
 - **심볼릭 링크 테스트** — Windows 개발자 모드(또는 관리자 셸)가 있어야 실행됩니다. 없으면 `host cannot create symlinks …` 사유와 함께 skip되고, 능력이 있는 호스트에서는 skip되지 않습니다. `mkfifo`가 필요한 FIFO 테스트도 같은 방식으로 skip됩니다.
-- **줄 끝(CRLF)** — 저장소의 `.gitattributes`가 `*.sh`와 `.githooks/*`를 LF로 고정합니다(`core.autocrlf=true` 체크아웃에서도 bash가 스크립트를 읽습니다). `.gitattributes`는 `/skill:harness-check` 동기화 대상이 아니므로 기존 소비 리포는 `*.sh text eol=lf`와 `.githooks/* text eol=lf` 두 줄을 직접 추가한 뒤, 이미 CRLF로 체크아웃된 파일을 `git add --renormalize .`나 재체크아웃으로 LF로 바꿔야 합니다.
+- **줄 끝(CRLF)** — 저장소의 `.gitattributes`가 `*.sh`와 `.githooks/*`를 LF로 고정합니다(`core.autocrlf=true` 체크아웃에서도 bash가 스크립트를 읽습니다). `.gitattributes`는 `/skill:harness-check` 동기화 대상이 아니므로 기존 소비 리포는 `*.sh text eol=lf`와 `.githooks/* text eol=lf` 두 줄을 직접 추가해야 합니다. 이미 CRLF로 체크아웃된 스크립트는 작업 트리를 다시 써야 LF가 됩니다 — 미커밋 변경이 없을 때 `git rm --cached -r -q . && git reset --hard`를 실행하거나 새로 clone하세요(`git add --renormalize .`는 인덱스만 바꾸고 작업 트리의 CRLF는 그대로 둡니다).
 - **권장 검증 경로** — Windows에서는 WSL에서 같은 체크아웃을 열어 `node --test .omp/extensions/harness/tests/*.test.mjs`를 실행합니다. Windows 네이티브 완전 동작에는 [#93](https://github.com/rae-hugo-kim/omp/issues/93)의 런타임 수정(review-gate의 `shasum` 의존 제거, cross-repo 절대 경로 판정)이 들어간 하네스가 필요합니다.
 
 ## 시작하기

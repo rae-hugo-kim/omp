@@ -707,6 +707,7 @@ function retireRulesScenario({ withSymlink }) {
     assert.ok(!existsSync(join(fx.consumer, 'rules', 'a.md')), 'pristine harness file removed');
     assert.equal(readFileSync(join(fx.consumer, 'rules', 'b.md'), 'utf-8'), '# b (edited by the consumer)\n', 'edited file kept');
     assert.ok(existsSync(join(fx.consumer, 'rules', 'mine.md')), 'consumer-added file kept');
+    if (!withSymlink) assert.ok(!existsSync(join(fx.consumer, 'rules', 'sub', 'c.md')), 'the pristine nested harness file is retired too (the second removed file)');
     assert.match(second.stdout, withSymlink
       ? /advisory: rules\/ is no longer a harness directory .*1 harness file\(s\) removed/
       : /advisory: rules\/ is no longer a harness directory .*2 harness file\(s\) removed/);

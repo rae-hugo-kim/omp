@@ -10,9 +10,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { hasCapability, skipUnless, FORCE_ENV } from './helpers/capabilities.mjs';
 
@@ -67,4 +67,19 @@ test('a host that HAS both capabilities skips nothing (capability-present hosts 
 
 test('unknown capability names fail loudly instead of silently running or skipping', () => {
   assert.throws(() => hasCapability('telepathy'), /unknown capability 'telepathy'/);
+  assert.throws(() => hasCapability('constructor'), /unknown capability 'constructor'/, 'prototype names are not capabilities');
+});
+
+test('POSIX: an mkfifo that exists but fails is an environment fault — the probe throws instead of skipping', { skip: process.platform === 'win32' ? 'POSIX-only contract (on Windows a failing MSYS mkfifo legitimately means "missing")' : false }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cap-shim-'));
+  try {
+    writeFileSync(join(dir, 'mkfifo'), '#!/bin/sh\necho boom >&2\nexit 3\n');
+    chmodSync(join(dir, 'mkfifo'), 0o755);
+    const env = { ...process.env, PATH: `${dir}${delimiter}${process.env.PATH}` };
+    delete env[FORCE_ENV];
+    delete env.NODE_TEST_CONTEXT;
+    const r = spawnSync('node', ['--input-type=module', '-e', `import { hasCapability } from ${JSON.stringify(HELPER_URL)}; hasCapability('fifo');`], { encoding: 'utf-8', env });
+    assert.notEqual(r.status, 0, 'a failing mkfifo must not be read as "capability missing"');
+    assert.match(r.stderr, /mkfifo probe failed on \w+: status=3 .*boom/s);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

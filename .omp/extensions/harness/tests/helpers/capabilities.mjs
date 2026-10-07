@@ -83,7 +83,7 @@ function forced(name) {
 
 /** Does this host have the capability? (measured once per process; honours the force-missing env). */
 export function hasCapability(name) {
-  if (!(name in PROBES)) throw new Error(`unknown capability '${name}' (known: ${Object.keys(PROBES).join(', ')})`);
+  if (!Object.hasOwn(PROBES, name)) throw new Error(`unknown capability '${name}' (known: ${Object.keys(PROBES).join(', ')})`);
   if (forced(name)) return false;
   if (!measured.has(name)) measured.set(name, PROBES[name]());
   return measured.get(name);
