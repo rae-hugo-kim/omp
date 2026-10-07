@@ -16,7 +16,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, appendFileSync, symlinkSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync, appendFileSync, symlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -24,6 +24,7 @@ import { repoIdentity, repoToplevel } from '../gates/repo-root.mjs';
 import { shellWriteTargets, isGitPush } from '../gates/git-commit-detect.mjs';
 import { crossRepoBashVerdict, crossRepoMutationVerdict } from '../gates/cross-repo.mjs';
 import { loadHarness, ctxFor } from './helpers/harness-handlers.mjs';
+import { mkdtempReal } from './helpers/real-tmpdir.mjs';
 
 for (const k of Object.keys(process.env)) if (k.startsWith('GIT_')) delete process.env[k];
 Object.assign(process.env, { HOME: tmpdir(), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
@@ -42,7 +43,7 @@ function repo(root, name, files) {
 
 /** session + worktree + external(discipline) + vault(none), torn down after `fn`. */
 async function withFixture(fn) {
-  const root = mkdtempSync(join(tmpdir(), 'xrepo-'));
+  const root = mkdtempReal('xrepo-');
   try {
     const session = repo(root, 'session', { 'AGENTS.md': '# session rules\n', 'a.txt': 'a\n' });
     const external = repo(root, 'external', { 'AGENTS.md': '# external rules\n', 'b.txt': 'b\n' });
@@ -78,7 +79,7 @@ test('repo-root: a linked worktree shares the session identity; another repo doe
 // `cd` is followed only into a directory that EXISTS (the shell stays put otherwise), so these
 // run on a real tree: <root>/base/repo (B), <root>/base/other, <root>/ext, B/sub.
 function withTree(fn) {
-  const root = mkdtempSync(join(tmpdir(), 'xscan-'));
+  const root = mkdtempReal('xscan-');
   try {
     const B = join(root, 'base', 'repo');
     for (const d of [join(B, 'sub'), join(root, 'base', 'other'), join(root, 'ext')]) mkdirSync(d, { recursive: true });

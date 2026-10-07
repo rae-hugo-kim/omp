@@ -188,10 +188,20 @@ fi
 # tree as it was. The temp file lives in the git dir (not as an untracked root file while hooks run),
 # starts as a mode-preserving copy of the original, and replaces it with an atomic rename; it is
 # removed on any exit. CRLF files keep CRLF on the inserted lines; a missing final newline is added.
+# harness-meta.json is rewritten the same way (step 4a). Neither edit uses `sed -i`: its in-place
+# syntax differs between GNU (`-i`) and BSD/macOS (`-i ''`; the suffix is a separate argument, so a
+# GNU-style `sed -i -e …` makes BSD sed treat `-e` as the backup suffix and fail).
+changelog_tmp=""
+meta_tmp=""
+cleanup_tmp() {
+  [[ -z "$changelog_tmp" ]] || rm -f "$changelog_tmp"
+  [[ -z "$meta_tmp" ]] || rm -f "$meta_tmp"
+  return 0
+}
+trap cleanup_tmp EXIT
 commit_paths=("$META_FILE")
 if [[ $promote_changelog -eq 1 ]]; then
   changelog_tmp="$(mktemp "$(git -C "$REPO_ROOT" rev-parse --absolute-git-dir)/changelog-promote.XXXXXX")"
-  trap 'rm -f "$changelog_tmp"' EXIT
   cp -p "$CHANGELOG_FILE" "$changelog_tmp"
   awk -v ver="$new_version" -v day="$today" '
     /^## \[Unreleased\][[:space:]]*$/ && !done {
@@ -206,10 +216,13 @@ if [[ $promote_changelog -eq 1 ]]; then
 fi
 
 # --- 4a. Update harness-meta.json (version always increments -> never an empty commit) ---
-sed -i \
+meta_tmp="$(mktemp "$(git -C "$REPO_ROOT" rev-parse --absolute-git-dir)/meta-bump.XXXXXX")"
+cp -p "$META_FILE" "$meta_tmp"
+sed \
   -e "s/\"version\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"version\": \"${new_version}\"/" \
   -e "s/\"updated\"[[:space:]]*:[[:space:]]*\"[^\"]*\"/\"updated\": \"${today}\"/" \
-  "$META_FILE"
+  "$META_FILE" > "$meta_tmp"
+mv "$meta_tmp" "$META_FILE"
 
 # --- 5. Dedicated commit (meta file + promoted CHANGELOG only — does not sweep other staged changes) ---
 git -C "$REPO_ROOT" add -- "${commit_paths[@]}"

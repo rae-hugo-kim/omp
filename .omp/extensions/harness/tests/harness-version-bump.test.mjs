@@ -320,3 +320,41 @@ test('promotion keeps the file mode, leaves no temp file behind, and never expos
     assert.deepEqual(readdirSync(join(dir, '.git')).filter((n) => n.startsWith('changelog-promote')), []);
   });
 });
+
+// BSD/macOS sed takes `-i SUFFIX` (the suffix is a separate argument) and stops option parsing at the
+// first non-option, so the GNU-style `sed -i -e … -e … FILE` fails there with "sed: -e: No such file
+// or directory" (issue #91). This shim reproduces exactly that parse for any `-i` call and delegates
+// every other call to the real sed, so the bump must rewrite harness-meta.json without `sed -i`.
+test('bump never relies on GNU-style `sed -i`: a BSD-parsing sed shim cannot break it, and meta keeps its mode', () => {
+  withRepo({ changelogText: changelog(ENTRIES) }, (dir) => {
+    const realSed = spawnSync('sh', ['-c', 'command -v sed'], { encoding: 'utf-8' }).stdout.trim();
+    const bin = mkdtempSync(join(tmpdir(), 'bsd-sed-'));
+    try {
+      writeFileSync(join(bin, 'sed'), `#!/bin/sh
+case " $* " in *" -i "*|*" -i"*)
+  [ "$1" = "-i" ] && shift 2 || shift   # -i consumes the next argument as its backup suffix
+  shift                                  # first non-option is the script; the rest are files
+  for f in "$@"; do [ -e "$f" ] || { echo "sed: $f: No such file or directory" >&2; exit 1; }; done
+  echo "bsd-sed shim: unexpected in-place edit" >&2; exit 2 ;;
+esac
+exec "${realSed}" "$@"
+`, { mode: 0o755 });
+      chmodSync(join(dir, META), 0o640);
+      const r = spawnSync('bash', [join(dir, 'scripts', 'harness-version-bump.sh')], {
+        cwd: dir,
+        encoding: 'utf-8',
+        env: { ...cleanEnv(), PATH: `${bin}:${process.env.PATH}`, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.com' },
+      });
+      assert.equal(r.status, 0, r.stderr + r.stdout);
+      const meta = JSON.parse(readFileSync(join(dir, META), 'utf-8'));
+      assert.equal(meta.version, NEW_VERSION);
+      assert.match(meta.updated, /^\d{4}-\d{2}-\d{2}$/);
+      assert.equal(meta.description, 'fixture');
+      assert.equal(statSync(join(dir, META)).mode & 0o777, 0o640);
+      assert.deepEqual(readdirSync(join(dir, '.git')).filter((n) => n.startsWith('meta-bump') || n.startsWith('changelog-promote')), []);
+      assert.equal(git(dir, ['status', '--porcelain']).trim(), '');
+    } finally {
+      rmSync(bin, { recursive: true, force: true });
+    }
+  });
+});
