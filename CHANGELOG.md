@@ -4,7 +4,7 @@
 
 ## [Unreleased]
 
-- **fix(harness)**: #91 — macOS에서 실패하던 하네스 테스트 10건을 이식성 수정으로 닫습니다. `scripts/harness-version-bump.sh`가 `harness-meta.json`을 `sed -i` 대신 git 디렉터리의 임시 파일(원본 모드 복사 → `sed` 출력 → `mv`)로 갱신해 GNU와 BSD sed 어느 쪽에서도 같은 결과를 냅니다(BSD sed는 `-i`의 다음 인자를 백업 접미사로 읽어 `sed: -e: No such file or directory`로 실패했습니다). 임시 파일은 CHANGELOG 승격 임시 파일과 같은 EXIT 정리를 공유하며, `-i SUFFIX` 파싱을 재현하는 sed shim 회귀 테스트를 더했습니다. `tests/cross-repo.test.mjs` fixture는 임시 루트를 `realpath`로 정규화하는 헬퍼(`tests/helpers/real-tmpdir.mjs`)를 써서 `/var` → `/private/var` 별칭에서도 기대값이 실경로와 일치합니다. 운영 코드(`gates/repo-root.mjs`)의 실경로 계약은 바꾸지 않았습니다.
+- **fix(harness)**: #91 — macOS에서 실패하던 하네스 테스트 10건을 이식성 수정으로 닫습니다. `scripts/harness-version-bump.sh`가 `harness-meta.json`을 `sed -i` 대신 메타 파일 옆 임시 파일(원본 모드 복사 → `sed` 출력 → `mv`)로 갱신해 GNU와 BSD sed 어느 쪽에서도 같은 결과를 냅니다(BSD sed는 `-i`의 다음 인자를 백업 접미사로 읽어 `sed: -e: No such file or directory`로 실패했습니다). 같은 파일시스템이라 교체가 원자적이고, 읽기 전용 메타 파일도 모드를 유지한 채 교체하며, 임시 파일은 CHANGELOG 승격 임시 파일과 같은 EXIT 정리를 공유합니다. 모든 in-place spelling을 BSD처럼 거부하는 sed shim 회귀 테스트를 더했습니다. `tests/cross-repo.test.mjs` fixture는 임시 루트를 `realpath`로 정규화하는 헬퍼(`tests/helpers/real-tmpdir.mjs`)를 써서 `/var` → `/private/var` 별칭에서도 기대값이 실경로와 일치합니다. 운영 코드(`gates/repo-root.mjs`)의 실경로 계약은 바꾸지 않았습니다.
 
 ## [2026.86] - 2026-10-07
 
