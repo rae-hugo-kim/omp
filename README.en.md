@@ -35,7 +35,7 @@ One improvement over the original: failed bash verifications are recorded as FAI
 | Platform | Status |
 |---|---|
 | Linux · WSL · macOS | **Officially supported** — a fully green harness test run is the baseline |
-| Windows native | **Targeted, with some tests skipped** — only tests that need an OS feature (symlinks, FIFOs) the host lacks are skipped, with the reason printed. The full suite has not been run on a real Windows host, and until the runtime fixes in [#93](https://github.com/rae-hugo-kim/omp/issues/93) land, review-gate fails closed there because `shasum` is missing |
+| Windows native | **Targeted, with some tests skipped** — only tests that need an OS feature (symlinks, FIFOs) the host lacks are skipped, with the reason printed. The runtime fixes from [#93](https://github.com/rae-hugo-kim/omp/issues/93) (no `shasum` dependency in review-gate, platform-aware absolute-path detection in cross-repo and `git -C`) are in, but the full suite has not been run on a real Windows host |
 
 Windows-native prerequisites:
 
@@ -43,7 +43,7 @@ Windows-native prerequisites:
 - **`node` must be on that bash's PATH.** Otherwise the pre-commit hook fails closed; for nvm-style setups point `OMP_NODE_BIN` at the binary.
 - **Symlink tests** — they run only with Windows Developer Mode (or an elevated shell). Without it they are skipped with a `host cannot create symlinks …` reason; a host that can create symlinks skips nothing. FIFO tests (which need `mkfifo`) are skipped the same way.
 - **Line endings (CRLF)** — the repo's `.gitattributes` pins `*.sh` and `.githooks/*` to LF, so a `core.autocrlf=true` checkout still gives bash readable scripts. `.gitattributes` is not part of the `/skill:harness-check` sync, so existing consumer repos must add the two lines `*.sh text eol=lf` and `.githooks/* text eol=lf` themselves. Scripts that are already checked out with CRLF only become LF when the working tree is rewritten — run `git rm --cached -r -q . && git reset --hard` with no uncommitted changes, or clone afresh (`git add --renormalize .` only rewrites the index and leaves the CRLF working-tree files as they are).
-- **Recommended verification path** — on Windows, open the same checkout in WSL and run `node --test .omp/extensions/harness/tests/*.test.mjs`. Full Windows-native operation needs a harness that includes the runtime fixes from [#93](https://github.com/rae-hugo-kim/omp/issues/93) (no `shasum` dependency in review-gate, absolute-path detection in cross-repo).
+- **Recommended verification path** — on Windows, open the same checkout in WSL and run `node --test .omp/extensions/harness/tests/*.test.mjs`. Windows-native behaviour rests on unit tests (with an injected `path.win32`) and code reading only; a result from a real Windows host would let this section be updated.
 
 ## Getting Started
 
