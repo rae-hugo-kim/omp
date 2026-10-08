@@ -27,8 +27,23 @@ OMP(Oh My Pi) 코딩 에이전트가 일관되고 안전하게 동작하도록 �
 ## 필요한 것
 
 - [OMP (Oh My Pi)](https://github.com/oh-my-pi) — 코딩 에이전트 하네스
-- Node.js — 게이트 스크립트 실행용 (`node`가 PATH에 있어야 함)
+- Node.js ≥ 20 — 게이트 스크립트 실행용 (`node`가 PATH에 있어야 함, CI는 22에서만 실행합니다). 하네스 테스트 스위트의 wiring 테스트는 내장 TypeScript 변환을 쓰므로 22.18 이상이 필요합니다
 - (선택) oh-my-claudecode — `~/.claude`에 설치돼 있으면 OMP가 OMC 에이전트/스킬을 자동 발견
+
+## 지원 플랫폼
+
+| 플랫폼 | 지위 |
+|---|---|
+| Linux · WSL · macOS | **공식 지원** — 전체 하네스 테스트 통과가 기준선입니다 |
+| Windows 네이티브 | **동작을 목표로 하며 일부 테스트는 skip** — OS 기능(심볼릭 링크·FIFO)이 없는 환경의 테스트만 사유를 출력하고 건너뜁니다. [#93](https://github.com/rae-hugo-kim/omp/issues/93)의 런타임 수정(review-gate의 `shasum` 의존 제거, cross-repo·`git -C` 절대 경로 판정)은 들어 있지만, 실제 Windows 호스트에서 전체 suite를 실행해 확인하지는 않았습니다 |
+
+Windows 네이티브 전제:
+
+- **bash** — Git for Windows가 설치한 bash가 `.githooks/*`와 `scripts/*.sh`를 실행합니다.
+- **`node`가 그 bash의 PATH에 있어야 합니다.** 없으면 pre-commit 훅이 fail-closed로 막고, nvm 같은 환경은 `OMP_NODE_BIN`으로 경로를 지정합니다.
+- **심볼릭 링크 테스트** — Windows 개발자 모드(또는 관리자 셸)가 있어야 실행됩니다. 없으면 `host cannot create symlinks …` 사유와 함께 skip되고, 능력이 있는 호스트에서는 skip되지 않습니다. `mkfifo`가 필요한 FIFO 테스트도 같은 방식으로 skip됩니다.
+- **줄 끝(CRLF)** — 저장소의 `.gitattributes`가 `*.sh`와 `.githooks/*`를 LF로 고정합니다(`core.autocrlf=true` 체크아웃에서도 bash가 스크립트를 읽습니다). `.gitattributes`는 `/skill:harness-check` 동기화 대상이 아니므로 기존 소비 리포는 `*.sh text eol=lf`와 `.githooks/* text eol=lf` 두 줄을 직접 추가해야 합니다. 이미 CRLF로 체크아웃된 스크립트는 작업 트리를 다시 써야 LF가 됩니다 — 미커밋 변경이 없을 때 `git rm --cached -r -q . && git reset --hard`를 실행하거나 새로 clone하세요(`git add --renormalize .`는 인덱스만 바꾸고 작업 트리의 CRLF는 그대로 둡니다).
+- **권장 검증 경로** — Windows에서는 WSL에서 같은 체크아웃을 열어 `node --test .omp/extensions/harness/tests/*.test.mjs`를 실행합니다. Windows 네이티브 동작은 단위 테스트(주입한 `path.win32`)와 코드 읽기 근거뿐이라, 실제 Windows 호스트의 실행 결과를 보고해 주시면 이 절을 갱신합니다.
 
 ## 시작하기
 

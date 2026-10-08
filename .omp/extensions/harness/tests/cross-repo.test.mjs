@@ -25,6 +25,7 @@ import { absolutize, shellWriteTargets, isGitPush } from '../gates/git-commit-de
 import { crossRepoBashVerdict, crossRepoMutationVerdict } from '../gates/cross-repo.mjs';
 import { loadHarness, ctxFor } from './helpers/harness-handlers.mjs';
 import { mkdtempReal } from './helpers/real-tmpdir.mjs';
+import { hasCapability, skipUnless } from './helpers/capabilities.mjs';
 
 for (const k of Object.keys(process.env)) if (k.startsWith('GIT_')) delete process.env[k];
 Object.assign(process.env, { HOME: tmpdir(), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
@@ -85,7 +86,7 @@ function withTree(fn) {
     for (const d of [join(B, 'sub'), join(root, 'base', 'other'), join(root, 'ext')]) mkdirSync(d, { recursive: true });
     writeFileSync(join(B, 'sub', 'x.txt'), 'x\n');
     mkdirSync(join(root, 'ext', 'inner'));
-    symlinkSync(join(root, 'ext', 'inner'), join(B, 'link'));          // B/link -> ext/inner
+    if (hasCapability('symlink')) symlinkSync(join(root, 'ext', 'inner'), join(B, 'link'));   // B/link -> ext/inner (only the symlink-gated test below reads it)
     return fn({ root, B, other: join(root, 'base', 'other'), ext: join(root, 'ext') });
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -132,8 +133,6 @@ test('shellWriteTargets: git commit/push targets follow -C chains, one literal c
     assert.equal(shellWriteTargets('echo $(date) && git commit -m x', B).unknown, null, 'a substitution outside a cd does not move the cwd');
     assert.deepEqual(gitOf('echo $(date) && git commit -m x'), [{ dir: B, verb: 'commit' }]);
     assert.deepEqual(gitOf(`git -C ${ext} --attr-source HEAD commit`), [{ dir: ext, verb: 'commit' }], 'a known value-taking global is walked (r2 X2)');
-    assert.deepEqual(gitOf(`cd ${B}/link/.. && git push`), [{ dir: B, verb: 'push' }], 'cd is logical like bash: link/.. is the link\'s parent');
-    assert.deepEqual(gitOf(`cd -P ${B}/link/.. && git push`), [{ dir: ext, verb: 'push' }], 'cd -P is physical: link/.. is the TARGET\'s parent (r3 C1)');
     assert.equal(shellWriteTargets(`git --git-dir=${ext}/.git show-ref && git -C "$R" --version`, B).unknown, null, 'read verbs and terminal options beside a redirect global are not findings (r3 C3)');
     assert.ok(shellWriteTargets(`git -C ${ext} --shallow-file x push`, B).git.some((g) => g.verb === 'push'), '--shallow-file takes a value (r3 N7)');
     assert.deepEqual(gitOf(`cd ${ext} 2>/dev/null && git commit -m x`), [{ dir: ext, verb: 'commit' }], 'a redirection on the cd segment is not an operand (r4-1)');
@@ -141,6 +140,14 @@ test('shellWriteTargets: git commit/push targets follow -C chains, one literal c
     assert.deepEqual(gitOf(`git -C ${ext} commit --help`), [], '`git commit --help` prints and exits (r4-8)');
     assert.equal(shellWriteTargets('git -c alias.c=commit --version', B).unknown, null);
     assert.ok(isGitPush('git -C /x push') && !isGitPush('git log --grep push'));
+  });
+});
+
+test('shellWriteTargets: `cd link/..` is logical, `cd -P link/..` is physical', { skip: skipUnless('symlink') }, () => {
+  withTree(({ B, ext }) => {
+    const gitOf = (cmd) => shellWriteTargets(cmd, B).git;
+    assert.deepEqual(gitOf(`cd ${B}/link/.. && git push`), [{ dir: B, verb: 'push' }], 'cd is logical like bash: link/.. is the link\'s parent');
+    assert.deepEqual(gitOf(`cd -P ${B}/link/.. && git push`), [{ dir: ext, verb: 'push' }], 'cd -P is physical: link/.. is the TARGET\'s parent (r3 C1)');
   });
 });
 
@@ -210,7 +217,7 @@ test('① a mutation into another discipline-bearing repo is blocked until its A
   });
 });
 
-test('① symlinks: a link INTO another repo\'s subtree attributes to that repo; a link TO a repo is read through the link (C1)', async () => {
+test('① symlinks: a link INTO another repo\'s subtree attributes to that repo; a link TO a repo is read through the link (C1)', { skip: skipUnless('symlink') }, async () => {
   await withFixture(({ root, session, external, markRead }) => {
     mkdirSync(join(external, 'src'));
     symlinkSync(join(external, 'src'), join(session, 'vendor'));                 // session/vendor -> external/src (npm link shape)

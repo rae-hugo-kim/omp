@@ -21,6 +21,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, cpSync, sy
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { skipUnless } from './helpers/capabilities.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..', '..', '..');
@@ -275,7 +276,7 @@ test('a deleted tracked CHANGELOG.md (unstaged or staged) aborts instead of ship
   }
 });
 
-test('a tracked symlinked CHANGELOG.md aborts (the promotion would write through to the target)', () => {
+test('a tracked symlinked CHANGELOG.md aborts (the promotion would write through to the target)', { skip: skipUnless('symlink') }, () => {
   withRepo({ changelogText: undefined }, (dir) => {
     writeFileSync(join(dir, 'real.md'), changelog(ENTRIES));
     symlinkSync('real.md', join(dir, 'CHANGELOG.md'));
