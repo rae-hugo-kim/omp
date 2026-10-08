@@ -1,49 +1,61 @@
-name: macos-test-portability-91
+name: windows-runtime-defects-93
 status: done
 completed: 2026-10-08
 version: 1
-task_id: "20261008-021500-9a1c"
-# gh-loop worker Stage 2에 따라 이슈 #91 본문(실패 A·B, 수락 기준 4건)과 "세션에서 직접 결정함" 댓글(AC 4건대로 진행, 머지 순서 #91 → #93 → #94)을 명세로 삼습니다.
+task_id: "20261008-030013-1286"
+# gh-loop worker Stage 2에 따라 이슈 #93 본문(결함 2건·AC 4건)과 "세션에서 직접 결정함" 댓글(본문 AC 4건대로, 리뷰 3-pass 필수)을 명세로 삼습니다. 배경은 #92 1차 분류와 지원 범위 결정(Linux·WSL·macOS 공식, Windows 네이티브는 런타임 결함만 수정)입니다.
 # 직전 완료 seed(cross-repo-guard-15)는 git 이력에 보존합니다.
 goal: >
-  macOS(BSD sed, /var → /private/var 별칭)에서 하네스 테스트 10건이 실패하는 이식성 결함을 닫습니다 —
-  A) cross-repo.test.mjs의 fixture가 mkdtempSync 결과를 realpath로 정규화해 기대값을 만듭니다(운영 코드 repo-root.mjs의 실경로 계약은 그대로, 정규화 헬퍼는 #94가 재사용하도록 tests/helpers로 분리).
-  B) scripts/harness-version-bump.sh가 `sed -i`(두 -e) 대신 임시 파일 + mv로 harness-meta.json을 갱신해 BSD/GNU 양쪽에서 동작합니다.
+  Windows 네이티브에서 실제 게이트 동작을 깨뜨리는 런타임 결함 2건을 고칩니다 —
+  (1) review-gate가 diff 해시를 `git diff | shasum -a 256` 셸 파이프 대신 `git diff`의 stdout Buffer를 Node crypto sha256으로 계산해 외부 명령 의존을 없애고(기존 사이드카 diff_hash와 동일 값),
+  (2) cross-repo guard가 절대 경로를 `startsWith('/')`가 아니라 `path.isAbsolute`로 판정해 `C:\…`·`C:/…`가 세션 cwd에 붙지 않게 합니다.
+  두 파일에 남은 POSIX 절대 경로 가정을 grep해 목록화하고 발견분만 고치며, 통합 계약 잔존면에 Windows 경로 주의를 한 줄 남깁니다.
 constraints:
-  - "운영 코드(gates/repo-root.mjs 등)는 건드리지 않습니다 — 실경로 보안 계약을 약화하거나 테스트를 macOS에서 건너뛰지 않습니다."
-  - "tests/cross-repo.test.mjs는 #93·#94도 수정하므로 변경은 import 1줄 + mkdtemp 호출 2곳으로 최소화합니다."
-  - "version-bump의 CHANGELOG/meta 동시 처리·CRLF·파일 모드·임시 파일 노출 방지(.git 안 임시 파일)·실패 후 복구 계약과 기존 harness-version-bump.test.mjs를 그대로 유지합니다."
-  - "macOS 실기는 이 머신에 없습니다: BSD sed -i 파싱을 재현하는 shim 테스트와 별칭 TMPDIR(심볼릭 링크) 재현으로 대신하고, 임시 파일 방식이 sed 방언과 무관함을 근거로 적습니다."
-  - "Stage 2의 체크 완료 seed·scope → 코드 커밋(앞에 reviewer 3-pass) → 리뷰 후속 → closeout 커밋 순서를 따릅니다."
+  - "해시 입력은 인코딩 옵션 없이 Buffer 그대로입니다 — shasum이 stdout 바이트를 그대로 해시하므로 기존 사이드카·override 튜플의 diff_hash와 같은 값이어야 합니다(shasum 대조 테스트 1건, shasum이 없는 호스트는 사유 skip)."
+  - "git 실패 시 `currentHash = null` → high/critical fail-closed(UNVERIFIED/UNVERIFIABLE) 경로는 그대로입니다. 기존 '해시 계산 불가' 테스트는 shasum이 아니라 git diff 실패를 주입하도록 바꿉니다(동어반복 재고정 금지)."
+  - "cross-repo 경로 결합은 lexical 정규화(resolve/join으로 `..` 접기)를 하지 않습니다 — `link/..`는 repo-root가 물리적으로 해석한다는 기존 주석 계약과 r2 X3 테스트를 유지합니다. Windows 절대 경로 판정은 `path.win32`/`path.posix`를 주입하는 순수 함수 수준에서 어느 호스트에서나 테스트합니다."
+  - "수정은 gates/review-gate.mjs·gates/cross-repo.mjs·gates/git-commit-detect.mjs(grep 발견분)와 테스트, 통합 계약 잔존면 한 줄에 한정합니다. 테스트 이식성(symlink/mkfifo/shasum 테스트 fixture·CRLF)과 지원 플랫폼 문서는 #94, macOS는 #91입니다."
+  - "세 워커(#91 #93 #94)가 tests/cross-repo.test.mjs를 동시에 건드리므로 그 파일의 변경은 끝에 테스트 1건을 append하는 최소 범위로 합니다(머지 순서 #91→#93→#94)."
+  - "Stage 2의 체크 완료 seed·scope → 코드 커밋(앞에 reviewer 3-pass, 이종 모델 포함) → 리뷰 후속 → closeout 커밋 순서를 따릅니다."
 acceptance_criteria:
   - id: AC1
-    title: "cross-repo.test.mjs의 withFixture/withTree가 realpath 정규화된 임시 루트를 쓰고(헬퍼 tests/helpers/real-tmpdir.mjs), /var 별칭이 있는 TMPDIR에서 기존 4건(repoToplevel·shellWriteTargets·AGENTS.md·CLAUDE.md 차단 메시지)이 통과합니다 — 별칭 TMPDIR 재현에서 수정 전 4건 실패 → 수정 후 0건 실패. 링크드 워크트리·다른 리포 차단·심볼릭 링크 경계 검증은 그대로 통과합니다."
+    title: "review-gate가 `shasum`을 호출하지 않고 Node crypto(`createHash('sha256')`)로 `git diff --cached`/`git diff HEAD`의 stdout Buffer를 해시하며, 기존 테스트의 diff_hash 기대값이 그대로 통과하고 shasum 대조 테스트 1건(shasum이 있는 환경에서만 실행, 없으면 사유 skip)이 추가됩니다. `git`이 실패한 경우의 `null`/UNVERIFIED 경로는 유지됩니다(git diff 실패를 주입하는 fail-closed 테스트)."
   - id: AC2
-    title: "scripts/harness-version-bump.sh가 harness-meta.json을 `sed -i` 없이(임시 파일 → 원본 모드 복사 → sed 출력 → mv) 갱신하고, 기존 harness-version-bump.test.mjs 전부가 그대로 통과합니다(CHANGELOG/meta 동시 커밋·CRLF·파일 모드·임시 파일 미노출·실패 후 복구 포함)."
+    title: "cross-repo guard가 `path.isAbsolute`로 절대 경로를 판정하고, Windows 스타일 절대 경로(`C:\\x`, `C:/x`, `\\\\srv\\share`)를 입력하는 단위 테스트가 플랫폼 무관하게 도는 순수 함수 수준으로 추가됩니다. `link/..` 비정규화 계약 테스트는 그대로 통과합니다."
   - id: AC3
-    title: "BSD sed의 `-i SUFFIX` 파싱을 재현하는 shim을 PATH 앞에 둔 회귀 테스트가 추가되어, 수정 전 스크립트에서는 `sed: -e: No such file or directory`로 실패하고 수정 후에는 통과하며, meta 파일 모드와 임시 파일 부재를 함께 확인합니다."
+    title: "`git-commit-detect.mjs`·`cross-repo.mjs`에서 `startsWith('/')` 류의 POSIX 절대 경로 가정을 grep한 목록이 PR 본문에 기록되고(수정은 발견분만), 통합 계약 'Cross-repo guard residuals'에 Windows 경로 주의가 한 줄 추가됩니다."
   - id: AC4
-    title: "Linux에서 전체 하네스 suite(node --test .omp/extensions/harness/tests/*.test.mjs)와 node scripts/docs-drift가 회귀 없이 통과합니다."
+    title: "하네스 suite(node --test .omp/extensions/harness/tests/*.test.mjs, Linux) 전부 통과, node scripts/docs-drift 0 errors/0 warnings. 수정은 게이트 파일(review-gate·cross-repo·git-commit-detect 발견분)과 테스트·계약 한 줄에 한정됩니다."
 out_of_scope:
-  - "운영 코드 repo-root.mjs·cross-repo.mjs의 변경, 다른 테스트 파일의 realpath 사용 정리(#93·#94 범위)."
-  - "macOS 실기 전체 suite 재실행 — 이 머신에 macOS가 없어 소비 저장소 측 확인으로 남깁니다."
+  - "테스트 fixture의 symlink/mkfifo/shasum 의존과 POSIX 경로 고정 기대값·CRLF·지원 플랫폼 문서(#94), macOS `/var`→`/private/var`(#91)."
+  - "repo-root.mjs의 physicalResolve(`/`에서 시작해 `/`로 split하는 물리 walk)와 Windows 드라이브 상대 경로(`C:foo`) 모델 — 잔존면으로 기록하고 후속 이슈 후보로 보고합니다."
+  - "review-gate BLOCK 메시지가 사람에게 안내하는 `git diff … | shasum -a 256` 계산법 문구 — shasum 값과 동일하므로 그대로 둡니다."
+  - "CHANGELOG.md 항목은 다음 하네스 범프(2026.87)에서 함께 정리합니다."
   - "PR 생성·교차검증 게시·head와 nonce 결정 요청은 커밋 뒤 후속 절차이며 AC 선체크 대상이 아닙니다."
 assumptions:
-  - "시작 HEAD는 main f9cc91a(harness/2026.86)이고 작업트리는 깨끗했습니다(워크트리 rae-hugo-kim/gh-loop-issue-91)."
-  - "macOS `mktemp`·`cp -p`·`mv`·`awk`는 이미 changelog 승격 경로가 쓰므로(이 이슈의 6건 실패 중 sed 줄에서만 종료) 추가 이식성 검증이 필요한 것은 sed 호출뿐입니다."
+  - "시작 HEAD는 main f9cc91a(2026.86)이고 작업트리는 깨끗했습니다(워크트리 rae-hugo-kim/gh-loop-issue-93, 코디네이터가 agent-working 부착)."
+  - "Node ≥ 20에서 `execSync(cmd, { maxBuffer: Infinity })`가 허용됩니다(Node 24.13에서 실측) — 파이프가 digest 한 줄만 남기던 것과 달리 diff 전체를 받으므로 기본 1 MiB 상한을 풉니다."
 risks:
-  - "BSD sed가 마지막 줄 개행 없는 파일에 개행을 붙일 수 있습니다 — 기존 `sed -i`와 같은 sed 동작이라 이번 변경이 새로 만드는 차이는 아닙니다."
-  - "meta 임시 파일 갱신이 CHANGELOG mv 뒤에 실행되므로 sed 실패 시 CHANGELOG만 승격된 채 남을 수 있습니다 — 기존 순서·복구 문구(두 파일 restore)와 같습니다."
+  - "shasum 대조는 shasum이 있는 Linux/macOS에서만 실제로 돌고 Windows에서는 skip됩니다 — Node crypto 값이 shasum과 같다는 보장은 '동일 바이트 입력'에서 오므로 Buffer(인코딩 없음)를 유지하는 것이 핵심입니다."
+  - "git-commit-detect의 chdir(-C 체인 물리 walk) Windows 분기는 Linux 호스트에서 실행 경로로 검증할 수 없습니다 — `path.parse(v).root` 의미론을 node 실측으로만 확인합니다([INFERENCE])."
 references:
-  - path: https://github.com/rae-hugo-kim/omp/issues/91
-    reason: "실패 A·B 원문, 수락 기준, 세션 직접 결정, 모델 마커·dispatch 튜플입니다."
-  - path: .omp/extensions/harness/gates/repo-root.mjs
-    reason: "실경로를 반환하는 운영 계약(18-22행)이며 이번에 바꾸지 않습니다."
+  - path: https://github.com/rae-hugo-kim/omp/issues/93
+    reason: "결함 2건·AC 4건·세션 직접 결정·dispatch 튜플의 원문입니다."
+  - path: https://github.com/rae-hugo-kim/omp/issues/92
+    reason: "1차 분류(런타임 결함 vs 테스트 이식성)와 지원 범위 결정(Linux·WSL·macOS 공식)의 배경입니다."
+  - path: .omp/extensions/harness/gates/review-gate.mjs
+    reason: "diff 해시 계산(기존 :551)과 null/UNVERIFIED fail-closed 분기입니다."
+  - path: .omp/extensions/harness/gates/cross-repo.mjs
+    reason: "mutation 대상 절대 경로 판정(기존 :73)과 `link/..` 비정규화 주석 계약입니다."
+  - path: .omp/extensions/harness/gates/git-commit-detect.mjs
+    reason: "grep 발견분 — chdir(-C 물리 walk, 기존 :838)과 addFiles(기존 :1114)의 `startsWith('/')`."
+  - path: .omp/rules/harness-harness_integration_contract.md
+    reason: "'Cross-repo guard residuals'에 Windows 경로 주의를 한 줄 넣는 문서입니다."
   - path: docs/rules/closeout_contract.md
     reason: "AC 착지·seed 종료·scope 은퇴·감사 append 순서를 정의합니다."
 estimate:
-  risk: low
-  files: 3
-  depth: low
-  model: anthropic/claude-sonnet-5-5
+  risk: medium
+  files: 4
+  depth: high
+  model: anthropic/claude-fable-5-1
   effort: high
