@@ -1,55 +1,38 @@
-name: windows-fifo-probe-triage-98
-status: done
-completed: 2026-10-12
+name: repo-root-windows-physical-resolve-99
+status: approved
 version: 1
-task_id: "20261012-142500-98f1"
-# gh-loop worker Stage 2에 따라 이슈 #98 본문 끝 "승인된 작업 범위" 1~3·AC 4건과 "세션에서 직접 결정함" 댓글(2026-10-12 "ㄱㄱ")을 명세로 삼습니다.
-# 직전 완료 seed(test-portability-platform-docs-94)는 git 이력에 보존합니다.
+task_id: "20261012-153300-99a7"
+# gh-loop worker Stage 2에 따라 이슈 #99 본문 끝 "승인된 작업 범위"·AC 4건과 "세션에서 직접 결정함" 댓글(2026-10-12 "ㄱㄱ")을 명세로 삼습니다.
+# 직전 완료 seed(windows-fifo-probe-triage-98)는 git 이력에 보존합니다.
 goal: >
-  #98: Windows 실기(2026.87)에서 FIFO capability probe가 mkfifo exit 0 뒤 lstat ENOENT로 throw해 테스트 3파일 초기화가 중단된 문제를
-  win32에서만 "사유 있는 capability 없음"으로 판정하도록 고치고(POSIX는 그대로 throw), 보고된 29건 실패 묶음을 테스트 소스와 대조해
-  런타임 결함 / 테스트 이식성 / 호스트 전제조건으로 분류해 PR 본문과 #98 댓글에 남기며(런타임 결함은 별도 이슈로 분리),
-  harness-check 스킬과 README ko/en에 Windows 2026.86 이하 → 2026.87 업그레이드 재정규화 단락을 추가합니다.
+  #99: `gates/repo-root.mjs`의 `physicalResolve`가 POSIX 루트 `/`를 가정해 Windows 절대 경로(`C:\…`, `C:/…`, UNC)에서
+  `repoToplevel`이 null을 돌려주고 cross-repo guard(#15)가 fail-open으로 끝나던 결함을, `path.parse(v).root`에서 시작해
+  플랫폼 구분자 양쪽으로 쪼개는 방식으로 일반화합니다(`git-commit-detect.mjs`의 `chdir()`과 하나의 헬퍼를 공유).
+  `path.win32`+인메모리 fs를 주입하는 단위 테스트로 수정 전 FAIL → 후 PASS를 고정하고, 통합 계약 residuals·README ko/en·CHANGELOG를 갱신합니다.
 constraints:
-  - "probeFifo의 완화는 win32에서만 적용합니다. POSIX에서 mkfifo exit 0 뒤 FIFO 부재·비FIFO는 지금처럼 throw하고, 일괄 catch/skip은 하지 않습니다."
-  - "mkdtempSync 경로에 공백이 있어도 mkfifo를 argv 배열로 호출하는 현재 방식을 유지합니다."
-  - "런타임 결함으로 분류된 항목은 이 PR에서 고치지 않고 별도 이슈(제목 '#N ' 접두)로 분리합니다. 게이트·스크립트 코드(gates/*, index.ts, scripts/*)는 바꾸지 않습니다."
-  - "분류표에서 테스트 이식성으로 분류한 테스트의 재설계·capability 확대는 이 PR에서 하지 않습니다(비범위). Windows 실기가 없어 확정하지 못한 항목은 '실기 재검증 필요'로 표시합니다."
-  - "Windows CI 러너 추가는 하지 않습니다."
+  - "`link/..` 컴포넌트별 physical 해석 계약(review 2026-10-07 X3)과 같은 리포 링크드 워크트리 판정은 바꾸지 않습니다."
+  - "POSIX 동작은 불변입니다 — 기존 cross-repo 테스트 전부 통과, Linux 전체 suite skip 0 유지."
+  - "MSYS 표기(`/c/Users/…`)는 변환하지 않습니다. 통합 계약 residuals에 '귀속 null → 허용(실기 확인 필요)'로 기록만 합니다."
+  - "게이트 코드이므로 코드 커밋 앞에 reviewer 3-pass(이종 모델)를 돌려 review-gate 사이드카를 만듭니다."
   - "Stage 2의 체크 완료 seed·scope → 코드 커밋 → 리뷰 후속 → closeout 커밋 순서를 따릅니다."
 acceptance_criteria:
   - id: AC1
-    title: "win32에서 mkfifo exit 0 뒤 lstat ENOENT(또는 FIFO 아님)는 throw가 아니라 사유 있는 capability 없음(skip 사유)이 되고 POSIX에서는 여전히 throw하며, 플랫폼을 주입해 양쪽을 tests/capabilities.test.mjs가 고정하고 Linux 전체 suite의 skip 수는 0으로 유지됩니다."
+    title: "path.win32 주입 테스트에서 physicalResolve('C:\\r\\x')·('C:/r/x')가 C:\\r\\x로 해석되고 UNC 1건이 포함되며 repoToplevel이 fixture(인메모리 fs) 루트를 돌려줍니다 — 수정 전 코드에서 FAIL, 수정 후 PASS가 PR에 기록됩니다."
   - id: AC2
-    title: "29건 실패 묶음 분류표(테스트 파일:행 / 분류 / 근거 / 처분)가 PR 본문과 #98 댓글에 있고, 런타임 결함으로 분류된 항목은 별도 이슈 번호를 가지며, 실기 확정이 불가능한 항목은 '실기 재검증 필요'로 표시됩니다."
+    title: "POSIX 기존 테스트와 link/.. 계약이 전부 통과하고 Linux 전체 suite의 skip 수가 0입니다."
   - id: AC3
-    title: "harness-check 스킬과 README ko/en에 Windows 업그레이드 재정규화 단락(git add --renormalize .omp scripts .githooks, sync 스크립트가 CRLF일 때의 우회)이 있고 node scripts/docs-drift가 0 errors/0 warnings입니다."
+    title: "통합 계약 Known residual surfaces(cross-repo·Windows native)에 #99 수정과 MSYS 미변환 residual이 기록되고, README ko/en Windows 행의 C:\\… 귀속 문구가 실제 상태(#93 absolutize + #99 repo-root, 실기 미검증)로 정정되며, CHANGELOG [Unreleased]에 항목이 있고 node scripts/docs-drift가 0 errors/0 warnings입니다."
   - id: AC4
-    title: "비범위가 지켜집니다 — 분류표의 런타임 결함 수정, 테스트 재설계, Windows CI 러너 추가가 diff에 없고, 이 이슈의 dispatch 튜플이 audit.jsonl에 gh_loop_dispatched(issue 98)로 있습니다."
+    title: "비범위가 지켜집니다 — MSYS 경로 변환, #100, Windows CI 러너가 diff에 없고, 이 이슈의 dispatch 튜플이 audit.jsonl에 gh_loop_dispatched(issue 99)로 있습니다."
 out_of_scope:
-  - "분류표의 런타임 결함 수정(별도 이슈 #99·#100)."
-  - "테스트 이식성 항목의 capability 확대·fixture 정규화·테스트 재설계."
+  - "MSYS 경로 변환(`cygpath -w` 상당) — 실기 확인 뒤 별도 사이클."
+  - "#100 (`harness-sync.sh` retire 경로 비교의 MSYS/Windows 표기 불일치)."
   - "Windows CI 러너 추가."
-  - "실제 Windows 호스트에서의 전체 suite 실행 — 이 워크트리에는 Windows가 없어 주입 가능한 플랫폼과 Linux 모사로 대신합니다."
+  - "실제 Windows 호스트에서의 전체 suite 실행 — 이 워크트리에는 Windows가 없어 주입한 path.win32·인메모리 fs 모사로 대신합니다."
   - "PR 생성·교차검증 게시·head와 nonce 결정 요청은 커밋 뒤 후속 절차이며 AC 선체크 대상이 아닙니다."
 assumptions:
-  - "시작 HEAD는 main cff6b18(2026.87)이고 작업트리는 깨끗했습니다(ingest가 더한 audit.jsonl 1행 제외)."
-  - "보고자는 개별 실패 테스트명을 제공하지 않았으므로 분류표의 각 행은 테스트 소스·프로덕션 코드 정적 판독과 Linux 모사 근거이며, 행과 29건의 1:1 대응은 확정이 아닙니다."
+  - "시작 HEAD는 main 84e56bd(PR #101 머지 후)이고 작업트리는 깨끗했습니다(ingest가 더한 audit.jsonl 1행 제외)."
+  - "repoToplevel의 Windows 기대값은 인메모리 fs stub(existsSync/statSync/realpathSync.native) 위에서 측정한 것이며 실제 NTFS·심볼릭 링크 동작의 확정은 아닙니다."
 risks:
-  - "분류는 Windows 실기 없이 한 것이라 오분류 가능성이 있습니다 — 2026.88 발행 뒤 보고자의 재검증으로 확정합니다."
-  - "win32 분기는 주입한 platform/spawn 단위 테스트로만 검증했고 실제 Git for Windows의 mkfifo 동작은 확인하지 못했습니다."
-references:
-  - path: https://github.com/rae-hugo-kim/omp/issues/98
-    reason: "보고 원문, 승인된 작업 범위 1~3·AC 4건, 세션 직접 결정, 모델 마커의 원문입니다."
-  - path: https://github.com/rae-hugo-kim/omp/issues/92
-    reason: "선행 Windows 보고와 1차 분류·지원 범위 결정입니다."
-  - path: https://github.com/rae-hugo-kim/omp/issues/94
-    reason: "capability 헬퍼(#97)를 도입한 작업의 범위와 경위입니다."
-  - path: .omp/extensions/harness/tests/helpers/capabilities.mjs
-    reason: "수정 대상 probeFifo가 있는 능력 실측 헬퍼입니다."
-estimate:
-  risk: low
-  files: 6
-  depth: low
-  model: anthropic/claude-sonnet-5-5
-  effort: high
+  - "chdir()이 physicalResolve를 공유하게 되면서 `git -C`·`cd -P` 경로도 같은 함수를 지납니다 — 호스트 기본 io에서는 동일 로직이지만 회귀는 기존 shellWriteTargets 테스트로만 고정됩니다."
+  - "Windows 실기 미검증: 2026.88 발행 뒤 보고자의 재검증으로 확정합니다."
