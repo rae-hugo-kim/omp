@@ -213,7 +213,7 @@ const HOOK_SRC = join(here, '..', '..', '..', '..', '.githooks', 'pre-commit');
 // Every module the hook-mode dispatcher and its children import. ONE list for all fixtures: a
 // cloned gates dir missing a sibling module makes review-gate die on ERR_MODULE_NOT_FOUND, which
 // fails closed and lets a budget/signal test pass for the wrong reason (review 2026-09-22, medium).
-const GATE_FILES = ['commit-gates.mjs', 'acceptance-gate.mjs', 'backpressure-gate.mjs', 'review-gate.mjs', 'archive-guard.mjs', 'git-commit-detect.mjs', 'risk-assess.mjs', 'estimate.mjs'];
+const GATE_FILES = ['commit-gates.mjs', 'acceptance-gate.mjs', 'backpressure-gate.mjs', 'review-gate.mjs', 'archive-guard.mjs', 'git-commit-detect.mjs', 'repo-root.mjs', 'risk-assess.mjs', 'estimate.mjs'];
 
 // Install the REAL hook artifact into a fixture repo (harness-sync ships this same file).
 function installHook(dir) {

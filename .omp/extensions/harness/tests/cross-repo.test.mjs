@@ -20,7 +20,7 @@ import { mkdirSync, rmSync, writeFileSync, appendFileSync, symlinkSync } from 'n
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, posix, win32 } from 'node:path';
-import { repoIdentity, repoToplevel } from '../gates/repo-root.mjs';
+import { physicalResolve, repoIdentity, repoToplevel } from '../gates/repo-root.mjs';
 import { absolutize, shellWriteTargets, isGitPush } from '../gates/git-commit-detect.mjs';
 import { crossRepoBashVerdict, crossRepoMutationVerdict } from '../gates/cross-repo.mjs';
 import { loadHarness, ctxFor } from './helpers/harness-handlers.mjs';
@@ -317,4 +317,47 @@ test('absolutize: Windows-style absolute paths stay absolute, relatives join wit
   assert.equal(absolutize('/abs/x.ts', '/session', posix), '/abs/x.ts');
   assert.equal(absolutize('link/../x.ts', '/session', posix), '/session/link/../x.ts', '`link/..` is preserved for the physical walk (r2 X3)');
   assert.equal(absolutize('link/../x.ts', '/session'), `/session${process.platform === 'win32' ? '\\' : '/'}link/../x.ts`, 'default is the host platform');
+});
+
+// repo-root on Windows (#99): `physicalResolve` used to start every walk at the POSIX root `/`
+// and split on `/` only, so `C:\r\x` (one "component") became `\C:\r\x`, nothing existed, and
+// `repoToplevel` returned null — both cross-repo verdicts then allowed silently (fail-open).
+// Pure: `path.win32` and an in-memory fs are injected so the Windows rule runs on any host.
+// The MSYS spelling (`/c/Users/…`) is deliberately NOT translated (integration contract residual).
+function winFs({ dirs = [], files = [], links = {} }) {
+  const d = new Set(dirs), f = new Set(files);
+  const has = (p) => d.has(p) || f.has(p) || p in links;
+  const enoent = (p) => Object.assign(new Error(`ENOENT: ${p}`), { code: 'ENOENT' });
+  return {
+    existsSync: has,
+    statSync: (p) => { if (!has(p)) throw enoent(p); return { isDirectory: () => d.has(p) || p in links }; },
+    realpathSync: { native: (p) => { if (p in links) return links[p]; if (!has(p)) throw enoent(p); return p; } },
+  };
+}
+
+test('physicalResolve (win32): drive and UNC absolute paths walk from their own root, both separators split, `link\\..` is the link TARGET\'s parent', () => {
+  const io = { path: win32, fs: winFs({ dirs: ['C:\\', 'C:\\r', 'C:\\r\\x', 'C:\\cwd', 'C:\\other', 'C:\\other\\target', '\\\\srv\\share\\', '\\\\srv\\share\\x'], links: { 'C:\\r\\link': 'C:\\other\\target' } }) };
+  assert.equal(physicalResolve('C:\\r\\x', 'C:\\cwd', io), 'C:\\r\\x', 'was `\\C:\\r\\x` (joined under the POSIX root)');
+  assert.equal(physicalResolve('C:/r/x', 'C:\\cwd', io), 'C:\\r\\x', 'forward slashes are separators on win32');
+  assert.equal(physicalResolve('\\\\srv\\share\\x', 'C:\\cwd', io), '\\\\srv\\share\\x', 'a UNC root is kept whole');
+  assert.equal(physicalResolve('r\\x', 'C:\\cwd', io), 'C:\\cwd\\r\\x', 'a relative path starts at the physical `from`');
+  assert.equal(physicalResolve('C:\\r\\link\\..\\y', 'C:\\cwd', io), 'C:\\other\\y', '`link\\..` resolves through the link first (r2 X3), on win32 too');
+  assert.equal(physicalResolve('C:\\r\\.\\x\\', 'C:\\cwd', io), 'C:\\r\\x', '`.` and empty components are skipped');
+});
+
+test('repoToplevel (win32): a Windows absolute path is attributed to the repo holding its first existing ancestor (was null → guard fail-open)', () => {
+  const io = { path: win32, fs: winFs({ dirs: ['C:\\', 'C:\\r', 'C:\\r\\.git', 'C:\\r\\x', '\\\\srv\\share\\', '\\\\srv\\share\\.git', '\\\\srv\\share\\x', 'C:\\plain'], files: ['C:\\r\\x\\a.txt'] }) };
+  assert.equal(repoToplevel('C:\\r\\x', io), 'C:\\r');
+  assert.equal(repoToplevel('C:/r/x', io), 'C:\\r');
+  assert.equal(repoToplevel('C:\\r\\x\\a.txt', io), 'C:\\r', 'a file path resolves to its repo toplevel');
+  assert.equal(repoToplevel('C:\\r\\new\\deep\\file.md', io), 'C:\\r', 'a not-yet-existing file is attributed through its first existing ancestor');
+  assert.equal(repoToplevel('\\\\srv\\share\\x', io), '\\\\srv\\share\\', 'UNC share root carrying .git');
+  assert.equal(repoToplevel('C:\\plain\\x', io), null, 'no .git up to the drive root: not a repo (the walk stops at `C:\\`, never loops)');
+});
+
+test('physicalResolve (posix): the host default still walks from `/` and keeps `C:\\…` as one relative file name', () => {
+  const io = { path: posix, fs: winFs({ dirs: ['/', '/cwd', '/cwd/C:\\r\\x', '/a', '/a/b'] }) };
+  assert.equal(physicalResolve('/a/b', '/cwd', io), '/a/b');
+  assert.equal(physicalResolve('C:\\r\\x', '/cwd', io), '/cwd/C:\\r\\x', 'a backslash is a legitimate POSIX file-name character');
+  assert.equal(physicalResolve('/a/./b/', '/cwd', io), '/a/b');
 });
