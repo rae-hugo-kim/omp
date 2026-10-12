@@ -1,37 +1,37 @@
-name: harness-sync-retire-repo-root-canonical-100
-status: done
-completed: 2026-10-12
+name: linked-worktree-version-check-68
+status: approved
 version: 1
-task_id: "20261012-173000-100c"
-# gh-loop worker Stage 2에 따라 이슈 #100 본문 끝 "승인된 작업 범위"·AC 3건과 "세션에서 직접 결정함" 댓글(2026-10-12 "ㄱㄱ")을 명세로 삼습니다.
-# 직전 완료 seed(repo-root-windows-physical-resolve-99)는 git 이력에 보존합니다.
+task_id: "20261012-190000-68a1"
+# gh-loop worker Stage 2에 따라 이슈 #68 본문 끝 "승인된 작업 범위"·AC 4건과 "세션에서 직접 결정함" 댓글(2026-10-12 "ㄱㄱ")을 명세로 삼습니다.
+# 직전 완료 seed(harness-sync-retire-repo-root-canonical-100)는 git 이력에 보존합니다.
 goal: >
-  #100: `scripts/harness-sync.sh`의 retire 단계(7c)가 `_realfile "$f"`(pwd -P 표기)와 `"$REPO_ROOT/$path"`를 비교하는데,
-  hand-off가 아닌 실행에서는 `REPO_ROOT`가 `git rev-parse --show-toplevel` 그대로라 Git for Windows(`C:/…` vs `/c/…`)에서
-  비교가 항상 거짓이 되고 retired 파일이 하나도 지워지지 않을 수 있는 결함을, `REPO_ROOT`를 `_realdir`로 한 번 정규화해
-  hand-off 경로(:91)와 같은 표기로 맞춥니다. `git rev-parse --show-toplevel`을 다른 표기(`<root>/.`)로 답하게 하는 git shim으로
-  Linux에서 재현하는 테스트를 추가하고(수정 전 FAIL → 후 PASS), CHANGELOG [Unreleased]에 한 줄을 남깁니다.
+  #68: 링크드 워크트리(`git worktree add`, Orca 워크트리 포함)에서도 `harness-version-check.mjs`가 `HARNESS STALE … run /skill:harness-check`를
+  내서 워크트리별 sync로 하네스 파일이 main과 갈라지던 결함을 고칩니다. 게이트가 `git rev-parse --git-dir` ≠ `--git-common-dir`로 링크드
+  워크트리를 판정하고 메인 워크트리 브랜치에 커밋된 `harness-meta.json`과 비교해 `HARNESS BEHIND MAIN`(메인이 최신 — 워크트리에서 merge)
+  또는 `HARNESS STALE (linked worktree)`(메인 체크아웃에서 sync·커밋 후 merge)를 냅니다. 어느 쪽도 워크트리에서 harness-check를 지시하지 않으며
+  24h 캐시는 메인·워크트리가 서로 다른 파일을 씁니다. `harness-check` 스킬은 링크드 워크트리에서 안내 후 중단하고 `--force-worktree`로만
+  진행합니다. 격리 임시 리포 + `git worktree add` fixture 테스트, CHANGELOG [Unreleased]·README ko/en 한 줄을 남깁니다.
 constraints:
-  - "수정은 `REPO_ROOT` 정규화 1곳(:98 인근)으로 한정합니다 — retire 알고리즘·`_cleanup`·hand-off 경로는 바꾸지 않습니다."
-  - "POSIX 동작은 불변입니다 — 기존 harness-sync 테스트 전부 통과, Linux 전체 suite skip 0 유지."
-  - "`:442` `TMPDIR` 백슬래시 지적은 Windows 실기 없이 확정할 수 없어 PR에 '실기 재검증 필요'로 기록만 합니다(fixture 변경 없음)."
+  - "`scripts/harness-sync.sh`는 변경하지 않습니다(스킬 층 가드만)."
+  - "`index.ts`·`backpressure-*.mjs`·`repo-root.mjs` 호출부는 수정하지 않습니다(#58 워커 영역) — 링크드 판정은 `git rev-parse` 비교를 쓰고 그 이유를 게이트 주석에 적습니다."
+  - "메인 체크아웃·단일 체크아웃·소스 리포(self-skip)·하네스 없는 리포의 기존 출력은 불변입니다 — 기존 version-check 테스트 전부 통과, Linux 전체 suite skip 0 유지."
   - "Stage 2의 체크 완료 seed·scope → 코드 커밋 → 리뷰 후속 → closeout 커밋 순서를 따릅니다."
 acceptance_criteria:
   - id: AC1
-    title: "REPO_ROOT가 _realdir로 정규화되고, git shim으로 `rev-parse --show-toplevel`을 다른 표기로 강제한 fixture에서 hand-off·비hand-off 두 경로 모두 pristine retired 파일이 삭제되는 테스트가 통과하며, 수정 전 코드에서 비hand-off만 FAIL이었다는 근거가 PR에 기록됩니다."
+    title: "링크드 워크트리 세션에서 STALE 대신 BEHIND MAIN(메인 커밋 meta가 최신) / STALE (linked worktree)(메인도 뒤처짐) 안내가 나오고 /skill:harness-check 지시가 없다 — 격리 임시 리포 + git worktree add fixture 테스트이고 캐시 키 분리(별도 캐시 파일)를 포함한다."
   - id: AC2
-    title: "Linux 전체 suite가 통과하고 skip이 0이며 node scripts/docs-drift가 0 errors/0 warnings입니다."
+    title: "harness-check 스킬이 링크드 워크트리에서 안내 후 중단하며 --force-worktree로만 진행한다(스킬 문서 + 절차), README ko/en 한 줄과 CHANGELOG [Unreleased] 한 줄이 있다."
   - id: AC3
-    title: "비범위가 지켜집니다 — MSYS 경로 변환 일반화·Windows CI·#99 외 sync 로직 변경이 diff에 없고, CHANGELOG [Unreleased]에 항목(Windows 실기 미검증 명시)이 있으며, 이 이슈의 dispatch 튜플이 audit.jsonl에 gh_loop_dispatched(issue 100)로 있습니다."
+    title: "메인 체크아웃·단일 체크아웃·소스 리포·하네스 없는 리포의 기존 출력이 불변(기존 테스트 통과)이고 Linux 전체 suite skip 0, node scripts/docs-drift 0 errors/0 warnings이다."
+  - id: AC4
+    title: "비범위가 지켜진다 — scripts/harness-sync.sh 워크트리 모드, 과거 갈라진 소비 리포 복구, index.ts·backpressure-*.mjs·repo-root.mjs 수정이 diff에 없고, 이 이슈의 dispatch 튜플이 audit.jsonl에 gh_loop_dispatched(issue 68)로 있다."
 out_of_scope:
-  - "MSYS 경로 변환 일반화(`cygpath -w` 상당)."
-  - "Windows CI 러너 추가."
-  - "#99와 무관한 sync 로직 변경(retire 알고리즘, `_cleanup`, hand-off 프로토콜)."
-  - "실제 Windows 호스트에서의 실행 — 이 워크트리에는 Windows가 없어 git shim 시뮬레이션으로 대신합니다."
+  - "`scripts/harness-sync.sh`의 링크드 워크트리 모드(--allow-linked-worktree)."
+  - "과거에 갈라진 소비 리포(chats/bonefish) 복구."
+  - "#58 영역: `index.ts`, `backpressure-*.mjs`, repo-root 호출부."
   - "PR 생성·교차검증 게시·head와 nonce 결정 요청은 커밋 뒤 후속 절차이며 AC 선체크 대상이 아닙니다."
 assumptions:
-  - "시작 HEAD는 main 5c59c09(PR #102 머지 후)이고 작업트리는 깨끗했습니다(ingest가 더한 audit.jsonl 1행 제외)."
-  - "git shim의 `<root>/.` 표기는 Git for Windows의 `C:/…` 표기와 같은 성질(같은 디렉터리의 다른 철자)만 모사하며 MSYS 경로 변환 자체를 재현하지는 않습니다."
+  - "시작 HEAD는 main 0a24c23(2026.88)이고 작업트리는 깨끗했습니다(ingest가 더한 audit.jsonl 1행 제외)."
+  - "메인 워크트리는 `git worktree list --porcelain`의 첫 항목입니다(git 문서 보증). bare 메인이면 경로 없이 STALE (linked worktree) 문구만 냅니다."
 risks:
-  - "Windows 실기 미검증: 2026.88 발행 뒤 보고자의 재검증으로 확정합니다."
-  - "`REPO_ROOT`가 이제 항상 physical 경로(pwd -P)라 심볼릭 링크 경유 cwd에서는 이전과 표기가 달라집니다 — 이후 모든 비교가 같은 표기를 쓰도록 하는 것이 목적이며 hand-off 경로는 이미 그랬습니다."
+  - "링크드 워크트리의 HARNESS HOOKS INACTIVE 안내는 여전히 harness-check를 언급합니다(범위 밖 — core.hooksPath는 레포 공용 설정이라 메인에서 한 번 설정하면 됩니다)."
