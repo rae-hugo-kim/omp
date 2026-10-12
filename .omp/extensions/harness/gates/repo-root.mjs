@@ -41,11 +41,12 @@ function physical(p, f = fs) {
  *  review 2026-10-07 X3; Node's JS `realpathSync` normalizes before walking too, only the
  *  libc-backed `.native` follows the link first). A component that does not exist stays lexical
  *  from there on. An absolute `v` is recognised by `io.path` (`/x` on POSIX; `C:\x`, `C:/x`,
- *  `\\srv\share\x` on Windows — #93/#99; `C:foo` drive-relative is unmodelled and walked
- *  lexically from `C:`) and walked from ITS root — never from a hard-coded `/`, which turned
- *  `C:\r\x` into `\C:\r\x` and attributed every Windows path to no repo (#99). A relative `v`
- *  starts at the physical `from`. `\` splits components only where the platform treats it as a
- *  separator: a POSIX file name may legitimately contain one. */
+ *  `\\srv\share\x` on Windows — #93/#99; a drive-relative `C:foo` is unmodelled: its root is
+ *  `C:` and `win32.join('C:', 'foo')` remaps it under the drive root as `C:\foo`) and walked
+ *  from ITS root — never from a hard-coded `/`, which turned `C:\r\x` into `\C:\r\x` and
+ *  attributed every Windows path to no repo (#99). A relative `v` starts at the physical
+ *  `from`. `\` splits components only where the platform treats it as a separator: a POSIX
+ *  file name may legitimately contain one. */
 export function physicalResolve(v, from = process.cwd(), io = HOST) {
   const { path: p, fs: f } = io;
   const { root } = p.parse(v);                     // '' when relative; '/', 'C:\', '\\srv\share\' when absolute

@@ -35,7 +35,7 @@ OMP(Oh My Pi) 코딩 에이전트가 일관되고 안전하게 동작하도록 �
 | 플랫폼 | 지위 |
 |---|---|
 | Linux · WSL · macOS | **공식 지원** — 전체 하네스 테스트 통과가 기준선입니다 |
-| Windows 네이티브 | **동작을 목표로 하며 일부 테스트는 skip** — OS 기능(심볼릭 링크·FIFO)이 없는 환경의 테스트만 사유를 출력하고 건너뜁니다. [#93](https://github.com/rae-hugo-kim/omp/issues/93)의 런타임 수정(review-gate의 `shasum` 의존 제거, cross-repo·`git -C` 절대 경로 판정)과 [#99](https://github.com/rae-hugo-kim/omp/issues/99)의 `repo-root.mjs` 수정(`C:\…`·`C:/…`·UNC 경로를 자기 루트에서 걸어 리포에 귀속 — 그 전에는 모든 Windows 경로가 어느 리포에도 속하지 않아 cross-repo 가드가 조용히 꺼졌습니다)은 들어 있지만, 둘 다 주입한 `path.win32` 단위 테스트 근거이고 실제 Windows 호스트에서 전체 suite를 실행해 확인하지는 않았습니다. Git Bash의 MSYS 표기(`/c/Users/…`)는 변환하지 않아 귀속 null → 허용입니다(실기 확인 필요) |
+| Windows 네이티브 | **동작을 목표로 하며 일부 테스트는 skip** — OS 기능(심볼릭 링크·FIFO)이 없는 환경의 테스트만 사유를 출력하고 건너뜁니다. [#93](https://github.com/rae-hugo-kim/omp/issues/93)의 런타임 수정(review-gate의 `shasum` 의존 제거, cross-repo·`git -C` 절대 경로 판정)과 [#99](https://github.com/rae-hugo-kim/omp/issues/99)의 `repo-root.mjs` 수정(`C:\…`·`C:/…`·UNC 경로를 자기 루트에서 걸어 리포에 귀속 — 그 전에는 모든 Windows 경로가 어느 리포에도 속하지 않아 cross-repo 가드가 조용히 꺼졌습니다)은 들어 있지만, 둘 다 주입한 `path.win32` 단위 테스트 근거이고 실제 Windows 호스트에서 전체 suite를 실행해 확인하지는 않았습니다. Git Bash의 MSYS 표기(`/c/Users/…`)는 변환하지 않아 edit/write·mutator 피연산자·`git -C /c/… commit`은 귀속 null → 허용이고(`cd /c/… && git commit`만 cwd 불명으로 fail-closed), 실기 확인이 필요합니다 |
 
 Windows 네이티브 전제:
 
