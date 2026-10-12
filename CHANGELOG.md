@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- **fix(harness)**: #68 — 링크드 워크트리(`git worktree add`, Orca 워크트리 포함)에서 `harness-version-check.mjs`가 `HARNESS STALE … run /skill:harness-check`를 내지 않습니다. `git rev-parse --git-dir`와 `--git-common-dir`가 다르면 메인 워크트리 브랜치에 **커밋된** `harness-meta.json`을 읽어, 메인이 최신이면 `HARNESS BEHIND MAIN`(`git merge <브랜치>` 안내), 메인도 뒤처졌으면 `HARNESS STALE (linked worktree)`(메인 체크아웃에서 sync·커밋 후 merge)를 냅니다. 워크트리는 `harness-version-check.linked.json` 캐시를 따로 쓰고 메인·단일 체크아웃·소스 리포의 출력은 그대로입니다. `harness-check` 스킬은 링크드 워크트리에서 안내만 하고 중단하며 `--force-worktree`로만 진행합니다(`harness-sync.sh`는 변경 없음). 워크트리별 sync가 하네스 파일을 main과 갈라 놓아 머지 때 14건이 충돌한 chats/bonefish 실측이 계기입니다.
+
 ## [2026.88] - 2026-10-12
 
 - **fix(tests)**: #98 — Windows 실기(2026.87)에서 FIFO capability probe가 파일 3개(`backpressure-patterns`·`hook-gates`·`review-gate` 테스트)의 초기화를 중단시키던 문제를 고칩니다. Git for Windows의 `mkfifo`는 exit 0을 돌려주지만 MSYS가 `C:\…` 경로를 다르게 해석해 기대 위치에 FIFO가 없어, 이어지는 `lstat`의 ENOENT가 모듈 로드 중 throw됐습니다. `tests/helpers/capabilities.mjs`의 `probeFifo`(이제 `platform`/`spawn` 주입 가능)는 **win32에서만** "mkfifo 성공 뒤 FIFO 부재 또는 FIFO 아님"을 사유가 적힌 capability 없음(skip 사유 `host mkfifo exited 0 but produced no FIFO at the expected path (MSYS path translation) — POSIX FIFOs unavailable`)으로 판정하고, POSIX에서는 같은 결과를 예외로 유지합니다(환경 결함을 skip으로 숨기지 않음). `tests/capabilities.test.mjs`가 양쪽 분기를 고정합니다. 보고된 나머지 29건 실패는 테스트 소스와 대조해 런타임 결함 / 테스트 이식성 / 호스트 전제조건으로 분류했고(이 변경의 PR 본문과 이슈 #98 댓글의 분류표), 런타임 결함 2건은 별도 이슈로 분리했습니다(#99 cross-repo guard의 `repo-root.mjs`가 Windows 경로에서 null → fail-open, #100 `harness-sync.sh` retire 경로 비교의 MSYS/Windows 표기 불일치) — 이 변경에서는 고치지 않습니다. harness-check 스킬과 README ko/en에 Windows에서 2026.86 이하 → 2026.87 이상으로 올릴 때의 CRLF 재정규화 단락(`git add --renormalize`, 작업 트리 재작성, CRLF sync 스크립트 우회)을 추가했습니다. 실제 Windows 호스트에서는 확인하지 못했습니다.

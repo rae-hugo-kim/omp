@@ -208,6 +208,8 @@ git push --follow-tags
 
 `--audit`은 `scripts/harness-audit.sh`(rubric v3)를 호출하며, 버전 bump 시 결과가 `.omp/state/harness-scores.jsonl`에 누적됩니다. 이 점수는 4개월간 값이 변한 적이 없고 결정에 쓰인 사례가 없어 **폐지가 결정됐습니다**([#87](https://github.com/rae-hugo-kim/omp/issues/87), 검토 문서 [`docs/harness/audit-score-review-2026-10-06.md`](docs/harness/audit-score-review-2026-10-06.md)) — 실행 사이클이 끝나면 이 절과 `--audit`이 사라집니다.
 
+링크드 워크트리(`git worktree add`, Orca 워크트리 포함)에서는 게이트가 `/skill:harness-check` 대신 `HARNESS BEHIND MAIN`(메인이 이미 최신 — 워크트리에서 `git merge <메인 브랜치>`) 또는 `HARNESS STALE (linked worktree)`(메인 체크아웃에서 sync·커밋 후 merge)를 안내하고, `/skill:harness-check`도 워크트리에서는 중단합니다(`--force-worktree`만 진행). 워크트리별 sync는 하네스 파일을 main과 갈라 머지 충돌을 만들기 때문입니다.
+
 ## Docs 뷰어 (Obsidian)
 
 마크다운(SST)을 빌드 없이 그대로 읽습니다. repo 루트를 vault로 열면 됩니다
