@@ -208,6 +208,8 @@ Projects created via `/skill:init` get a `session_start` gate that checks remote
 
 `--audit` runs `scripts/harness-audit.sh` (rubric v3); on version bumps results accumulate in `.omp/state/harness-scores.jsonl`. The score has not changed in four months and has never driven a decision, so its **retirement is decided** ([#87](https://github.com/rae-hugo-kim/omp/issues/87), review in [`docs/harness/audit-score-review-2026-10-06.md`](docs/harness/audit-score-review-2026-10-06.md)) — this section and `--audit` disappear once the removal cycle lands.
 
+In a linked worktree (`git worktree add`, Orca worktrees included) the gate reports `HARNESS BEHIND MAIN` (main is already current — `git merge <main branch>` in the worktree) or `HARNESS STALE (linked worktree)` (sync and commit in the main checkout, then merge) instead of pointing at `/skill:harness-check`, and `/skill:harness-check` itself stops in a worktree (only `--force-worktree` proceeds) — a per-worktree sync forks the harness files from main and the later merge conflicts.
+
 ## Docs Viewer (Obsidian)
 
 Markdown (SST) is read as-is, no build step: open the repo root as an Obsidian
