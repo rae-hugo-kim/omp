@@ -1,5 +1,6 @@
 name: repo-root-windows-physical-resolve-99
-status: approved
+status: done
+completed: 2026-10-12
 version: 1
 task_id: "20261012-153300-99a7"
 # gh-loop worker Stage 2에 따라 이슈 #99 본문 끝 "승인된 작업 범위"·AC 4건과 "세션에서 직접 결정함" 댓글(2026-10-12 "ㄱㄱ")을 명세로 삼습니다.
