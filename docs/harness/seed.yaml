@@ -1,57 +1,54 @@
-name: test-portability-platform-docs-94
-status: done
-completed: 2026-10-08
+name: windows-fifo-probe-triage-98
+status: approved
 version: 1
-task_id: "20261007-180736-e342"
-# gh-loop worker Stage 2에 따라 이슈 #94 본문(범위 1~4·AC 5건)과 "세션에서 직접 결정함" 댓글(본문 범위대로 진행, #91 헬퍼 공유, 일괄 skip 금지)을 명세로 삼습니다.
-# 직전 완료 seed(cross-repo-guard-15)는 git 이력에 보존합니다.
+task_id: "20261012-142500-98f1"
+# gh-loop worker Stage 2에 따라 이슈 #98 본문 끝 "승인된 작업 범위" 1~3·AC 4건과 "세션에서 직접 결정함" 댓글(2026-10-12 "ㄱㄱ")을 명세로 삼습니다.
+# 직전 완료 seed(test-portability-platform-docs-94)는 git 이력에 보존합니다.
 goal: >
-  #92 ②: Windows 네이티브에서 보고된 테스트 이식성 문제를 고치고 지원 플랫폼을 문서화합니다 —
-  심볼릭 링크·FIFO 테스트는 능력을 실측해 없을 때만 사유를 출력하고 skip(능력이 있는 호스트에서는 skip 증가 없음),
-  POSIX 고정 기대값·shasum·셸 문자열 mkfifo는 플랫폼 중립으로, CRLF 체크아웃의 harness-sync fixture 실패는 재현 후
-  .gitattributes로 고치고, init 스킬·README ko/en·통합 계약에 지원 플랫폼 절을 둡니다.
+  #98: Windows 실기(2026.87)에서 FIFO capability probe가 mkfifo exit 0 뒤 lstat ENOENT로 throw해 테스트 3파일 초기화가 중단된 문제를
+  win32에서만 "사유 있는 capability 없음"으로 판정하도록 고치고(POSIX는 그대로 throw), 보고된 29건 실패 묶음을 테스트 소스와 대조해
+  런타임 결함 / 테스트 이식성 / 호스트 전제조건으로 분류해 PR 본문과 #98 댓글에 남기며(런타임 결함은 별도 이슈로 분리),
+  harness-check 스킬과 README ko/en에 Windows 2026.86 이하 → 2026.87 업그레이드 재정규화 단락을 추가합니다.
 constraints:
-  - "런타임 게이트 코드(.omp/extensions/harness/gates/*, index.ts, scripts/*)는 바꾸지 않습니다 — 런타임 결함은 #93 몫입니다."
-  - "capability skip은 능력을 실측해 없을 때만 사유를 명시해 skip합니다. 보안 게이트 실패를 숨기는 파일·스위트 단위 일괄 skip은 금지이며, 한 테스트에 섞인 케이스는 능력별 테스트로 나눕니다."
-  - "FIFO·심볼릭 링크 없이 동등 검증하는 테스트 재설계는 하지 않습니다."
-  - "macOS /var→/private/var 경로 정규화는 #91 몫입니다. #91이 머지되기 전이라 cross-repo.test.mjs의 fixture 경로는 건드리지 않고(머지 순서 #91→#93→#94, 세 PR이 같은 파일을 만집니다) 그 파일은 심볼릭 링크 skip만 최소 변경합니다."
-  - "CRLF는 core.autocrlf=true clone으로 실제 재현한 뒤 고치고, 재현 명령·출력을 PR에 기록합니다."
+  - "probeFifo의 완화는 win32에서만 적용합니다. POSIX에서 mkfifo exit 0 뒤 FIFO 부재·비FIFO는 지금처럼 throw하고, 일괄 catch/skip은 하지 않습니다."
+  - "mkdtempSync 경로에 공백이 있어도 mkfifo를 argv 배열로 호출하는 현재 방식을 유지합니다."
+  - "런타임 결함으로 분류된 항목은 이 PR에서 고치지 않고 별도 이슈(제목 '#N ' 접두)로 분리합니다. 게이트·스크립트 코드(gates/*, index.ts, scripts/*)는 바꾸지 않습니다."
+  - "분류표에서 테스트 이식성으로 분류한 테스트의 재설계·capability 확대는 이 PR에서 하지 않습니다(비범위). Windows 실기가 없어 확정하지 못한 항목은 '실기 재검증 필요'로 표시합니다."
+  - "Windows CI 러너 추가는 하지 않습니다."
   - "Stage 2의 체크 완료 seed·scope → 코드 커밋 → 리뷰 후속 → closeout 커밋 순서를 따릅니다."
 acceptance_criteria:
   - id: AC1
-    title: "Linux에서 전체 suite(node --test .omp/extensions/harness/tests/*.test.mjs)가 실패 0건으로 통과하고 skip 수가 변하지 않습니다(기준선 701 pass / 0 skipped → 신규 테스트만 늘고 skipped는 0). 능력이 있는 호스트에서는 skip이 늘지 않습니다."
+    title: "win32에서 mkfifo exit 0 뒤 lstat ENOENT(또는 FIFO 아님)는 throw가 아니라 사유 있는 capability 없음(skip 사유)이 되고 POSIX에서는 여전히 throw하며, 플랫폼을 주입해 양쪽을 tests/capabilities.test.mjs가 고정하고 Linux 전체 suite의 skip 수는 0으로 유지됩니다."
   - id: AC2
-    title: "능력 감지 헬퍼를 강제로 '없음'으로 두는 시뮬레이션(HARNESS_TEST_FORCE_NO_CAPS)으로 skip 사유 문자열이 출력됨을 tests/capabilities.test.mjs가 고정하고(skipped 본문 미실행, 능력이 필요 없는 테스트는 skip되지 않음 포함), 전체 suite를 강제 '없음'으로 돌려도 실패 0건입니다."
+    title: "29건 실패 묶음 분류표(테스트 파일:행 / 분류 / 근거 / 처분)가 PR 본문과 #98 댓글에 있고, 런타임 결함으로 분류된 항목은 별도 이슈 번호를 가지며, 실기 확정이 불가능한 항목은 '실기 재검증 필요'로 표시됩니다."
   - id: AC3
-    title: "core.autocrlf=true clone에서 harness-sync 테스트 28건이 'failed to inject the new PATHS entry'로 실패함을 재현한 명령·출력이 PR에 기록되고, .gitattributes(*.sh, .githooks/* eol=lf)로 28/28 통과가 확인되며, fixture 정규식은 \\r?\\n을 허용합니다."
+    title: "harness-check 스킬과 README ko/en에 Windows 업그레이드 재정규화 단락(git add --renormalize .omp scripts .githooks, sync 스크립트가 CRLF일 때의 우회)이 있고 node scripts/docs-drift가 0 errors/0 warnings입니다."
   - id: AC4
-    title: "README ko/en, init 스킬, 통합 계약 Known residual surfaces에 지원 플랫폼 절(Linux·WSL·macOS 공식, Windows 네이티브는 동작+OS 기능 없는 테스트 skip, 전제: Node ≥ 20·bash·bash PATH의 node·심볼릭 링크 테스트는 개발자 모드·권장 검증은 WSL)이 있고 node scripts/docs-drift가 0 errors/0 warnings입니다."
-  - id: AC5
-    title: "POSIX 고정 기대값(git-commit-detect·read-path·xdev-dispatch)은 join/resolve로, shasum 파이프는 node:crypto로, 공백 경로에서 쪼개지던 execSync mkfifo는 argv 배열로 바꿨고, 런타임 게이트 코드는 diff에 없으며, 이 이슈의 dispatch 튜플이 audit.jsonl에 gh_loop_dispatched(issue 94)로 있습니다."
+    title: "비범위가 지켜집니다 — 분류표의 런타임 결함 수정, 테스트 재설계, Windows CI 러너 추가가 diff에 없고, 이 이슈의 dispatch 튜플이 audit.jsonl에 gh_loop_dispatched(issue 98)로 있습니다."
 out_of_scope:
-  - "런타임 게이트 코드 변경(review-gate shasum → crypto, cross-repo isAbsolute) — #93."
-  - "macOS 실경로 정규화 헬퍼와 cross-repo·version-bump fixture의 realpath 처리 — #91. 이번에는 cross-repo.test.mjs의 fixture 경로를 바꾸지 않습니다."
-  - "FIFO·심볼릭 링크 없이 동등 검증하는 테스트 재설계."
-  - "실제 Windows 호스트에서의 전체 suite 실행 — 이 워크트리에는 Windows가 없어 능력 없음 시뮬레이션으로 대신합니다."
+  - "분류표의 런타임 결함 수정(별도 이슈 #99·#100)."
+  - "테스트 이식성 항목의 capability 확대·fixture 정규화·테스트 재설계."
+  - "Windows CI 러너 추가."
+  - "실제 Windows 호스트에서의 전체 suite 실행 — 이 워크트리에는 Windows가 없어 주입 가능한 플랫폼과 Linux 모사로 대신합니다."
   - "PR 생성·교차검증 게시·head와 nonce 결정 요청은 커밋 뒤 후속 절차이며 AC 선체크 대상이 아닙니다."
 assumptions:
-  - "시작 HEAD는 main f9cc91a(2026.86)이고 작업트리는 깨끗했습니다(워크트리 rae-hugo-kim/gh-loop-issue-94; ingest가 더한 audit.jsonl 1행 제외)."
-  - "#91 PR은 아직 열리지 않았고(형제 워크트리 gh-loop-issue-91은 변경 없음) 공유할 realpath 헬퍼가 없어 만들지 않았습니다 — 이 PR의 경로 수정은 realpath가 필요 없는 expected-value 계산(join/resolve)뿐입니다."
+  - "시작 HEAD는 main cff6b18(2026.87)이고 작업트리는 깨끗했습니다(ingest가 더한 audit.jsonl 1행 제외)."
+  - "보고자는 개별 실패 테스트명을 제공하지 않았으므로 분류표의 각 행은 테스트 소스·프로덕션 코드 정적 판독과 Linux 모사 근거이며, 행과 29건의 1:1 대응은 확정이 아닙니다."
 risks:
-  - "Windows 호스트에서 실행해 보지 못했으므로 join/resolve 기대값과 capability 프로브의 Windows 동작은 코드 읽기(git-commit-detect chdir·read-path resolve)와 시뮬레이션으로만 검증했습니다 — 실측은 Windows 보고자 확인이 필요합니다."
-  - "hook-gates I5/I6(shimBin이 링크로 bare PATH를 만들어 통째 symlink-gated)와 ADR002 symlinked-rules 2건은 링크가 fixture/공격 자체라 통째로 skip됩니다 — 그 밖의 retire·디렉터리 충돌 케이스는 능력별 테스트로 분리돼 항상 실행됩니다(리뷰 r1 지적 반영). risk-assess의 index/HEAD guard 2건은 git update-index로 링크 없이도 만들 수 있으나 이번 범위 밖(재설계 비범위)입니다."
+  - "분류는 Windows 실기 없이 한 것이라 오분류 가능성이 있습니다 — 2026.88 발행 뒤 보고자의 재검증으로 확정합니다."
+  - "win32 분기는 주입한 platform/spawn 단위 테스트로만 검증했고 실제 Git for Windows의 mkfifo 동작은 확인하지 못했습니다."
 references:
-  - path: https://github.com/rae-hugo-kim/omp/issues/94
-    reason: "범위 1~4·AC 5건·세션 직접 결정·모델 마커의 원문입니다."
+  - path: https://github.com/rae-hugo-kim/omp/issues/98
+    reason: "보고 원문, 승인된 작업 범위 1~3·AC 4건, 세션 직접 결정, 모델 마커의 원문입니다."
   - path: https://github.com/rae-hugo-kim/omp/issues/92
-    reason: "보고 원문(149건 실패 분류)과 1차 분류·지원 범위 결정 댓글입니다."
+    reason: "선행 Windows 보고와 1차 분류·지원 범위 결정입니다."
+  - path: https://github.com/rae-hugo-kim/omp/issues/94
+    reason: "capability 헬퍼(#97)를 도입한 작업의 범위와 경위입니다."
   - path: .omp/extensions/harness/tests/helpers/capabilities.mjs
-    reason: "능력 실측·skip 사유·강제 없음 시뮬레이션 헬퍼입니다."
-  - path: .omp/rules/harness-harness_integration_contract.md
-    reason: "Known residual surfaces에 Windows 네이티브 항목을 추가한 문서입니다."
+    reason: "수정 대상 probeFifo가 있는 능력 실측 헬퍼입니다."
 estimate:
   risk: low
-  files: 12
+  files: 6
   depth: low
   model: anthropic/claude-sonnet-5-5
   effort: high
