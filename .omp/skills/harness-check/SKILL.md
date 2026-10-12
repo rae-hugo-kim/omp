@@ -58,6 +58,19 @@ The script:
 - Sets `core.hooksPath=.githooks` when `.githooks/` exists and git is not already pointing at it (idempotent). This is local git config that no file sync can carry, so a repo registered before `bootstrap` gained the step is otherwise disarmed forever (#26) — the `HARNESS HOOKS INACTIVE` session/turn notice from `harness-version-check.mjs` routes here.
 - Clears the `harness-version-check` and `harness-hooks-check` caches
 
+#### Windows native: upgrading from 2026.86 or earlier
+
+The 2026.87 `.gitattributes` pins `*.sh` and `.githooks/*` to LF, but it **does not convert files that are already checked out with CRLF**. A 2026.86-or-earlier Windows checkout therefore may have a CRLF `scripts/harness-sync.sh`, and `bash scripts/harness-sync.sh` stops at once with `$'\r': command not found` / `set: pipefail: invalid option name`. Work around it once by running a CR-stripped copy from a real temp file (not `bash <(…)`: the script re-copies `$0` to a temp file and re-execs it, and a pipe has already been partly consumed by then, so the copy would lose the script's first lines). WSL does not avoid this by itself — a bash in WSL fails on the same CRLF file, so use the same temp-copy command there. Add `--dry-run` to the first run if unsure. After the sync, confirm `*.sh text eol=lf` and `.githooks/* text eol=lf` are in the consumer's `.gitattributes` (it is not a sync target), then re-normalize:
+
+```bash
+lf=$(mktemp) && tr -d '\r' < scripts/harness-sync.sh > "$lf" && bash "$lf"; rc=$?; rm -f "$lf"; [ "$rc" -eq 0 ]   # only when the script itself is CRLF
+git add --renormalize .omp scripts .githooks '*.sh' && git status   # commit what it lists (blobs that were committed with CRLF)
+# --renormalize rewrites the index only; with no uncommitted changes, rewrite the CRLF working-tree files too
+# (uncommitted edits to these files are lost):
+git ls-files -z -- '*.sh' '.githooks/*' | xargs -0 sh -c 'rm -f -- "$@" && git checkout -- "$@"' _
+git ls-files --eol -- '*.sh' '.githooks/*'                   # expect w/lf everywhere
+```
+
 ### 3. Report
 
 | Outcome | Report |
