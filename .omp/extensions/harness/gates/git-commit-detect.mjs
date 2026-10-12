@@ -59,7 +59,8 @@
 //   - Past MAX_DEPTH of nested `bash -c`, detection FAILS CLOSED (treats it as a commit).
 
 import { realpathSync, statSync } from 'fs';
-import path, { dirname, join, resolve, sep } from 'path';
+import path, { resolve } from 'path';
+import { physicalResolve } from './repo-root.mjs';
 
 const MAX_DEPTH = 5;
 
@@ -827,27 +828,15 @@ const WRAPPER_CHDIR = /^(-C|-D|--ch)/;
 // tokenize() with their `$`), globs, brace expansion — is not the literal directory git will see.
 const UNEXPANDED = /[$`*?[{]|^~/;
 // Change directory the way git's chdir does: component by component, following symlinks at
-// each step, so `-C link/..` is the PARENT OF THE LINK TARGET (lexical `resolve()` would
-// collapse `link/..` to the link's own parent first — and so does Node's JS `realpathSync`,
-// which normalizes before walking; only the libc-backed `.native` follows the link first). A
-// component that does not exist stays lexical — readHead fails there anyway.
-// Absolute paths are recognised by the platform's `path` (`C:\x`, `C:/x`, `\\srv\share\x` on
-// Windows; only `/x` on POSIX — `C:\x` is a relative name there) and walked from their root
-// (#93). `\` splits components only where the platform treats it as a separator: a POSIX file
-// name may legitimately contain one.
-const SEPARATORS = sep === '\\' ? /[\\/]/ : /\//;
+// each step, so `-C link/..` is the PARENT OF THE LINK TARGET — the walk is repo-root's
+// `physicalResolve` (one implementation for `git -C`, `cd -P` and mutation-target attribution,
+// #99), which recognises absolute paths by the platform's `path` (`C:\x`, `C:/x`,
+// `\\srv\share\x` on Windows; only `/x` on POSIX — `C:\x` is a relative name there) and walks
+// them from their own root (#93).
 function physical(p) {
   try { return realpathSync.native(p); } catch { return p; }
 }
-function chdir(from, v) {
-  const { root } = path.parse(v);                  // '' when relative; '/', 'C:\', '\\srv\share\' when absolute ('C:' for a drive-relative `C:foo` — unmodelled, walked lexically)
-  let cur = root || physical(from);
-  for (const part of v.slice(root.length).split(SEPARATORS)) {
-    if (part === '' || part === '.') continue;
-    cur = part === '..' ? dirname(cur) : physical(join(cur, part));
-  }
-  return cur;
-}
+const chdir = (from, v) => physicalResolve(v, from);
 
 /** `target` as an absolute path: itself when `p.isAbsolute` says so, else spelled under `base`
  *  with the platform separator — NOT normalized (`link/..` is resolved physically by repo-root

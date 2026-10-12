@@ -35,7 +35,7 @@ OMP(Oh My Pi) 코딩 에이전트가 일관되고 안전하게 동작하도록 �
 | 플랫폼 | 지위 |
 |---|---|
 | Linux · WSL · macOS | **공식 지원** — 전체 하네스 테스트 통과가 기준선입니다 |
-| Windows 네이티브 | **동작을 목표로 하며 일부 테스트는 skip** — OS 기능(심볼릭 링크·FIFO)이 없는 환경의 테스트만 사유를 출력하고 건너뜁니다. [#93](https://github.com/rae-hugo-kim/omp/issues/93)의 런타임 수정(review-gate의 `shasum` 의존 제거, cross-repo·`git -C` 절대 경로 판정)은 들어 있지만, 실제 Windows 호스트에서 전체 suite를 실행해 확인하지는 않았습니다 |
+| Windows 네이티브 | **동작을 목표로 하며 일부 테스트는 skip** — OS 기능(심볼릭 링크·FIFO)이 없는 환경의 테스트만 사유를 출력하고 건너뜁니다. [#93](https://github.com/rae-hugo-kim/omp/issues/93)의 런타임 수정(review-gate의 `shasum` 의존 제거, cross-repo·`git -C` 절대 경로 판정)과 [#99](https://github.com/rae-hugo-kim/omp/issues/99)의 `repo-root.mjs` 수정(`C:\…`·`C:/…`·UNC 경로를 자기 루트에서 걸어 리포에 귀속 — 그 전에는 모든 Windows 경로가 어느 리포에도 속하지 않아 cross-repo 가드가 조용히 꺼졌습니다)은 들어 있지만, 둘 다 주입한 `path.win32` 단위 테스트 근거이고 실제 Windows 호스트에서 전체 suite를 실행해 확인하지는 않았습니다. Git Bash의 MSYS 표기(`/c/Users/…`)는 변환하지 않아 edit/write·mutator 피연산자·`git -C /c/… commit`은 귀속 null → 허용이고(`cd /c/… && git commit`만 cwd 불명으로 fail-closed), 실기 확인이 필요합니다 |
 
 Windows 네이티브 전제:
 
@@ -44,7 +44,7 @@ Windows 네이티브 전제:
 - **심볼릭 링크 테스트** — Windows 개발자 모드(또는 관리자 셸)가 있어야 실행됩니다. 없으면 `host cannot create symlinks …` 사유와 함께 skip되고, 능력이 있는 호스트에서는 skip되지 않습니다. `mkfifo`가 필요한 FIFO 테스트도 같은 방식으로 skip됩니다.
 - **줄 끝(CRLF)** — 저장소의 `.gitattributes`가 `*.sh`와 `.githooks/*`를 LF로 고정합니다(`core.autocrlf=true` 체크아웃에서도 bash가 스크립트를 읽습니다). `.gitattributes`는 `/skill:harness-check` 동기화 대상이 아니므로 기존 소비 리포는 `*.sh text eol=lf`와 `.githooks/* text eol=lf` 두 줄을 직접 추가해야 합니다. 이미 CRLF로 체크아웃된 스크립트는 작업 트리를 다시 써야 LF가 됩니다 — 미커밋 변경이 없을 때 `git rm --cached -r -q . && git reset --hard`를 실행하거나 새로 clone하세요(`git add --renormalize .`는 인덱스만 바꾸고 작업 트리의 CRLF는 그대로 둡니다).
 - **2026.86 이하에서 올릴 때(Windows 재정규화)** — 2026.87의 `.gitattributes`는 **이미 CRLF로 체크아웃된 파일을 되돌리지 않습니다.** 2026.86 이하 체크아웃의 `scripts/harness-sync.sh`가 CRLF이면 `bash scripts/harness-sync.sh`가 `$'\r': command not found`, `set: pipefail: invalid option name`으로 즉시 멈춥니다. 이때는 CR을 벗긴 사본을 임시 파일로 만들어 한 번 실행합니다: `lf=$(mktemp) && tr -d '\r' < scripts/harness-sync.sh > "$lf" && bash "$lf"; rc=$?; rm -f "$lf"; [ "$rc" -eq 0 ]`(`bash <(…)` 프로세스 치환은 스크립트가 `$0`를 다시 복사할 때 파이프가 이미 일부 소비돼 앞부분이 빠지므로 쓰지 않습니다. WSL의 bash도 같은 CRLF 파일에서는 똑같이 실패하므로 WSL에서도 이 임시 사본 방식을 씁니다). 동기화가 끝나면 위 `.gitattributes` 두 줄이 있는지 확인하고 `git add --renormalize .omp scripts .githooks '*.sh' && git status`로 LF를 재정규화합니다(변경이 나열되면 커밋하세요). `--renormalize`는 인덱스만 바꾸므로 작업 트리의 CRLF는 미커밋 변경이 없을 때 `git ls-files -z -- '*.sh' '.githooks/*' | xargs -0 sh -c 'rm -f -- "$@" && git checkout -- "$@"' _`로 다시 씁니다(이 파일들의 미커밋 변경은 사라집니다). `git ls-files --eol -- '*.sh' '.githooks/*'`가 모두 `w/lf`이면 끝입니다.
-- **권장 검증 경로** — Windows에서는 WSL에서 같은 체크아웃을 열어 `node --test .omp/extensions/harness/tests/*.test.mjs`를 실행합니다. Windows 네이티브 동작은 단위 테스트(주입한 `path.win32`)와 코드 읽기 근거뿐이라, 실제 Windows 호스트의 실행 결과를 보고해 주시면 이 절을 갱신합니다.
+- **권장 검증 경로** — Windows에서는 WSL에서 같은 체크아웃을 열어 `node --test .omp/extensions/harness/tests/*.test.mjs`를 실행합니다. Windows 네이티브 동작은 단위 테스트(주입한 `path.win32`, `repo-root`는 인메모리 fs까지)와 코드 읽기 근거뿐이라, 실제 Windows 호스트의 실행 결과를 보고해 주시면 이 절을 갱신합니다.
 
 ## 시작하기
 

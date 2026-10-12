@@ -20,40 +20,57 @@
 // walk would find A's `.git` first and attribute B's file to A (review 2026-10-06 C1). The
 // toplevel returned is therefore a physical path; the identity is realpath'd too, which is what
 // makes two spellings of one repo compare equal.
+//
+// `physicalResolve` / `repoToplevel` take an `io = { path, fs }` seam so the Windows rule is
+// unit-testable on any host (`path.win32` + an in-memory fs); production callers use the host
+// defaults. `git-commit-detect.mjs` walks `git -C` / `cd -P` values through the same function.
 
-import { existsSync, readFileSync, realpathSync, statSync } from 'fs';
-import { dirname, isAbsolute, join, resolve } from 'path';
+import * as fs from 'fs';
+import { readFileSync, statSync } from 'fs';
+import path, { isAbsolute, join, resolve } from 'path';
 
-function physical(p) {
-  try { return realpathSync.native(p); } catch { return p; }
+const HOST = { path, fs };
+
+function physical(p, f = fs) {
+  try { return f.realpathSync.native(p); } catch { return p; }
 }
 
-/** `p` resolved the way the kernel walks it: component by component, following symlinks at
- *  each step, so `link/../x` is the sibling of the LINK TARGET, not of the link (a lexical
- *  `resolve()` would collapse `link/..` first and attribute the file to the wrong repo — review
- *  2026-10-07 X3). A component that does not exist stays lexical from there on. `p` must be
- *  absolute (callers join the cwd without normalizing). */
-export function physicalResolve(p) {
-  let cur = '/';
-  for (const part of p.split('/')) {
+/** `v` resolved the way the kernel (and git's chdir) walks it: component by component, following
+ *  symlinks at each step, so `link/../x` is the sibling of the LINK TARGET, not of the link (a
+ *  lexical `resolve()` would collapse `link/..` first and attribute the file to the wrong repo —
+ *  review 2026-10-07 X3; Node's JS `realpathSync` normalizes before walking too, only the
+ *  libc-backed `.native` follows the link first). A component that does not exist stays lexical
+ *  from there on. An absolute `v` is recognised by `io.path` (`/x` on POSIX; `C:\x`, `C:/x`,
+ *  `\\srv\share\x` on Windows — #93/#99; a drive-relative `C:foo` is unmodelled: its root is
+ *  `C:` and `win32.join('C:', 'foo')` remaps it under the drive root as `C:\foo`) and walked
+ *  from ITS root — never from a hard-coded `/`, which turned `C:\r\x` into `\C:\r\x` and
+ *  attributed every Windows path to no repo (#99). A relative `v` starts at the physical
+ *  `from`. `\` splits components only where the platform treats it as a separator: a POSIX
+ *  file name may legitimately contain one. */
+export function physicalResolve(v, from = process.cwd(), io = HOST) {
+  const { path: p, fs: f } = io;
+  const { root } = p.parse(v);                     // '' when relative; '/', 'C:\', '\\srv\share\' when absolute
+  let cur = root || physical(from, f);
+  for (const part of v.slice(root.length).split(p.sep === '\\' ? /[\\/]/ : /\//)) {
     if (part === '' || part === '.') continue;
-    cur = part === '..' ? dirname(cur) : physical(join(cur, part));
+    cur = part === '..' ? p.dirname(cur) : physical(p.join(cur, part), f);
   }
   return cur;
 }
 
-export function repoToplevel(p) {
-  if (typeof p !== 'string' || p.length === 0) return null;
-  let cur = physicalResolve(isAbsolute(p) ? p : `${process.cwd()}/${p}`);
-  while (!existsSync(cur)) {                       // a path that does not exist yet: its first existing ancestor
-    const up = dirname(cur);
+export function repoToplevel(v, io = HOST) {
+  if (typeof v !== 'string' || v.length === 0) return null;
+  const { path: p, fs: f } = io;
+  let cur = physicalResolve(v, process.cwd(), io);
+  while (!f.existsSync(cur)) {                     // a path that does not exist yet: its first existing ancestor
+    const up = p.dirname(cur);
     if (up === cur) return null;
     cur = up;
   }
-  try { if (!statSync(cur).isDirectory()) cur = dirname(cur); } catch { return null; }
+  try { if (!f.statSync(cur).isDirectory()) cur = p.dirname(cur); } catch { return null; }
   for (;;) {
-    if (existsSync(join(cur, '.git'))) return cur;
-    const up = dirname(cur);
+    if (f.existsSync(p.join(cur, '.git'))) return cur;
+    const up = p.dirname(cur);
     if (up === cur) return null;
     cur = up;
   }
