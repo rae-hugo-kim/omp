@@ -27,7 +27,9 @@ export const FORCE_ENV = 'HARNESS_TEST_FORCE_NO_CAPS';
 // them); on POSIX they are a real environment fault and must fail the probe loudly instead of
 // silently turning security-gate tests into skips.
 const WIN = process.platform === 'win32';
-const MISSING_CODES = new Set(['EPERM', 'ENOSYS', 'ENOTSUP', 'EOPNOTSUPP', ...(WIN ? ['EACCES', 'UNKNOWN'] : [])]);
+const POSIX_MISSING_CODES = new Set(['EPERM', 'ENOSYS', 'ENOTSUP', 'EOPNOTSUPP']);
+const WIN_MISSING_CODES = new Set([...POSIX_MISSING_CODES, 'EACCES', 'UNKNOWN']);
+const MISSING_CODES = WIN ? WIN_MISSING_CODES : POSIX_MISSING_CODES;
 
 const REASONS = {
   symlink: 'host cannot create symlinks (on Windows this needs Developer Mode or an elevated shell: symlinkSync fails with EPERM)',
@@ -55,26 +57,41 @@ function probeSymlink() {
   });
 }
 
-function probeFifo() {
+// Returns true (present), false (missing, default reason), or a string (missing, with that specific
+// reason). `platform`/`spawn` are injectable so both platform branches are testable on any host.
+export function probeFifo({ platform = process.platform, spawn = spawnSync } = {}) {
+  const win = platform === 'win32';
   return withTmp((dir) => {
     const p = join(dir, 'probe.fifo');
-    const r = spawnSync('mkfifo', [p], { encoding: 'utf-8' });
+    const r = spawn('mkfifo', [p], { encoding: 'utf-8' });
     if (r.error) {
-      if (r.error.code === 'ENOENT' || MISSING_CODES.has(r.error.code)) return false;   // no such binary / not runnable
+      if (r.error.code === 'ENOENT' || (win ? WIN_MISSING_CODES : POSIX_MISSING_CODES).has(r.error.code)) return false;   // no such binary / not runnable
       throw r.error;
     }
     if (r.status !== 0 || r.signal) {
       // Windows: an MSYS mkfifo on NTFS exits non-zero ("Permission denied") — present but unusable = missing.
       // POSIX: a mkfifo that exists and fails is an environment fault, not a missing capability.
-      if (WIN) return false;
-      throw new Error(`mkfifo probe failed on ${process.platform}: status=${r.status} signal=${r.signal} stderr=${r.stderr}`);
+      if (win) return false;
+      throw new Error(`mkfifo probe failed on ${platform}: status=${r.status} signal=${r.signal} stderr=${r.stderr}`);
     }
-    if (!lstatSync(p).isFIFO()) throw new Error(`mkfifo probe: ${p} was created but is not a FIFO`);
+    let st;
+    try {
+      st = lstatSync(p);
+    } catch (e) {
+      // Windows (#98): Git for Windows' mkfifo exits 0 but MSYS translates the C:\… path differently, so nothing
+      // exists where Node looks. That is "no FIFO on this host". On POSIX the same outcome is a real fault.
+      if (win && e?.code === 'ENOENT') return 'host mkfifo exited 0 but produced no FIFO at the expected path (MSYS path translation) — POSIX FIFOs unavailable';
+      throw e;
+    }
+    if (!st.isFIFO()) {
+      if (win) return `host mkfifo exited 0 but ${p} is not a FIFO — POSIX FIFOs unavailable`;
+      throw new Error(`mkfifo probe: ${p} was created but is not a FIFO`);
+    }
     return true;
   });
 }
 
-const PROBES = { symlink: probeSymlink, fifo: probeFifo };
+const PROBES = { symlink: probeSymlink, fifo: () => probeFifo() };
 const measured = new Map();
 
 function forced(name) {
@@ -86,14 +103,16 @@ export function hasCapability(name) {
   if (!Object.hasOwn(PROBES, name)) throw new Error(`unknown capability '${name}' (known: ${Object.keys(PROBES).join(', ')})`);
   if (forced(name)) return false;
   if (!measured.has(name)) measured.set(name, PROBES[name]());
-  return measured.get(name);
+  return measured.get(name) === true;
 }
 
 /** `false` when every named capability is present (run the test), else the first missing one's skip reason. */
 export function skipUnless(...names) {
   for (const name of names) {
     if (hasCapability(name)) continue;
-    return forced(name) ? `${REASONS[name]} [forced missing via ${FORCE_ENV}]` : REASONS[name];
+    if (forced(name)) return `${REASONS[name]} [forced missing via ${FORCE_ENV}]`;
+    const specific = measured.get(name);
+    return typeof specific === 'string' ? specific : REASONS[name];
   }
   return false;
 }

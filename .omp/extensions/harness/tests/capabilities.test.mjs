@@ -14,7 +14,7 @@ import { mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { hasCapability, skipUnless, FORCE_ENV } from './helpers/capabilities.mjs';
+import { hasCapability, skipUnless, probeFifo, FORCE_ENV } from './helpers/capabilities.mjs';
 
 const HELPER_URL = pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), 'helpers', 'capabilities.mjs')).href;
 
@@ -81,5 +81,48 @@ test('POSIX: an mkfifo that exists but fails is an environment fault — the pro
     const r = spawnSync('node', ['--input-type=module', '-e', `import { hasCapability } from ${JSON.stringify(HELPER_URL)}; hasCapability('fifo');`], { encoding: 'utf-8', env });
     assert.notEqual(r.status, 0, 'a failing mkfifo must not be read as "capability missing"');
     assert.match(r.stderr, /mkfifo probe failed on \w+: status=3 .*boom/s);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// #98: Git for Windows' mkfifo exits 0 but MSYS translates the C:\… path, so nothing exists where Node looks.
+// These stubs make `spawn` report success without creating the FIFO, so both platform branches run on any host.
+const MKFIFO_OK_NOTHING_CREATED = () => ({ status: 0, signal: null, stderr: '' });
+const MKFIFO_OK_REGULAR_FILE = (_cmd, [p]) => { writeFileSync(p, ''); return { status: 0, signal: null, stderr: '' }; };
+
+test('win32: mkfifo exit 0 but no FIFO at the expected path is "capability missing" with the reason, not a throw', () => {
+  const r = probeFifo({ platform: 'win32', spawn: MKFIFO_OK_NOTHING_CREATED });
+  assert.equal(typeof r, 'string', 'a string result means missing-with-reason');
+  assert.match(r, /host mkfifo exited 0 but produced no FIFO at the expected path \(MSYS path translation\) — POSIX FIFOs unavailable/);
+});
+
+test('win32: mkfifo exit 0 but the path is not a FIFO is also "capability missing" with the reason', () => {
+  const r = probeFifo({ platform: 'win32', spawn: MKFIFO_OK_REGULAR_FILE });
+  assert.match(String(r), /host mkfifo exited 0 but .* is not a FIFO — POSIX FIFOs unavailable/);
+});
+
+test('POSIX: mkfifo exit 0 but no FIFO at the expected path is an environment fault — the probe still throws (ENOENT is not hidden)', () => {
+  for (const platform of ['linux', 'darwin']) {
+    assert.throws(() => probeFifo({ platform, spawn: MKFIFO_OK_NOTHING_CREATED }), (e) => e.code === 'ENOENT', `${platform}: must throw the lstat ENOENT`);
+  }
+});
+
+test('POSIX: mkfifo exit 0 but the path is not a FIFO throws', () => {
+  assert.throws(() => probeFifo({ platform: 'linux', spawn: MKFIFO_OK_REGULAR_FILE }), /was created but is not a FIFO/);
+});
+
+test('win32 host with an MSYS-style mkfifo: skipUnless("fifo") surfaces the specific reason through the real module-init path', { skip: process.platform === 'win32' ? 'uses a /bin/sh mkfifo shim on PATH (POSIX-only harness for a platform-stubbed child)' : false }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cap-msys-'));
+  try {
+    writeFileSync(join(dir, 'mkfifo'), '#!/bin/sh\nexit 0\n');   // exit 0, creates nothing — what Git for Windows does with a C:\\ path
+    chmodSync(join(dir, 'mkfifo'), 0o755);
+    const env = { ...process.env, PATH: `${dir}${delimiter}${process.env.PATH}`, TEMP: tmpdir(), TMP: tmpdir() };   // os.tmpdir() reads TEMP once process.platform says win32
+    delete env[FORCE_ENV];
+    delete env.NODE_TEST_CONTEXT;
+    const code = `Object.defineProperty(process, 'platform', { value: 'win32' });
+      const { skipUnless } = await import(${JSON.stringify(HELPER_URL)});
+      console.log('REASON=' + skipUnless('fifo'));`;
+    const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf-8', env });
+    assert.equal(r.status, 0, `the probe must not throw on win32:\n${r.stderr}`);
+    assert.match(r.stdout, /REASON=host mkfifo exited 0 but produced no FIFO at the expected path \(MSYS path translation\) — POSIX FIFOs unavailable/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
