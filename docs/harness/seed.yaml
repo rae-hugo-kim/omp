@@ -1,5 +1,6 @@
 name: harness-sync-retire-repo-root-canonical-100
-status: approved
+status: done
+completed: 2026-10-12
 version: 1
 task_id: "20261012-173000-100c"
 # gh-loop worker Stage 2에 따라 이슈 #100 본문 끝 "승인된 작업 범위"·AC 3건과 "세션에서 직접 결정함" 댓글(2026-10-12 "ㄱㄱ")을 명세로 삼습니다.
