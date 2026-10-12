@@ -764,19 +764,25 @@ function skewedGitEnv(binDir, marker) {
   const realGit = spawnSync('bash', ['-c', 'command -v git'], { encoding: 'utf-8' }).stdout.trim();
   assert.ok(realGit, 'fixture: git not found on PATH');
   const shim = join(binDir, 'git');
+  // Paths travel through the environment, never interpolated into the shim source: a temp or git
+  // install directory containing a quote must not break the shell syntax.
   writeFileSync(shim, [
     '#!/bin/sh',
     'if [ "$1" = rev-parse ] && [ "$2" = --show-toplevel ] && [ "$#" -eq 2 ]; then',
-    `  out=$('${realGit}' "$@") || exit $?`,
-    `  : > '${marker}'`,
+    '  out=$("$HSYNC_REAL_GIT" "$@") || exit $?',
+    '  : > "$HSYNC_SHIM_MARKER"',
     '  printf "%s\\n" "$out/."',
     '  exit 0',
     'fi',
-    `exec '${realGit}' "$@"`,
+    'exec "$HSYNC_REAL_GIT" "$@"',
     '',
   ].join('\n'));
   chmodSync(shim, 0o755);
-  return cleanEnv({ PATH: `${binDir}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH}` });
+  return cleanEnv({
+    PATH: `${binDir}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH}`,
+    HSYNC_REAL_GIT: realGit,
+    HSYNC_SHIM_MARKER: marker,
+  });
 }
 
 for (const mode of ['hand-off', 'local script (no hand-off)']) {
@@ -787,10 +793,19 @@ for (const mode of ['hand-off', 'local script (no hand-off)']) {
       git(fx.consumer, ['add', '-A']);
       git(fx.consumer, ['commit', '-q', '-m', 'sync 2026.99']);
       publishRetiredRulesTag(fx);
-      if (mode !== 'hand-off') {
+      const consumerScript = join(fx.consumer, 'scripts', 'harness-sync.sh');
+      if (mode === 'hand-off') {
+        // An older consumer's script hands a NON-canonical root to the fetched child. Strip the
+        // parent-side normalization so only the child's own `_realdir` (the hand-off path) can
+        // rescue the retire comparison; otherwise losing the child's line would go unnoticed.
+        const text = readFileSync(consumerScript, 'utf-8');
+        const stripped = text.replace('REPO_ROOT="$(_realdir "$REPO_ROOT")"\n', '');
+        assert.notEqual(stripped, text, 'fixture: the parent-side REPO_ROOT normalization line must be present to strip');
+        writeFileSync(consumerScript, stripped);
+      } else {
         // The consumer already carries the target tag's script: step 4b finds it byte-equal and
         // does not hand off, so THIS process computes REPO_ROOT itself.
-        cpSync(join(fx.root, 'source-work', 'scripts', 'harness-sync.sh'), join(fx.consumer, 'scripts', 'harness-sync.sh'));
+        cpSync(join(fx.root, 'source-work', 'scripts', 'harness-sync.sh'), consumerScript);
       }
       const binDir = mkdtempSync(join(tmpdir(), 'hsync-shim-'));
       try {
