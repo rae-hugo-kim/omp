@@ -58,8 +58,8 @@ function probeSymlink() {
 }
 
 // Returns true (present), false (missing, default reason), or a string (missing, with that specific
-// reason). `platform`/`spawn` are injectable so both platform branches are testable on any host.
-export function probeFifo({ platform = process.platform, spawn = spawnSync } = {}) {
+// reason). `platform`/`spawn`/`lstat` are injectable so both platform branches are testable on any host.
+export function probeFifo({ platform = process.platform, spawn = spawnSync, lstat = lstatSync } = {}) {
   const win = platform === 'win32';
   return withTmp((dir) => {
     const p = join(dir, 'probe.fifo');
@@ -76,7 +76,7 @@ export function probeFifo({ platform = process.platform, spawn = spawnSync } = {
     }
     let st;
     try {
-      st = lstatSync(p);
+      st = lstat(p);
     } catch (e) {
       // Windows (#98): Git for Windows' mkfifo exits 0 but MSYS translates the C:\… path differently, so nothing
       // exists where Node looks. That is "no FIFO on this host". On POSIX the same outcome is a real fault.

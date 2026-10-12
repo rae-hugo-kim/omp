@@ -110,6 +110,13 @@ test('POSIX: mkfifo exit 0 but the path is not a FIFO throws', () => {
   assert.throws(() => probeFifo({ platform: 'linux', spawn: MKFIFO_OK_REGULAR_FILE }), /was created but is not a FIFO/);
 });
 
+test('win32: only lstat ENOENT is relaxed — any other lstat error (EACCES, EIO) is still an environment fault and throws', () => {
+  for (const code of ['EACCES', 'EIO']) {
+    const lstat = () => { throw Object.assign(new Error(`${code} probe`), { code }); };
+    assert.throws(() => probeFifo({ platform: 'win32', spawn: MKFIFO_OK_NOTHING_CREATED, lstat }), (e) => e.code === code, `${code} must not become a skip`);
+  }
+});
+
 test('win32 host with an MSYS-style mkfifo: skipUnless("fifo") surfaces the specific reason through the real module-init path', { skip: process.platform === 'win32' ? 'uses a /bin/sh mkfifo shim on PATH (POSIX-only harness for a platform-stubbed child)' : false }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'cap-msys-'));
   try {
