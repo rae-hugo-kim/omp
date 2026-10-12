@@ -753,3 +753,74 @@ test('ADR002 retire: an all-pristine rules/ disappears entirely; without a previ
     assert.match(again.stdout, /advisory: rules\/ is not a harness directory any more .*no earlier synced harness tree attributes/);
   });
 });
+
+// #100: the retire step compares `_realfile` output (pwd -P) with "$REPO_ROOT/<path>". On Git for
+// Windows `git rev-parse --show-toplevel` prints `C:/…` while MSYS pwd -P prints `/c/…`, so the
+// comparison was always false and nothing was deleted — but only when the script was NOT handing
+// off (the hand-off child normalizes REPO_ROOT via _realdir), which is why the other retire tests
+// never saw it. A `git` shim on PATH makes `rev-parse --show-toplevel` answer with a different
+// spelling of the SAME directory (`<root>/.`), the Linux stand-in for that notation skew.
+function skewedGitEnv(binDir, marker) {
+  const realGit = spawnSync('bash', ['-c', 'command -v git'], { encoding: 'utf-8' }).stdout.trim();
+  assert.ok(realGit, 'fixture: git not found on PATH');
+  const shim = join(binDir, 'git');
+  // Paths travel through the environment, never interpolated into the shim source: a temp or git
+  // install directory containing a quote must not break the shell syntax.
+  writeFileSync(shim, [
+    '#!/bin/sh',
+    'if [ "$1" = rev-parse ] && [ "$2" = --show-toplevel ] && [ "$#" -eq 2 ]; then',
+    '  out=$("$HSYNC_REAL_GIT" "$@") || exit $?',
+    '  : > "$HSYNC_SHIM_MARKER"',
+    '  printf "%s\\n" "$out/."',
+    '  exit 0',
+    'fi',
+    'exec "$HSYNC_REAL_GIT" "$@"',
+    '',
+  ].join('\n'));
+  chmodSync(shim, 0o755);
+  return cleanEnv({
+    PATH: `${binDir}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH}`,
+    HSYNC_REAL_GIT: realGit,
+    HSYNC_SHIM_MARKER: marker,
+  });
+}
+
+for (const mode of ['hand-off', 'local script (no hand-off)']) {
+  test(`#100 retire: pristine rules/ is removed with a skewed REPO_ROOT spelling — ${mode}`, () => {
+    withFixture({}, (fx) => {
+      publishLegacyRulesTag(fx);
+      assert.equal(runSync(fx.consumer).status, 0);
+      git(fx.consumer, ['add', '-A']);
+      git(fx.consumer, ['commit', '-q', '-m', 'sync 2026.99']);
+      publishRetiredRulesTag(fx);
+      const consumerScript = join(fx.consumer, 'scripts', 'harness-sync.sh');
+      if (mode === 'hand-off') {
+        // An older consumer's script hands a NON-canonical root to the fetched child. Strip the
+        // parent-side normalization so only the child's own `_realdir` (the hand-off path) can
+        // rescue the retire comparison; otherwise losing the child's line would go unnoticed.
+        const text = readFileSync(consumerScript, 'utf-8');
+        const stripped = text.replace('REPO_ROOT="$(_realdir "$REPO_ROOT")"\n', '');
+        assert.notEqual(stripped, text, 'fixture: the parent-side REPO_ROOT normalization line must be present to strip');
+        writeFileSync(consumerScript, stripped);
+      } else {
+        // The consumer already carries the target tag's script: step 4b finds it byte-equal and
+        // does not hand off, so THIS process computes REPO_ROOT itself.
+        cpSync(join(fx.root, 'source-work', 'scripts', 'harness-sync.sh'), consumerScript);
+      }
+      const binDir = mkdtempSync(join(tmpdir(), 'hsync-shim-'));
+      try {
+        const marker = join(binDir, 'shim-hit');
+        const r = spawnSync('bash', [join(fx.consumer, 'scripts', 'harness-sync.sh')], {
+          cwd: fx.consumer, encoding: 'utf-8', env: skewedGitEnv(binDir, marker),
+        });
+        assert.equal(r.status, 0, r.stderr);
+        assert.ok(existsSync(marker), 'fixture: the shim must have skewed `rev-parse --show-toplevel`');
+        assert.equal(/own sync script/.test(r.stdout), mode === 'hand-off', `hand-off expectation for mode "${mode}"`);
+        assert.ok(!existsSync(join(fx.consumer, 'rules')), 'the pristine harness rules/ must be deleted, not skipped by the path comparison');
+        assert.match(r.stdout, /retired rules\/: 3 harness file\(s\) removed/);
+      } finally {
+        rmSync(binDir, { recursive: true, force: true });
+      }
+    });
+  });
+}
