@@ -95,7 +95,11 @@ fi
 
 if [[ -z "${_HARNESS_SYNC_FETCHED:-}" ]]; then
 
+# Canonicalize once, exactly like the hand-off path (:91): the retire step (7c) compares this
+# against `_realfile` output (pwd -P), and Git for Windows reports `C:/…` while MSYS bash's
+# pwd -P reports `/c/…` — one notation for every later comparison.
 REPO_ROOT="$(git rev-parse --show-toplevel)"
+REPO_ROOT="$(_realdir "$REPO_ROOT")"
 META_FILE="$REPO_ROOT/.omp/extensions/harness/harness-meta.json"
 DEFAULT_SOURCE="git@github.com:rae-hugo-kim/omp.git"
 # Anchor to a host/path boundary so e.g. `notrae-hugo-kim/omp.git` does NOT
