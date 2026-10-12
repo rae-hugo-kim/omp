@@ -1,39 +1,36 @@
-name: repo-root-windows-physical-resolve-99
-status: done
-completed: 2026-10-12
+name: harness-sync-retire-repo-root-canonical-100
+status: approved
 version: 1
-task_id: "20261012-153300-99a7"
-# gh-loop worker Stage 2에 따라 이슈 #99 본문 끝 "승인된 작업 범위"·AC 4건과 "세션에서 직접 결정함" 댓글(2026-10-12 "ㄱㄱ")을 명세로 삼습니다.
-# 직전 완료 seed(windows-fifo-probe-triage-98)는 git 이력에 보존합니다.
+task_id: "20261012-173000-100c"
+# gh-loop worker Stage 2에 따라 이슈 #100 본문 끝 "승인된 작업 범위"·AC 3건과 "세션에서 직접 결정함" 댓글(2026-10-12 "ㄱㄱ")을 명세로 삼습니다.
+# 직전 완료 seed(repo-root-windows-physical-resolve-99)는 git 이력에 보존합니다.
 goal: >
-  #99: `gates/repo-root.mjs`의 `physicalResolve`가 POSIX 루트 `/`를 가정해 Windows 절대 경로(`C:\…`, `C:/…`, UNC)에서
-  `repoToplevel`이 null을 돌려주고 cross-repo guard(#15)가 fail-open으로 끝나던 결함을, `path.parse(v).root`에서 시작해
-  플랫폼 구분자 양쪽으로 쪼개는 방식으로 일반화합니다(`git-commit-detect.mjs`의 `chdir()`과 하나의 헬퍼를 공유).
-  `path.win32`+인메모리 fs를 주입하는 단위 테스트로 수정 전 FAIL → 후 PASS를 고정하고, 통합 계약 residuals·README ko/en·CHANGELOG를 갱신합니다.
+  #100: `scripts/harness-sync.sh`의 retire 단계(7c)가 `_realfile "$f"`(pwd -P 표기)와 `"$REPO_ROOT/$path"`를 비교하는데,
+  hand-off가 아닌 실행에서는 `REPO_ROOT`가 `git rev-parse --show-toplevel` 그대로라 Git for Windows(`C:/…` vs `/c/…`)에서
+  비교가 항상 거짓이 되고 retired 파일이 하나도 지워지지 않을 수 있는 결함을, `REPO_ROOT`를 `_realdir`로 한 번 정규화해
+  hand-off 경로(:91)와 같은 표기로 맞춥니다. `git rev-parse --show-toplevel`을 다른 표기(`<root>/.`)로 답하게 하는 git shim으로
+  Linux에서 재현하는 테스트를 추가하고(수정 전 FAIL → 후 PASS), CHANGELOG [Unreleased]에 한 줄을 남깁니다.
 constraints:
-  - "`link/..` 컴포넌트별 physical 해석 계약(review 2026-10-07 X3)과 같은 리포 링크드 워크트리 판정은 바꾸지 않습니다."
-  - "POSIX 동작은 불변입니다 — 기존 cross-repo 테스트 전부 통과, Linux 전체 suite skip 0 유지."
-  - "MSYS 표기(`/c/Users/…`)는 변환하지 않습니다. 통합 계약 residuals에 '귀속 null → 허용(실기 확인 필요)'로 기록만 합니다."
-  - "게이트 코드이므로 코드 커밋 앞에 reviewer 3-pass(이종 모델)를 돌려 review-gate 사이드카를 만듭니다."
+  - "수정은 `REPO_ROOT` 정규화 1곳(:98 인근)으로 한정합니다 — retire 알고리즘·`_cleanup`·hand-off 경로는 바꾸지 않습니다."
+  - "POSIX 동작은 불변입니다 — 기존 harness-sync 테스트 전부 통과, Linux 전체 suite skip 0 유지."
+  - "`:442` `TMPDIR` 백슬래시 지적은 Windows 실기 없이 확정할 수 없어 PR에 '실기 재검증 필요'로 기록만 합니다(fixture 변경 없음)."
   - "Stage 2의 체크 완료 seed·scope → 코드 커밋 → 리뷰 후속 → closeout 커밋 순서를 따릅니다."
 acceptance_criteria:
   - id: AC1
-    title: "path.win32 주입 테스트에서 physicalResolve('C:\\r\\x')·('C:/r/x')가 C:\\r\\x로 해석되고 UNC 1건이 포함되며 repoToplevel이 fixture(인메모리 fs) 루트를 돌려줍니다 — 수정 전 코드에서 FAIL, 수정 후 PASS가 PR에 기록됩니다."
+    title: "REPO_ROOT가 _realdir로 정규화되고, git shim으로 `rev-parse --show-toplevel`을 다른 표기로 강제한 fixture에서 hand-off·비hand-off 두 경로 모두 pristine retired 파일이 삭제되는 테스트가 통과하며, 수정 전 코드에서 비hand-off만 FAIL이었다는 근거가 PR에 기록됩니다."
   - id: AC2
-    title: "POSIX 기존 테스트와 link/.. 계약이 전부 통과하고 Linux 전체 suite의 skip 수가 0입니다."
+    title: "Linux 전체 suite가 통과하고 skip이 0이며 node scripts/docs-drift가 0 errors/0 warnings입니다."
   - id: AC3
-    title: "통합 계약 Known residual surfaces(cross-repo·Windows native)에 #99 수정과 MSYS 미변환 residual이 기록되고, README ko/en Windows 행의 C:\\… 귀속 문구가 실제 상태(#93 absolutize + #99 repo-root, 실기 미검증)로 정정되며, CHANGELOG [Unreleased]에 항목이 있고 node scripts/docs-drift가 0 errors/0 warnings입니다."
-  - id: AC4
-    title: "비범위가 지켜집니다 — MSYS 경로 변환, #100, Windows CI 러너가 diff에 없고, 이 이슈의 dispatch 튜플이 audit.jsonl에 gh_loop_dispatched(issue 99)로 있습니다."
+    title: "비범위가 지켜집니다 — MSYS 경로 변환 일반화·Windows CI·#99 외 sync 로직 변경이 diff에 없고, CHANGELOG [Unreleased]에 항목(Windows 실기 미검증 명시)이 있으며, 이 이슈의 dispatch 튜플이 audit.jsonl에 gh_loop_dispatched(issue 100)로 있습니다."
 out_of_scope:
-  - "MSYS 경로 변환(`cygpath -w` 상당) — 실기 확인 뒤 별도 사이클."
-  - "#100 (`harness-sync.sh` retire 경로 비교의 MSYS/Windows 표기 불일치)."
+  - "MSYS 경로 변환 일반화(`cygpath -w` 상당)."
   - "Windows CI 러너 추가."
-  - "실제 Windows 호스트에서의 전체 suite 실행 — 이 워크트리에는 Windows가 없어 주입한 path.win32·인메모리 fs 모사로 대신합니다."
+  - "#99와 무관한 sync 로직 변경(retire 알고리즘, `_cleanup`, hand-off 프로토콜)."
+  - "실제 Windows 호스트에서의 실행 — 이 워크트리에는 Windows가 없어 git shim 시뮬레이션으로 대신합니다."
   - "PR 생성·교차검증 게시·head와 nonce 결정 요청은 커밋 뒤 후속 절차이며 AC 선체크 대상이 아닙니다."
 assumptions:
-  - "시작 HEAD는 main 84e56bd(PR #101 머지 후)이고 작업트리는 깨끗했습니다(ingest가 더한 audit.jsonl 1행 제외)."
-  - "repoToplevel의 Windows 기대값은 인메모리 fs stub(existsSync/statSync/realpathSync.native) 위에서 측정한 것이며 실제 NTFS·심볼릭 링크 동작의 확정은 아닙니다."
+  - "시작 HEAD는 main 5c59c09(PR #102 머지 후)이고 작업트리는 깨끗했습니다(ingest가 더한 audit.jsonl 1행 제외)."
+  - "git shim의 `<root>/.` 표기는 Git for Windows의 `C:/…` 표기와 같은 성질(같은 디렉터리의 다른 철자)만 모사하며 MSYS 경로 변환 자체를 재현하지는 않습니다."
 risks:
-  - "chdir()이 physicalResolve를 공유하게 되면서 `git -C`·`cd -P` 경로도 같은 함수를 지납니다 — 호스트 기본 io에서는 동일 로직이지만 회귀는 기존 shellWriteTargets 테스트로만 고정됩니다."
   - "Windows 실기 미검증: 2026.88 발행 뒤 보고자의 재검증으로 확정합니다."
+  - "`REPO_ROOT`가 이제 항상 physical 경로(pwd -P)라 심볼릭 링크 경유 cwd에서는 이전과 표기가 달라집니다 — 이후 모든 비교가 같은 표기를 쓰도록 하는 것이 목적이며 hand-off 경로는 이미 그랬습니다."
