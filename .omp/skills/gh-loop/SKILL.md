@@ -128,7 +128,7 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 3. **verifier.** verdict가 PASS 또는 PASS WITH NOTES이며 미해결 AC가 없습니다.
 4. **reviewer.** 3-pass(또는 risk에 맞는 리뷰)가 PASS 또는 PASS WITH NOTES이고 **contested finding이 없습니다**(심각도 high 이상에서 adversary와 code-reviewer가 엇갈린 항목 0).
 5. **범위.** `gh pr diff <pr>`의 변경 파일이 이슈 본문의 승인 범위·AC 안이고 범위 밖 파일이 0이며, 이슈의 비범위 목록에 오른 항목은 파일명이 아니라 diff 내용으로 수정하지 않았음을 대조합니다. Stage 2가 요구하는 워크플로 산출물(`docs/harness/` seed·scope·audit)은 범위 안으로 봅니다.
-6. **rebase 뒤 새 head.** PR을 rebase했다면 새 head에 대해 순차 PR 갱신 절의 검증 4종 보고와 `<!-- gh-loop:rebased:<PR 번호> -->` 마커 댓글이 있고, 그 댓글에 적힌 SHA가 현재 head와 같습니다. rebase하지 않았으면 해당 없음입니다.
+6. **rebase 뒤 새 head.** PR을 rebase했다면 새 head에 대해 순차 PR 갱신 절의 검증 4종 보고와 `<!-- gh-loop:rebased:<이슈 번호> -->` 마커 댓글(이슈 댓글)이 있고, 그 댓글 본문에 적힌 SHA가 현재 head와 같습니다. rebase하지 않았으면 해당 없음입니다.
 
 **반드시 질문합니다** — 위 조건이 하나라도 미충족이면(워커가 B·C를 추천함, 범위 밖 파일, contested finding, verifier PASS WITH NOTES에 미해결 항목 포함) 사용자에게 묻습니다. 아래는 조건 충족과 무관하게 **항상 승인제**입니다. **발행(버전 범프·태그·릴리스), 원격 히스토리 재작성(force-push, rebase 후 `--force-with-lease` 포함), 브랜치 보호 변경.** 이 정책은 `gh pr merge` 한 가지만 다루며, rebase·force-push 승인은 머지 조건이 아니라 순차 PR 갱신 절의 별도 승인입니다.
 
@@ -305,7 +305,7 @@ PR에 교차검증 결과를 게시한다 — 결과는 **참고용**이다. 게
    ```
    일반 `--force`, 예상 SHA 없는 `--force-with-lease`, lease 실패 뒤 새 SHA를 넣어 자동 재시도하는 것은 금지합니다. 응답 유실이면 실제 원격 SHA를 한 번 확인하고, 결과가 불명확하면 성공으로 기록하거나 재시도하지 않고 park합니다.
 6. **변경된 head는 별도로 머지 승인받습니다.** 원격 PR head가 검증한 새 로컬 HEAD와 같음을 확인한 뒤 rebase 승인 nonce의 `acted`와 검증 결과를 이슈·PR에 기록합니다. 이어 **PR URL·head/base 리포와 ref·새 head SHA·base SHA·새 nonce·머지 방식**을 담은 별도 질문을 남기고 양쪽을 `needs-decision`으로 바꾼 뒤 종료합니다. 머지 직전에도 5의 PR 대상 리포·ref·SHA를 재조회하며, base 브랜치가 바뀌면 SHA가 같아도 새 nonce로 승인받습니다. base가 전진했으면 최신 base 포함 여부·검증부터 다시 확인합니다. Stage 5 재개 5의 `--match-head-commit`으로 승인된 head만 머지합니다. 이 옵션은 head 가드이지 base 리포·ref·SHA를 원자적으로 잠그는 수단은 아니므로 최종 조회 뒤의 base 변경 경쟁은 남습니다. 다음 PR은 이 PR의 실제 머지를 확인한 뒤 처리합니다.
-   이 기록 댓글에는 `<!-- gh-loop:rebased:<PR 번호> -->` 마커와 새 head SHA·검증 4종 결과를 함께 적고, 위 질문에는 Stage 5의 Auto-merge checklist 6번을 채웁니다. 코디네이터가 Stage 0 "조건부 자동 머지"의 조건 1~6을 새 head 기준으로 모두 충족한다고 판정하면 사용자 답을 기다리지 않고 머지할 수 있고, 하나라도 미충족이면 질문에 사용자 답을 기다립니다. rebase와 force-push 자체는 이 정책의 대상이 아니며 계속 PR별 승인제입니다.
+   이 기록 댓글에는 `<!-- gh-loop:rebased:<이슈 번호> -->` 마커와 새 head SHA·검증 4종 결과를 본문으로 함께 적고, 위 질문에는 Stage 5의 Auto-merge checklist 6번을 채웁니다. 코디네이터가 Stage 0 "조건부 자동 머지"의 조건 1~6을 새 head 기준으로 모두 충족한다고 판정하면 사용자 답을 기다리지 않고 머지할 수 있고, 하나라도 미충족이면 질문에 사용자 답을 기다립니다. rebase와 force-push 자체는 이 정책의 대상이 아니며 계속 PR별 승인제입니다.
 
 **배포 범위를 구분합니다.** 이 소스 리포와 이 속성을 포함한 신규 템플릿 복사에는 한 경로의 union 규칙이 적용됩니다. 기존 소비 리포의 `.gitattributes`는 `scripts/harness-sync.sh` allowlist 밖이며 이번 변경도 sync 범위를 넓히지 않습니다. 소비 리포는 별도 적용 승인 후 **기존 속성과 우선순위를 읽고 해당 한 줄만 반영**하며 `git check-attr`로 유효값을 확인합니다. 파일 전체 덮어쓰기는 금지합니다. 속성이 없는 리포에서는 자동 해결을 전제하지 않고 위 중단·보고 절차를 따릅니다.
 
