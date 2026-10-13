@@ -1,5 +1,6 @@
 name: gh-loop-conditional-auto-merge-105
-status: approved
+status: done
+completed: 2026-10-13
 version: 1
 task_id: "20261013-043500-105a"
 # gh-loop worker Stage 2에 따라 이슈 #105 본문의 정책 조건 1~6·반드시 질문 목록·기록 양식·범위·AC 4건과 "세션에서 직접 결정함" 댓글(2026-10-13)을 명세로 삼습니다.
@@ -38,3 +39,4 @@ assumptions:
 risks:
   - "자기 보고 체크리스트는 위조·오기재 가능성이 있어 코디네이터가 CI·head·변경 파일은 GitHub에서 직접 재조회합니다. verifier·reviewer verdict는 PR에 게시된 근거 확인까지만 가능하고 재실행하지 않습니다 — 통합 계약에 잔여 표면으로 기록합니다."
   - "SKILL 요약·README·템플릿에 남은 'never auto-merges' 문구는 범위 밖이라 이 PR 이후 stale일 수 있습니다."
+  - "리뷰 라운드 4(r1 FAIL → r2 PASS WITH NOTES → r3 FAIL → r4 FAIL, high 1건 = 머지 큐 경로)는 반복 한도(3회) 이후라 r4 지적(머지 큐 브랜치 정책 제외·PAT 모드 판정·계약 정렬)을 고친 뒤 재리뷰 없이 closeout합니다. 마지막 diff는 reviewer 검증을 받지 않았고 verifier(r4 전 diff 기준 PASS WITH NOTES)와 docs-drift·suite로만 확인했어요."
