@@ -1,7 +1,7 @@
 ---
 name: gh-fanout
 argument-hint: [label/filter for issues to fan out, or a tracking issue number]
-description: Fans out gh-loop across many issues as Orca-managed worktree-isolated omp worker sessions, observed via GitHub labels/comments and Orca cards, with dynamic scaling. Use when the user says "gh-fanout", "멀티세션", "fan-out", "병렬 루프", "multisession orchestration", or wants several gh-loop issues worked in parallel. A THIN on-demand controller — never a daemon; never auto-merges.
+description: Fans out gh-loop across many issues as Orca-managed worktree-isolated omp worker sessions, observed via GitHub labels/comments and Orca cards, with dynamic scaling. Use when the user says "gh-fanout", "멀티세션", "fan-out", "병렬 루프", "multisession orchestration", or wants several gh-loop issues worked in parallel. A THIN on-demand controller — never a daemon; merges stay per-PR approval except gh-loop's coordinator-only conditional auto-merge (conditions 1-6), and publish, force-push and branch-protection changes always need approval.
 ---
 
 # gh-fanout — multisession controller (autonomy Q3)
@@ -16,7 +16,7 @@ description: Fans out gh-loop across many issues as Orca-managed worktree-isolat
 
 | Rule | Why |
 |------|-----|
-| **머지 절대 자동 금지** | 워커 PR은 인간 승인으로만 머지(gh-loop과 동일 불변식) |
+| **머지는 승인제** | 워커 PR은 인간 승인으로만 머지(gh-loop과 동일 불변식). 예외는 gh-loop “조건부 자동 머지” 조건 1~6을 코디네이터가 전부 충족으로 판정한 머지 하나이며, 발행·force-push·브랜치 보호는 항상 승인제입니다 |
 | **얇은 오케스트레이터** | 컨트롤러는 spawn/모니터/스케일만 — 상시 데몬·대시보드 제품화 금지(Q3.6 ecc2 경계) |
 | **이슈 1 ↔ worktree 1 ↔ 워커 1** | 병렬 편집·커밋 충돌 방지 |
 | **cap 준수 + 예산 가드** | 워커마다 모델콜 N배 — `--cap`(기본 3) 천장, 동적 스케일은 1~cap |
@@ -154,10 +154,12 @@ node .omp/extensions/harness/gh-loop-controller.mjs scale --state-json "$STATE" 
 
 구현 워커는 병렬로 일하지만, 코디네이터는 **현재 head에 대한 승인을 받은 PR부터 하나씩** 처리합니다. [gh-loop](../gh-loop/SKILL.md)의 “순차 PR 갱신 — 소유 워커가 rebase·검증합니다”가 실행 절차의 정본입니다.
 
+머지 승인은 gh-loop의 “조건부 자동 머지(코디네이터)” 조건 1~6을 전부 충족하면 코디네이터가 묻지 않고 실행하고, 그 밖의 PR과 발행·force-push·브랜치 보호는 계속 PR별 승인입니다(#105).
+
 1. 앞 PR의 **실제 머지 상태**를 확인한 뒤 다음 PR의 head/base·최신 원격 base SHA·승인 head·소유 워커를 대조합니다. 이미 최신 base를 포함하고 검증이 유효하면 불필요한 rebase는 하지 않습니다. `CONFLICTING`이거나 base가 오래됐으면 코디네이터가 대신 코드를 만지지 않고 **해당 PR의 소유 워커**에게 갱신을 맡깁니다.
 2. **PR별 rebase와 원격 히스토리 갱신 승인을 먼저 받습니다.** PR URL·head/base 리포와 ref·기존 head·대상 base SHA·예상 원격 head SHA·`--force-with-lease` 방식을 질문에 명시합니다. #71의 A+C 방향 승인이나 트래킹 이슈의 운영 승인은 개별 PR의 재작성·머지 권한이 아닙니다. 세션 직접 결정은 gh-loop Stage 0 9로 이슈·PR에 기록하고, 워커 재개는 §6의 cap·소유권·라벨 절차를 유지합니다.
 3. 소유 워커는 **깨끗한 작업트리·원격 SHA·최신 base·원 AC/변경 범위**를 확인하고 승인된 base로 rebase합니다. gh-loop의 검증 4종(감사 로그의 기존 행·추가 행 보존과 끝 개행·모든 행 JSON 파싱, 원 작업 범위 대조, 발견된 명령과 실제 스모크, 새 head 리뷰·verifier)을 수행한 뒤에만 `git push --no-follow-tags --recurse-submodules=no --force-with-lease="refs/heads/$BRANCH:$EXPECTED_REMOTE_SHA" "$HEAD_PUSH_URL" "HEAD:refs/heads/$BRANCH"`로 갱신합니다. 목적지는 gh-loop 절차로 확인한 **단일 push URL**로 고정하며 URL 재작성 설정(`url.*.insteadOf`·`url.*.pushInsteadOf`) 부재와 PR의 head/base 리포·ref·SHA를 push 직전에 다시 대조합니다. 재작성 설정이 있거나 조회가 불명확하면 park하며 태그·서브모듈은 전송하지 않습니다. 예상 SHA는 비어 있지 않은 완전한 승인 값이고 자동 갱신하지 않습니다. 일반 `--force`나 예상 SHA 없는 lease는 금지합니다.
-4. rebase·추가 커밋으로 **head가 바뀌면 기존 머지 승인은 재사용하지 않습니다.** 검증 근거와 PR 대상 리포·ref·새 head/base SHA·새 nonce로 별도 머지 승인을 요청하고 이슈·PR 양쪽을 `needs-decision`으로 바꾼 뒤 종료합니다. 답을 받은 뒤 gh-loop Stage 5의 권한자·nonce·acted 규칙을 거쳐, 머지 직전 대상 리포·ref·SHA를 다시 확인하고 승인된 방식의 `gh pr merge <pr> --merge --match-head-commit <approved-sha>`로 처리합니다. base ref가 바뀌면 SHA가 같아도 재승인하며, head 가드가 base까지 원자적으로 고정하지는 않습니다. 실패·불명확성은 새 질문으로 park하며 다음 PR로 자동 진행하지 않습니다.
+4. rebase·추가 커밋으로 **head가 바뀌면 기존 머지 승인은 재사용하지 않습니다.** 검증 근거와 PR 대상 리포·ref·새 head/base SHA·새 nonce로 별도 머지 승인을 요청하고 이슈·PR 양쪽을 `needs-decision`으로 바꾼 뒤 종료합니다. 답을 받은 뒤(또는 gh-loop “조건부 자동 머지” 조건 1~6이 새 head 기준으로 모두 충족돼 코디네이터가 판정·실행한 뒤) gh-loop Stage 5의 권한자·nonce·acted 규칙을 거쳐, 머지 직전 대상 리포·ref·SHA를 다시 확인하고 승인된 방식의 `gh pr merge <pr> --merge --match-head-commit <approved-sha>`로 처리합니다. base ref가 바뀌면 SHA가 같아도 재승인하며, head 가드가 base까지 원자적으로 고정하지는 않습니다. 실패·불명확성은 새 질문으로 park하며 다음 PR로 자동 진행하지 않습니다.
 
 `docs/harness/audit.jsonl`에만 적용하는 `merge=union`은 **로컬 순수 append 충돌 완화**이며 JSON·append-only·시간순서 보증이 아닙니다. 기존 로그 삭제·교체, 비JSON 행, 다른 파일 충돌은 중단·보고하고 정렬·덮어쓰기로 통과시키지 않습니다. GitHub가 이 속성으로 자동 해결한다고 가정하지 않습니다(#73~#76 실측). 소비 리포의 속성 적용은 gh-loop의 배포 범위를 따르며 `.gitattributes` 전체를 복사하거나 sync allowlist를 넓히지 않습니다.
 

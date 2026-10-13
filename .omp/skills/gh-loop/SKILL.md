@@ -1,7 +1,7 @@
 ---
 name: gh-loop
 argument-hint: [finding description | issue number to resume]
-description: Runs a finding→issue→fix→PR→cross-verify→HITL loop on GitHub (autonomy Q2, option-D PoC). Use when the user says "gh-loop", "이슈 루프", "finding을 이슈로", "자율 수정 루프", "issue fix loop", or wants a finding turned into an issue, fixed, PR'd, and cross-verified with a human decision gate. NEVER auto-merges.
+description: Runs a finding→issue→fix→PR→cross-verify→HITL loop on GitHub (autonomy Q2, option-D PoC). Use when the user says "gh-loop", "이슈 루프", "finding을 이슈로", "자율 수정 루프", "issue fix loop", or wants a finding turned into an issue, fixed, PR'd, and cross-verified with a human decision gate. Merge needs per-PR human approval, except the coordinator's narrow conditional auto-merge policy (conditions 1-6, issue 105); publish, force-push and branch-protection changes always need approval.
 ---
 
 # gh-loop — Finding → Issue → Fix → PR → Cross-verify → HITL
@@ -18,9 +18,9 @@ description: Runs a finding→issue→fix→PR→cross-verify→HITL loop on Git
 
 | Rule | Violation = STOP |
 |------|------------------|
-| **머지 절대 자동 금지** | 교차검증은 advisory일 뿐. 에이전트는 **자율 단계로 머지하지 않는다**; `gh pr merge`는 **PR별 명시적 인간 승인**(이슈/PR 댓글, 또는 코디네이터 세션 대화의 직접 지시 — Stage 0 9)이 있을 때만 그 지시로 실행한다. |
+| **머지는 승인제 — 예외는 조건부 자동 머지 하나** | 교차검증은 advisory이며 그 자체가 머지 게이트는 아니다. 에이전트는 **자율 단계로 머지하지 않는다**; `gh pr merge`는 **PR별 명시적 인간 승인**(이슈/PR 댓글, 또는 코디네이터 세션 대화의 직접 지시 — Stage 0 9)이 있을 때, 또는 **코디네이터가 Stage 0 "조건부 자동 머지" 조건 1~6을 전부 충족한다고 판정한 때**(#105, 2026-10-13 사용자 결정)에만 실행한다. 조건부 자동 머지는 코디네이터만 실행하며 워커는 승인 댓글을 받은 머지만 실행한다. **발행(범프)·원격 재작성(force-push)·브랜치 보호 변경은 항상 승인제다.** |
 | **블로킹 대기 금지** | 결정점에선 질문을 이슈에 게시하고 **턴 종료**. 프로세스를 붙잡고 폴링/sleep 하지 않는다. 코디네이터도 같다 — 워커를 띄운 뒤 **즉시 복귀**하고 `orca orchestration check --wait`·`terminal read` 폴링을 하지 않는다. 상태 원천은 GitHub(라벨·댓글)이다. |
-| **코디네이터는 코드를 만지지 않는다** | dispatch 모드의 메인 세션은 이슈 읽기·모델 질문·워커 기동·재개 프롬프트·머지 뒤 정리, 그리고 세션 직접 결정의 기록·실행(Stage 0 9)만 한다. 수정·커밋·PR·댓글 해석은 **워커**가 한다(소유자 1명). 워커는 **다시 dispatch하지 않는다**(재귀 금지). |
+| **코디네이터는 코드를 만지지 않는다** | dispatch 모드의 메인 세션은 이슈 읽기·모델 질문·워커 기동·재개 프롬프트·머지 뒤 정리, 세션 직접 결정의 기록·실행(Stage 0 9), 그리고 조건부 자동 머지의 판정·실행(Stage 0 "조건부 자동 머지")만 한다. 수정·커밋·PR·댓글 해석은 **워커**가 한다(소유자 1명). 워커는 **다시 dispatch하지 않는다**(재귀 금지). |
 | **dedup/throttle** | 이슈 생성 전 항상 `gh-loop-issue.mjs`로 중복·상한을 판정. 동일 finding 이슈 폭주 금지. 단 `gh issue list`는 **최종일관성**이라 생성 직후 조회가 권위적이지 않음 — Stage 1 주의 참조. |
 | **사용자 응답 최우선** | 재개 시 이슈 댓글의 최신 사용자 지시를 memory/계획보다 우선한다 (CLAUDE.md "user > memory"). 코디네이터 세션 대화의 직접 지시는 이 스킬의 댓글 절차보다 우선한다(Stage 0 9). |
 | **파괴 작업 가드** | force-push·history 재작성·대량 삭제는 advisory에 그치지 않고 사용자 확인. |
@@ -101,7 +101,7 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 5. **즉시 복귀**: 사용자에게 워크트리 id·워커 핸들·모델을 보고하고(Orca 상태 확장 없이 띄웠으면 "Orca 카드 상태·알림이 보이지 않을 수 있음"도 알린다 — R8) 턴을 종료한다. `check --wait`·`terminal read` 폴링 금지(Non-Negotiables).
 6. **재개** `/gh-loop N`(코디네이터): 사용자가 이 세션 대화로 결정을 줬으면 9의 댓글을 먼저 남긴다. `orca worktree show --worktree issue:N --json`으로 워크트리를 찾고, `terminal list --worktree id:…`에 살아 있는 omp 터미널이 있으면 `terminal send`로 재개 프롬프트(워커 마커 + "이슈 #N 재개 — 댓글을 해석해 다음 단계 수행")를 보내고, 없으면 3의 `WORKER_CMD` 블록을 이슈의 모델 마커 값으로 다시 실행해 만든 명령(R8)으로 같은 워크트리에 `terminal create`해 새 워커를 띄운 뒤 같은 프롬프트를 보낸다. 댓글 해석(LLM, 권한자, nonce 이후)은 **워커가** 한다 — 코디네이터는 해석하지 않는다(소유자 1명).
 7. **정리**(머지 뒤): 워커가 "머지 완료, 정리 필요"를 이슈 댓글(+ status 메일)로 알리거나 코디네이터가 9에서 직접 머지했으면 코디네이터가 `orca worktree rm --worktree issue:N --json`(로컬 브랜치도 함께 지워진다) + `git push origin --delete <branch>`를 실행한다. 미커밋 변경이 있으면 중단하고 보고한다(`--force` 금지). 리뷰 사이드카(`docs/reviews/`, gitignored)는 삭제 전에 메인 체크아웃으로 복사한다. 워커는 자기 워크트리 안에서 실행 중이라 스스로 지울 수 없다.
-8. **턴 시작 루틴**(코디네이터): Run이 있으면 `orca orchestration check --unread`, 그리고 `orca worktree ps --json`의 `gh-loop-issue-*` 카드 comment를 보고 결정 요청·완료를 사용자에게 전달한다. 폴링이 아니라 턴마다 한 번이다.
+8. **턴 시작 루틴**(코디네이터): Run이 있으면 `orca orchestration check --unread`, 그리고 `orca worktree ps --json`의 `gh-loop-issue-*` 카드 comment를 보고 결정 요청·완료를 사용자에게 전달한다. 머지 결정 요청이면 아래 “조건부 자동 머지”의 판정을 먼저 거친다(미충족이면 그대로 전달한다). 폴링이 아니라 턴마다 한 번이다.
 9. **세션 직접 결정**(R7, 2026-10-02 사용자 결정 — 첫 적용: #65 → PR #67 머지): 결정은 이슈 댓글만이 아니라 **코디네이터 세션 대화**로도 받는다 — 대화의 직접 지시가 이 스킬의 댓글 절차보다 우선한다. 받으면 코디네이터가 그 이슈(PR이 있으면 PR에도)에 아래 댓글을 파일로 써서(`--body-file`) 남긴다:
    ```
    ## 세션에서 직접 결정함
@@ -114,6 +114,42 @@ gh repo view --json nameWithOwner -q .nameWithOwner
    - **코디네이터가 바로 실행하는 결정**(머지·닫기): Stage 5 재개 5의 head 가드와 아래 “순차 PR 갱신”의 최신 base·검증 확인을 거칩니다. 머지는 `gh pr merge <pr> --merge --match-head-commit <질문에 적힌 head SHA>`처럼 승인된 방식으로 실행한 뒤, 같은 댓글에 `<!-- gh-loop:acted:<nonce> -->`를 함께 남기고 이슈·PR에서 `needs-decision`을 뗍니다. 머지했으면 곧바로 7(정리)로 갑니다.
    - **워커가 실행할 결정**(수정 요청·PR별 rebase/force-with-lease 등): 댓글(acted 없음)을 남기고 이슈(PR이 있으면 PR도)의 `needs-decision`을 `agent-working`으로 바꾼 **뒤** 6처럼 재개 프롬프트를 보냅니다. 라벨을 먼저 바꿔야 워커의 다음 전이를 덮어쓰지 않습니다. 워커는 Stage 5 재개 2에 따라 인용된 지시를 해석하며, 이견·모호성으로 멈추면 새 nonce와 `needs-decision`으로 되돌립니다. rebase 승인은 머지 승인이 아닙니다.
    - option A 러너는 이 댓글을 계속 무시한다(`<!-- gh-loop:` 마커 자기 제외) — 코디네이터가 워커를 직접 깨우므로 러너까지 기동하면 중복이다(회귀 테스트 `gh-loop-runner.test.mjs` "session-decision").
+
+#### 조건부 자동 머지 (코디네이터 — #105, 2026-10-13 사용자 결정)
+
+10-02의 "PR별 명시 승인"을 조건부로 개정합니다. 10-03~10-13 머지 결정 14건에서 워커 추천이 전부 A(머지)였고 사용자도 전부 A를 골라, 정보 없는 승인 왕복을 없애려는 결정입니다. 결정이 필요한 사항(트리아지·코멘트·질문)은 계속 사용자에게 묻고, **조건을 전부 충족한 머지만** 코디네이터가 묻지 않고 실행합니다. 이 절은 코디네이터만 실행합니다. 워커는 계속 머지하지 않고 Stage 5 결정 요청에 조건 체크리스트를 보고한 뒤 턴을 종료합니다(Non-Negotiables, worker 모드).
+
+**판정 시점과 방법.** 턴 시작 루틴(8)에서 Orca 카드 comment나 `needs-decision` 라벨로 머지 결정 요청을 알게 되면 `issue://N`과 `pr://<n>`의 댓글을 읽어 판정합니다(카드만 보고 판정하지 않습니다). 코디네이터는 사용자 답을 해석하지 않고(해석은 워커 몫 — 소유자 1명) 결정 요청·체크리스트·게시된 근거의 존재와 일치만 확인합니다. 워커의 체크리스트는 자기 보고이므로 코디네이터가 GitHub에서 직접 확인할 수 있는 것(CI·현재 head·변경 파일)은 재조회하고, verifier·reviewer 판정은 PR에 게시된 근거를 확인합니다. 그 근거는 **현재 head를 평가한 것**일 때만 인정합니다(Stage 4 게시 댓글 — rebase한 head는 조건 6의 rebased 기록 댓글 — 에 평가한 head SHA가 없거나 그 뒤 커밋이 더해졌으면 미충족입니다). 체크리스트가 없거나(이 절 이전 질문 포함) 확인할 수 없는 조건이 있으면 미충족으로 보고 평소처럼 사용자에게 묻습니다. 결정 요청의 nonce 이후에 사용자의 이슈·PR 댓글이나 세션 지시가 있으면 그 지시가 우선하며 자동 머지하지 않습니다(사용자 응답 최우선).
+
+**자동 머지 조건 — 전부 충족해야 합니다.**
+
+1. **추천 A, 설계 결정 없음.** 워커 결정 요청의 Recommendation이 A(머지)이고, Options의 B/C가 "다른 방식"인 설계 결정이 아닙니다.
+2. **CI.** `gh pr checks <pr>`의 CI(harness-ci)가 전부 pass입니다. CI가 없는 리포는 워커 보고의 suite 명령과 통과 결과로 대신합니다.
+3. **verifier.** verdict가 PASS 또는 PASS WITH NOTES이며 미해결 AC가 없습니다.
+4. **reviewer.** 3-pass(또는 risk에 맞는 리뷰)가 PASS 또는 PASS WITH NOTES이고 **contested finding이 없습니다**(심각도 high 이상에서 adversary와 code-reviewer가 엇갈린 항목 0).
+5. **범위.** `gh pr diff <pr>`의 변경 파일이 이슈 본문의 승인 범위·AC 안이고 범위 밖 파일이 0이며, 이슈의 비범위 목록에 오른 항목은 파일명이 아니라 diff 내용으로 수정하지 않았음을 대조합니다. Stage 2가 요구하는 워크플로 산출물(`docs/harness/` seed·scope·audit)은 범위 안으로 봅니다.
+6. **rebase 뒤 새 head.** PR을 rebase했다면 새 head에 대해 순차 PR 갱신 절의 검증 4종 보고와 `<!-- gh-loop:rebased:<PR 번호> -->` 마커 댓글이 있고, 그 댓글에 적힌 SHA가 현재 head와 같습니다. rebase하지 않았으면 해당 없음입니다.
+
+**반드시 질문합니다** — 위 조건이 하나라도 미충족이면(워커가 B·C를 추천함, 범위 밖 파일, contested finding, verifier PASS WITH NOTES에 미해결 항목 포함) 사용자에게 묻습니다. 아래는 조건 충족과 무관하게 **항상 승인제**입니다. **발행(버전 범프·태그·릴리스), 원격 히스토리 재작성(force-push, rebase 후 `--force-with-lease` 포함), 브랜치 보호 변경.** 이 정책은 `gh pr merge` 한 가지만 다루며, rebase·force-push 승인은 머지 조건이 아니라 순차 PR 갱신 절의 별도 승인입니다.
+
+**실행.** Stage 5 재개 5의 head 가드와 순차 PR 갱신의 최신 base·검증 확인을 그대로 거칩니다. 머지 큐가 걸린 브랜치는 이 정책의 대상이 아닙니다 — `gh pr merge`가 큐 등록만 하므로 평소처럼 사용자에게 묻고 `--admin`으로 우회하지 않습니다. 판정에 쓴 결정 요청의 nonce를 고정하고(아래 기록 마커도 그 nonce를 씁니다), 머지 직전에 넷을 다시 확인해 하나라도 어긋나면 자동 머지하지 않고 평소 절차로 돌아갑니다. ① PR이 OPEN이고 현재 head가 결정 요청에 적힌 head SHA와 같습니다(다르면 워커가 새 head·새 nonce로 다시 묻게 합니다). ② 그 nonce 이후 권한자(write+)의 이슈·PR 댓글과 `session-decision` 댓글이 없습니다(같은 턴의 세션 지시도 포함합니다). 에이전트 댓글을 제외하는 것은 **작성자가 bot 계정일 때만**입니다. 결정 요청 댓글의 작성자가 bot 계정이 아니면(PAT 모드) 작성자로 에이전트와 사람을 가를 수 없으므로 nonce 이후의 모든 write+ 댓글을 차단으로 세어 평소 절차로 돌아갑니다(마커만으로 제외하지 않습니다. 결정 요청을 인용한 사용자 댓글이 통과할 수 있습니다). ③ 이슈·PR에 `needs-decision`이 남아 있습니다. ④ 가장 최근 결정 요청 마커가 판정한 nonce입니다(워커가 새 nonce로 park하지 않았습니다). 모두 맞으면 `gh pr merge <pr> --merge --match-head-commit <그 head SHA>`를 실행하고, `gh pr view <pr> --json state,mergeCommit`으로 MERGED와 merge SHA를 확인한 **뒤에만** 기록합니다. 예상과 달리 MERGED가 아니면(큐 등록 등) 기록·라벨 변경 없이 즉시 사용자에게 보고합니다. 확인되면 아래 댓글을 파일로 써서(`--body-file`) **이슈와 PR 양쪽**에 남긴 뒤 두 곳에서 `needs-decision`을 뗍니다. 머지는 되돌릴 수 없으므로 댓글·라벨 쓰기가 일부 실패해도 머지를 되돌리려 하지 말고, 실패한 쓰기와 머지 SHA를 사용자에게 보고하며 재시도합니다. **자동 머지 뒤의 정리(7)는 이 정책에 포함되지 않습니다.** 워크트리·원격 브랜치 삭제는 파괴 작업이라 머지 보고와 함께 승인받습니다(gh-fanout §6과 같습니다. 사용자가 승인한 머지 뒤의 정리 절차 7·9는 바꾸지 않습니다).
+
+```
+## 정책에 따라 자동 머지
+**원 질문**: <결정 요청 댓글 링크>
+**근거** (조건 1~6):
+1. 추천 A·설계 결정 없음 — <한 줄>
+2. CI — <harness-ci pass(run URL) | CI 없는 리포의 suite 명령·결과>
+3. verifier — <verdict>, 미해결 AC 0
+4. reviewer — <verdict>, contested 0
+5. 범위 — <변경 파일 n개, 범위 밖 0>
+6. rebase — <해당 없음 | 새 head SHA·검증 4종·rebased 마커 댓글 링크>
+**머지**: `<merge SHA>` (head `<head SHA>`, `--match-head-commit`)
+<!-- gh-loop:auto-merged:<판정에 고정한 nonce> -->
+<!-- gh-loop:acted:<같은 nonce> -->
+```
+
+`acted` 마커는 재개한 워커가 이미 실행된 결정으로 인식해 다시 머지하지 않게 하며(Stage 5 재개 6의 실제 상태 재확인과 함께 — 재개 2는 `gh-loop:` 마커 댓글을 후보에서 제외합니다), `auto-merged` 마커는 사용자 승인 머지와 정책 머지를 구분합니다. option A 러너는 `<!-- gh-loop:` 마커 댓글을 계속 무시합니다. 사용자에게는 다음 보고 때 PR·머지 SHA·충족 근거를 표로 알립니다.
 
 #### worker 모드 (워커 세션)
 
@@ -128,7 +164,7 @@ gh repo view --json nameWithOwner -q .nameWithOwner
   재개 때 새로 뜬 워커는 이 두 단계를 건너뛰고 Stage 5 재개를 따른다(재개 중 코디네이터가 모델을 바꿔 다시 dispatch했으면 — 새 마커·튜플 댓글 — 그 워커가 위 ingest를 한 번 더 실행해 새 행을 남긴다. 멱등이라 기존 행은 skip된다). 이슈(및 handoff 문서)를 읽고 **Stage 2~5를 그대로** 수행한다 — 커밋 순서(Stage 2 문단), compr로 PR(`Closes #N`, PR에 `needs-review`), advisory 교차검증, 결정 지점에서 이슈 댓글 + 이슈·PR `needs-decision`(Stage 5) + **턴 종료**.
 - 보고 채널: 이슈 댓글(마일스톤·결정 요청) + `orca worktree set --worktree active --comment "gh-loop #N: <마일스톤>" --json`(마일스톤마다). Run이 바인딩돼 있으면 코디네이터 핸들로 `orca orchestration send --type status` 1건씩(시작·결정 요청·완료만).
 - 재개 프롬프트를 받으면 Stage 5 "재개" 1~6을 워커가 수행한다(댓글 해석·권한자·nonce·멱등 — 코디네이터의 `세션에서 직접 결정함` 댓글도 그 nonce의 답이다, 재개 2). 머지 승인 댓글이면 `gh pr merge --match-head-commit <approved-sha>`까지는 워커가 실행하고(2026-10-01 #62 선례), 이슈에 "머지 완료, 정리 필요(워크트리·브랜치)" 댓글을 남긴 뒤 턴을 종료한다 — 정리는 코디네이터 몫.
-- **자기 워크트리를 지우지 않는다**(그 안에서 실행 중). 머지도 승인 없이는 하지 않는다(Non-Negotiables).
+- **자기 워크트리를 지우지 않는다**(그 안에서 실행 중). 머지도 승인 없이는 하지 않는다(Non-Negotiables) — 조건부 자동 머지는 코디네이터만 실행하고 워커는 체크리스트를 보고만 한다.
 - `.omp/harness-state/`의 backpressure 기록은 검증·편집 대상 워크트리 기준입니다(#58). 구조화 `cwd` 또는 선행 리터럴 `cd <path> &&`를 사용하며, 해석 불가 입력은 기록하지 않습니다. 이전 확장을 로드한 세션은 갱신 코드를 자동으로 읽지 않으므로 새 세션에서 검증합니다. 상태 파일을 다른 워크트리로 복사하지 않습니다.
 
 ### Stage 1 — Finding → Issue (dedup + throttle)
@@ -205,10 +241,11 @@ node .omp/extensions/harness/gh-loop-record.mjs close --issue N --files-changed 
 
 ### Stage 4 — PR → Cross-verify (**advisory**)
 
-PR에 교차검증 결과를 게시한다 — 결과는 **참고용**이지 머지 게이트가 아니다:
+PR에 교차검증 결과를 게시한다 — 결과는 **참고용**이다. 게시 자체가 머지 게이트는 아니며, 머지는 승인 또는 Stage 0 "조건부 자동 머지" 조건 충족 판정으로만 진행한다:
 - `reviewer` 에이전트 (`.omp/agents/reviewer.md`) — 적대적 다중패스 리뷰. 이 리뷰는 코드 커밋 **앞**에 돈다(review-gate가 high/critical 커밋에 요구하는 사이드카를 만드는 그 라운드들 — Stage 2 커밋 순서·"closeout 기록"의 `review-rounds`); PR 단계에서는 그 결과를 게시하고, 필요하면 PR diff에 1패스를 더 돌린다(추가 라운드는 `gh_loop_closed`에 들어가지 않는다).
 - 이종 모델 2차 의견: `adversary` 에이전트 (`.omp/agents/adversary.md`) 또는 OMC `ccg`(claude+codex+gemini).
 - 결과 요약을 파일로 써서 PR 코멘트로 게시한다 (`gh pr comment <pr> --body-file /tmp/ghloop-review.md`) — 본문을 쉘 명령줄에 보간하지 않는다.
+- 게시 댓글에는 **평가한 PR head SHA**와 verifier·reviewer verdict를 적는다 — Stage 0 "조건부 자동 머지" 조건 3·4를 코디네이터가 판정하는 입력이다(결과 자체는 여전히 advisory이고, 머지 여부는 코디네이터가 그 조건으로 판정한다).
 
 ### Stage 5 — Decision Gate → HITL (the crux)
 
@@ -223,8 +260,16 @@ PR에 교차검증 결과를 게시한다 — 결과는 **참고용**이지 머�
    **Question**: <하나의 명확한 질문>
    **Options**: A) … (tradeoff) / B) … (tradeoff)
    **Recommendation**: <기본안 + 근거>
+   **Auto-merge checklist** (머지 질문일 때 — Stage 0 "조건부 자동 머지" 조건 1~6):
+   - [x] 1 추천 A, 설계 결정 선택지 없음 — <B/C가 무엇인지>
+   - [x] 2 CI — <harness-ci 전부 pass(run URL) | CI 없는 리포: suite 명령·결과>
+   - [x] 3 verifier — <PASS | PASS WITH NOTES>, 미해결 AC 0
+   - [x] 4 reviewer — <verdict·라운드 수>, contested finding 0
+   - [x] 5 범위 — 변경 <n>개 전부 이슈 범위·AC 안, 범위 밖 0, 비범위 미수정
+   - [x] 6 rebase — <해당 없음 | 새 head SHA에 검증 4종 + rebased 마커 댓글 링크>
    <!-- gh-loop:decision:<nonce> -->
    ```
+   머지 질문이면 위 **Auto-merge checklist**를 반드시 채웁니다 — 워커가 1~5(rebase한 head면 6)를 자기 보고에 명시해 코디네이터가 Stage 0 "조건부 자동 머지"를 판정하기 쉽게 하는 것이 목적입니다. 미충족 항목은 `[ ]`와 사유를 적고 평소처럼 사용자 답을 기다립니다. 체크 여부와 무관하게 발행(범프)·원격 재작성(force-push)·브랜치 보호 변경이 걸린 결정은 항상 승인제이며 체크리스트로 자동 머지되지 않습니다. 워커는 체크리스트를 **보고만 하고 머지하지 않으며** 턴을 종료합니다.
    ```bash
    gh issue comment <issue> --body-file /tmp/ghloop-question.md
    gh issue edit <issue> --remove-label agent-working,needs-review --add-label needs-decision
@@ -260,6 +305,7 @@ PR에 교차검증 결과를 게시한다 — 결과는 **참고용**이지 머�
    ```
    일반 `--force`, 예상 SHA 없는 `--force-with-lease`, lease 실패 뒤 새 SHA를 넣어 자동 재시도하는 것은 금지합니다. 응답 유실이면 실제 원격 SHA를 한 번 확인하고, 결과가 불명확하면 성공으로 기록하거나 재시도하지 않고 park합니다.
 6. **변경된 head는 별도로 머지 승인받습니다.** 원격 PR head가 검증한 새 로컬 HEAD와 같음을 확인한 뒤 rebase 승인 nonce의 `acted`와 검증 결과를 이슈·PR에 기록합니다. 이어 **PR URL·head/base 리포와 ref·새 head SHA·base SHA·새 nonce·머지 방식**을 담은 별도 질문을 남기고 양쪽을 `needs-decision`으로 바꾼 뒤 종료합니다. 머지 직전에도 5의 PR 대상 리포·ref·SHA를 재조회하며, base 브랜치가 바뀌면 SHA가 같아도 새 nonce로 승인받습니다. base가 전진했으면 최신 base 포함 여부·검증부터 다시 확인합니다. Stage 5 재개 5의 `--match-head-commit`으로 승인된 head만 머지합니다. 이 옵션은 head 가드이지 base 리포·ref·SHA를 원자적으로 잠그는 수단은 아니므로 최종 조회 뒤의 base 변경 경쟁은 남습니다. 다음 PR은 이 PR의 실제 머지를 확인한 뒤 처리합니다.
+   이 기록 댓글에는 `<!-- gh-loop:rebased:<PR 번호> -->` 마커와 새 head SHA·검증 4종 결과를 함께 적고, 위 질문에는 Stage 5의 Auto-merge checklist 6번을 채웁니다. 코디네이터가 Stage 0 "조건부 자동 머지"의 조건 1~6을 새 head 기준으로 모두 충족한다고 판정하면 사용자 답을 기다리지 않고 머지할 수 있고, 하나라도 미충족이면 질문에 사용자 답을 기다립니다. rebase와 force-push 자체는 이 정책의 대상이 아니며 계속 PR별 승인제입니다.
 
 **배포 범위를 구분합니다.** 이 소스 리포와 이 속성을 포함한 신규 템플릿 복사에는 한 경로의 union 규칙이 적용됩니다. 기존 소비 리포의 `.gitattributes`는 `scripts/harness-sync.sh` allowlist 밖이며 이번 변경도 sync 범위를 넓히지 않습니다. 소비 리포는 별도 적용 승인 후 **기존 속성과 우선순위를 읽고 해당 한 줄만 반영**하며 `git check-attr`로 유효값을 확인합니다. 파일 전체 덮어쓰기는 금지합니다. 속성이 없는 리포에서는 자동 해결을 전제하지 않고 위 중단·보고 절차를 따릅니다.
 
