@@ -271,17 +271,3 @@ test('hooks write under session_state.cwd, not the spawn cwd', () => {
   });
 });
 
-// --- wiring: index.ts registers all three on the lifecycle they assume ----
-
-test('index.ts wires tracker/invalidator/failure-tracker to the right events', () => {
-  const src = readFileSync(
-    join(dirname(fileURLToPath(import.meta.url)), '..', 'index.ts'), 'utf-8');
-  // Registration = a quoted "<gate>.mjs" literal in the OMP extension entry point
-  // (runGate call; the bash tool_result handler picks tracker vs failure-tracker).
-  assert.ok(src.includes('"backpressure-tracker.mjs"'),
-    'bash tool_result (ok) must run the PASS tracker');
-  assert.ok(src.includes('"backpressure-invalidator.mjs"'),
-    'edit/write tool_result must run the invalidator');
-  assert.ok(src.includes('"backpressure-failure-tracker.mjs"'),
-    'bash tool_result (isError) must run the failure tracker');
-});

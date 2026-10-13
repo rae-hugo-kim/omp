@@ -4,6 +4,7 @@
 
 ## [Unreleased]
 
+- **fix(harness)**: #58 — bash의 구조화 `cwd`와 선행 리터럴 `cd <path> &&`로 구한 실효 cwd의 `repoToplevel`에 backpressure PASS/FAIL을 기록합니다. 편집은 파일의 toplevel만 UNKNOWN으로 바꾸며 링크드 워크트리의 상태도 분리합니다. 해석 불가·저장소 밖이면 세션 cwd 폴백 없이 기록을 생략하고 `HARNESS_DEBUG`로 알립니다. hook mode는 커밋 워크트리 기준을 유지하며 핸들러 캡처 회귀 테스트와 워크트리 인계·검증 재실행·상태 복사 금지 운영 규칙을 추가합니다.
 - **fix(harness)**: #68 — 링크드 워크트리(`git worktree add`, Orca 워크트리 포함)에서 `harness-version-check.mjs`가 `HARNESS STALE … run /skill:harness-check`를 내지 않습니다. `git rev-parse --git-dir`와 `--git-common-dir`가 다르면 메인 워크트리 브랜치에 **커밋된** `harness-meta.json`을 읽어, 메인이 최신이면 `HARNESS BEHIND MAIN`(`git merge <브랜치>` 안내), 메인도 뒤처졌으면 `HARNESS STALE (linked worktree)`(메인 체크아웃에서 sync·커밋 후 merge)를 냅니다. 워크트리는 `harness-version-check.linked.json` 캐시를 따로 쓰고 메인·단일 체크아웃·소스 리포의 출력은 그대로입니다. `harness-check` 스킬은 링크드 워크트리에서 안내만 하고 중단하며 `--force-worktree`로만 진행합니다(`harness-sync.sh`는 변경 없음). 워크트리별 sync가 하네스 파일을 main과 갈라 놓아 머지 때 14건이 충돌한 chats/bonefish 실측이 계기입니다.
 
 ## [2026.88] - 2026-10-12

@@ -46,9 +46,10 @@ import { spawn } from "node:child_process";
 import { type FileHandle, open } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { commitBypassTripwire, commitTargetDir, isGitCommit, isWipCommit } from "./gates/git-commit-detect.mjs";
+import { absolutize, commitBypassTripwire, commitTargetDir, isGitCommit, isWipCommit, verificationCwd } from "./gates/git-commit-detect.mjs";
 import { crossRepoBashVerdict, crossRepoMutationVerdict } from "./gates/cross-repo.mjs";
 import { mutationCallTargets, mutationRoute, readTarget, searchTrackTargets } from "./gates/read-path.mjs";
+import { repoToplevel } from "./gates/repo-root.mjs";
 import { checkMermaidFile, MERMAID_SUPPORTED } from "./mermaid-check";
 
 const GATES_DIR = join(dirname(fileURLToPath(import.meta.url)), "gates");
@@ -513,6 +514,17 @@ export default function harness(pi: HarnessExtensionApi): void {
 		else pi.logger?.warn?.(message);
 	};
 
+	// Only backpressure moves with the verification/edit target. Read ledgers,
+	// breadcrumbs, commit snapshots and service routing retain their own contracts.
+	const trackBackpressure = async (script: string, tool_input: Record<string, unknown>, target: string | null): Promise<void> => {
+		const root = target === null ? null : repoToplevel(target);
+		if (root === null) {
+			if (process.env.HARNESS_DEBUG) pi.logger?.info?.(`HARNESS_DEBUG: ${script} skipped: unresolved cwd or target outside a repository.`);
+			return;
+		}
+		await runGate(script, { tool_name: script === "backpressure-invalidator.mjs" ? "Write" : "Bash", tool_input, session_state: { cwd: root } });
+	};
+
 	pi.on("tool_call", async (event, ctx) => {
 		// The bash-commit path fails CLOSED on adapter errors (its own catch below); the outer
 		// catch keeps advisory hooks fail-open.
@@ -632,9 +644,12 @@ export default function harness(pi: HarnessExtensionApi): void {
 					await runGate("breadcrumb-tracker.mjs", { tool_name: "Bash", tool_input: { command, pending: true }, session_state });
 					return;
 				}
-				const payload: GatePayload = { tool_name: "Bash", tool_input: { command }, session_state };
+				const cwdInput = typeof event.input?.cwd === "string" ? event.input.cwd : "";
+				const toolCwd = cwdInput ? absolutize(cwdInput, ctx.cwd) : ctx.cwd;
+				const toolEnv = event.input?.env && typeof event.input.env === "object" ? event.input.env : {};
+				const target = verificationCwd(command, toolCwd, toolEnv);
 				const tracker = bashRunFailed(event) ? "backpressure-failure-tracker.mjs" : "backpressure-tracker.mjs";
-				await runGate(tracker, payload);
+				await trackBackpressure(tracker, { command }, target);
 				// A commit "succeeded" only if the repo it targeted gained a commit; without a
 				// snapshot (unresolvable target, e.g. `cd x && git commit`) the exit code decides.
 				const commit = isGitCommit(command) ? await commitOutcome(event) : null;
@@ -677,7 +692,7 @@ export default function harness(pi: HarnessExtensionApi): void {
 				// discard) and write-tracker are deferred to the xd://resolve apply below.
 				if (route.kind === "preview") {
 					for (const filePath of route.files) {
-						await runGate("backpressure-invalidator.mjs", { tool_name: "Write", tool_input: { file_path: filePath }, session_state });
+						await trackBackpressure("backpressure-invalidator.mjs", { file_path: filePath }, filePath);
 					}
 					return;
 				}
@@ -689,7 +704,7 @@ export default function harness(pi: HarnessExtensionApi): void {
 				for (const filePath of route.files) {
 					const payload: GatePayload = { tool_name: "Write", tool_input: { file_path: filePath }, session_state };
 					await runGate("write-tracker.mjs", payload);
-					await runGate("backpressure-invalidator.mjs", payload);
+					await trackBackpressure("backpressure-invalidator.mjs", { file_path: filePath }, filePath);
 					await runGate("breadcrumb-tracker.mjs", payload);
 					for (const problem of await checkMermaidFile(filePath)) {
 						mermaidProblems.push(`${relative(ctx.cwd, filePath)}: ${problem}`);
