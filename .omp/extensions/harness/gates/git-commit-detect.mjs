@@ -1109,6 +1109,103 @@ function cdTarget(cwd, args) {
   try { return statSync(dir).isDirectory() ? dir : null; } catch { return null; }
 }
 
+// Bounded shell grammar for verification attribution only. Preserve quoted words
+// but discard output redirections (including fd duplication) instead of lexSegments:
+// that older lexer otherwise mistakes the & in 2>&1 for a command separator.
+function verificationSegments(command) {
+  command = command.replace(/^(?:[ \t]|\r?\n)+/, '');
+  // Unquoted operators/expansions are unknown; quoted or escaped data is not
+  // control flow. Double-quoted expansion still stays outside this grammar.
+  const token = /[ \t]*(?:(&&)|((?:\d+)?(?:>>|>&|>)|&>>?)|((?:[^ \t'"&><;|(){}\r\n$`\\]+|\\[^\r]|'[^'\r\n]*'|"(?:[^"$`\\\r\n]|\\[^\r])*")+))/y;
+  const segments = [];
+  let words = [], redirect = false, offset = 0;
+  while (offset < command.length) {
+    if (/^[ \t\r\n]*$/.test(command.slice(offset))) break;
+    token.lastIndex = offset;
+    const m = token.exec(command);
+    if (!m) return null;
+    offset = token.lastIndex;
+    // Leading unquoted joins are zero-width: `\\LF#x` starts a comment too.
+    const comment = m[3]?.replace(/^(?:\\\n)+/, '');
+    if (comment?.startsWith('#')) {
+      // Search AFTER those joins, not at the raw token's first continuation LF.
+      // A comment's own backslash never joins its following command line.
+      const lf = command.indexOf('\n', offset - comment.length);
+      if (lf !== -1 && !/^[ \t\r\n]*$/.test(command.slice(lf))) return null;
+      break;
+    }
+    // The existing lexer removes unquoted backslash-LF; tokenize handles
+    // double-quoted joins. Single-quoted newlines remain unsupported literals.
+    const word = m[3]?.includes('\\\n') ? lexSegments(m[3])[0] : m[3];
+    if (m[1]) {
+      if (redirect || !words.length) return null;
+      segments.push(words); words = [];
+    } else if (m[2]) {
+      if (redirect) return null;
+      redirect = true;
+    } else if (redirect) {
+      if (word) redirect = false;
+    } else if (word) {
+      words.push(word);
+    }
+  }
+  if (redirect || !words.length) return null;
+  segments.push(words);
+  return segments;
+}
+
+/**
+ * Shell cwd for backpressure (#58), not a general shell interpreter. Accept simple
+ * commands joined by &&, optionally preceded by ONE literal `cd <dir> &&`.
+ * Ambiguous control flow/expansion/wrappers return null, never the session cwd.
+ * Reuse the same physical/logical directory walks as gitInvocationTarget/cdTarget.
+ * A runner's own scripts may chdir internally; command text cannot prove otherwise.
+ */
+export function verificationCwd(command, baseDir, env = {}) {
+  if (typeof command !== 'string' || !command || !baseDir) return null;
+  const segments = verificationSegments(command);
+  if (segments === null) return null;
+  try { if (!statSync(baseDir).isDirectory()) return null; } catch { return null; }
+  let cwd = physical(baseDir);
+  for (let n = 0; n < segments.length; n++) {
+    const toks = tokenize(segments[n].join(' '));
+    if (!toks.length) return null;
+    if (toks[0] === 'cd') {
+      if (n !== 0 || segments.length < 2) return null;
+      const args = toks.slice(1);
+      let i = /^-(L|P)$/.test(args[0] ?? '') ? 1 : 0;
+      if (args[i] === '--') i++;
+      if (args.length !== i + 1 || !args[i] || args[i] === '-' || (args[i].startsWith('-') && args[i - 1] !== '--')) return null;
+      // Expansion checks need the RAW word: quoted/escaped [*$?] are literal
+      // filename characters, not a reason to discard a known directory.
+      const raw = segments[n][i + 1];
+      const bare = raw.replace(/'[^']*'|"(?:[^"\\]|\\[\s\S])*"|\\[\s\S]/g, '');
+      if (/[*?[]/.test(bare) || raw.startsWith('~')) return null;
+      // CDPATH changes relative cd lookup. Do not guess which search entry won.
+      if (!path.isAbsolute(args[i]) && (env.CDPATH ?? process.env.CDPATH)) return null;
+      // Validate each traversed component BEFORE .. can erase it. cdTarget's
+      // final-path stat alone accepts missing/.. and file/.., unlike Bash.
+      const { root } = path.parse(args[i]);
+      cwd = root || cwd;
+      for (const part of args[i].slice(root.length).split(path.sep === '\\' ? /[\\/]/ : /\//)) {
+        if (!part) continue;
+        cwd = args[0] === '-P' ? chdir(cwd, part) : resolve(cwd, part);
+        try { if (!statSync(cwd).isDirectory()) return null; } catch { return null; }
+      }
+      continue;
+    }
+    let i = 0;
+    while (i < toks.length && (isAssign(toks[i]) || toks[i] === 'env' || toks[i] === 'time')) i++;
+    const prog = toks[i];
+    // No wrapper-option arity or shell execution model here. Scripts run as
+    // ordinary executables remain opaque, like package-manager test scripts.
+    if (!prog || prog.startsWith('-') || !/^[\w./-]+$/.test(prog) || RESERVED.has(prog) || prog === '.'
+      || CWD_SHIFTERS.has(basename(prog)) || WRAPPER.has(basename(prog)) || prog === 'builtin') return null;
+    if (/^(?:ba|da|z|k)?sh$/.test(basename(prog)) && (!toks[i + 1] || /^[+-]/.test(toks[i + 1]))) return null;
+  }
+  return cwd;
+}
+
 // Attributed as spelled (absolutize): `cwd/p` is NOT normalized here, so a `link/..` inside `p`
 // is resolved component-wise (physically) by repo-root later, not collapsed lexically first
 // (review r2 X3).

@@ -129,7 +129,7 @@ gh repo view --json nameWithOwner -q .nameWithOwner
 - 보고 채널: 이슈 댓글(마일스톤·결정 요청) + `orca worktree set --worktree active --comment "gh-loop #N: <마일스톤>" --json`(마일스톤마다). Run이 바인딩돼 있으면 코디네이터 핸들로 `orca orchestration send --type status` 1건씩(시작·결정 요청·완료만).
 - 재개 프롬프트를 받으면 Stage 5 "재개" 1~6을 워커가 수행한다(댓글 해석·권한자·nonce·멱등 — 코디네이터의 `세션에서 직접 결정함` 댓글도 그 nonce의 답이다, 재개 2). 머지 승인 댓글이면 `gh pr merge --match-head-commit <approved-sha>`까지는 워커가 실행하고(2026-10-01 #62 선례), 이슈에 "머지 완료, 정리 필요(워크트리·브랜치)" 댓글을 남긴 뒤 턴을 종료한다 — 정리는 코디네이터 몫.
 - **자기 워크트리를 지우지 않는다**(그 안에서 실행 중). 머지도 승인 없이는 하지 않는다(Non-Negotiables).
-- `.omp/harness-state/`는 세션 cwd 기준(#58) — 워크트리에서 테스트해도 "No build/test verification recorded" 경고가 날 수 있다(medium은 경고, high는 BLOCK).
+- `.omp/harness-state/`의 backpressure 기록은 검증·편집 대상 워크트리 기준입니다(#58). 구조화 `cwd` 또는 선행 리터럴 `cd <path> &&`를 사용하며, 해석 불가 입력은 기록하지 않습니다. 이전 확장을 로드한 세션은 갱신 코드를 자동으로 읽지 않으므로 새 세션에서 검증합니다. 상태 파일을 다른 워크트리로 복사하지 않습니다.
 
 ### Stage 1 — Finding → Issue (dedup + throttle)
 

@@ -1,38 +1,34 @@
-name: linked-worktree-version-check-68
+name: backpressure-worktree-root-58-astra
 status: done
-completed: 2026-10-12
+completed: 2026-10-13
 version: 1
-task_id: "20261012-190000-68a1"
-# gh-loop worker Stage 2에 따라 이슈 #68 본문 끝 "승인된 작업 범위"·AC 4건과 "세션에서 직접 결정함" 댓글(2026-10-12 "ㄱㄱ")을 명세로 삼습니다.
-# 직전 완료 seed(harness-sync-retire-repo-root-canonical-100)는 git 이력에 보존합니다.
+task_id: "20261013-58-astra"
+# 이슈 #58 끝의 승인 범위·AC 5건과 astra dispatch(2026-10-13T04:17:44Z)를 따릅니다.
+# 직전 완료 seed는 git 이력에 보존합니다.
 goal: >
-  #68: 링크드 워크트리(`git worktree add`, Orca 워크트리 포함)에서도 `harness-version-check.mjs`가 `HARNESS STALE … run /skill:harness-check`를
-  내서 워크트리별 sync로 하네스 파일이 main과 갈라지던 결함을 고칩니다. 게이트가 `git rev-parse --git-dir` ≠ `--git-common-dir`로 링크드
-  워크트리를 판정하고 메인 워크트리 브랜치에 커밋된 `harness-meta.json`과 비교해 `HARNESS BEHIND MAIN`(메인이 최신 — 워크트리에서 merge)
-  또는 `HARNESS STALE (linked worktree)`(메인 체크아웃에서 sync·커밋 후 merge)를 냅니다. 어느 쪽도 워크트리에서 harness-check를 지시하지 않으며
-  24h 캐시는 메인·워크트리가 서로 다른 파일을 씁니다. `harness-check` 스킬은 링크드 워크트리에서 안내 후 중단하고 `--force-worktree`로만
-  진행합니다. 격리 임시 리포 + `git worktree add` fixture 테스트, CHANGELOG [Unreleased]·README ko/en 한 줄을 남깁니다.
+  backpressure 기록 위치를 세션 cwd에서 검증·편집 대상 워크트리의 repoToplevel로 바꿉니다.
+  bash의 구조화 cwd와 선행 리터럴 cd를 해석하고, 해석 불가 또는 저장소 밖이면 기록을 생략합니다.
+  편집은 파일 경로로 귀속하며 hook mode의 커밋 워크트리 기준 판정은 바꾸지 않습니다.
 constraints:
-  - "`scripts/harness-sync.sh`는 변경하지 않습니다(스킬 층 가드만)."
-  - "`index.ts`·`backpressure-*.mjs`·`repo-root.mjs` 호출부는 수정하지 않습니다(#58 워커 영역) — 링크드 판정은 `git rev-parse` 비교를 쓰고 그 이유를 게이트 주석에 적습니다."
-  - "메인 체크아웃·단일 체크아웃·소스 리포(self-skip)·하네스 없는 리포의 기존 출력은 불변입니다 — 기존 version-check 테스트 전부 통과, Linux 전체 suite skip 0 유지."
-  - "Stage 2의 체크 완료 seed·scope → 코드 커밋 → 리뷰 후속 → closeout 커밋 순서를 따릅니다."
+  - "다른 gh-loop-issue-58* 브랜치를 조회하거나 참고하지 않습니다."
+  - "사용자가 제공한 재현을 RED 근거로 삼고 테스트를 먼저 작성합니다. suite는 변경 완료 후 한 번 실행합니다."
+  - "기존 chdir·cdTarget 경로 해석과 repoToplevel을 재사용하며 범용 shell 해석기를 만들지 않습니다."
+  - "기록 생략은 HARNESS_DEBUG 로그로 알리고 세션 cwd로 폴백하지 않습니다."
 acceptance_criteria:
   - id: AC1
-    title: "링크드 워크트리 세션에서 STALE 대신 BEHIND MAIN(메인 커밋 meta가 최신) / STALE (linked worktree)(메인도 뒤처짐) 안내가 나오고 /skill:harness-check 지시가 없다 — 격리 임시 리포 + git worktree add fixture 테스트이고 캐시 키 분리(별도 캐시 파일)를 포함한다."
+    title: "세션 A에서 bash(cwd=B)·cd B && 검증의 PASS/FAIL이 B에만 기록되고 A는 불변입니다. 실제 index.ts 핸들러 캡처로 검증합니다."
   - id: AC2
-    title: "harness-check 스킬이 링크드 워크트리에서 안내 후 중단하며 --force-worktree로만 진행한다(스킬 문서 + 절차), README ko/en 한 줄과 CHANGELOG [Unreleased] 한 줄이 있다."
+    title: "B의 편집은 B만 UNKNOWN으로 만듭니다. 링크드 워크트리도 별도 state dir을 사용하며 hook mode는 커밋 워크트리 상태만 읽습니다."
   - id: AC3
-    title: "메인 체크아웃·단일 체크아웃·소스 리포·하네스 없는 리포의 기존 출력이 불변(기존 테스트 통과)이고 Linux 전체 suite skip 0, node scripts/docs-drift 0 errors/0 warnings이다."
+    title: "해석 불가 cwd·저장소 밖 cwd는 backpressure 상태를 쓰지 않으며 HARNESS_DEBUG에서 생략을 알립니다."
   - id: AC4
-    title: "비범위가 지켜진다 — scripts/harness-sync.sh 워크트리 모드, 과거 갈라진 소비 리포 복구, index.ts·backpressure-*.mjs·repo-root.mjs 수정이 diff에 없고, 이 이슈의 dispatch 튜플이 audit.jsonl에 gh_loop_dispatched(issue 68)로 있다."
+    title: "단일 워크트리 회귀가 없고 Linux suite skip 0 및 최종 docs-drift 0/0을 확인합니다. 이종 모델 reviewer 3-pass와 verifier 판정을 확보합니다."
+  - id: AC5
+    title: "#51 서브에이전트 격리·#45 service 라우팅·#57 verify-commands를 변경하지 않습니다. 운영 규칙 1단락과 astra dispatch 감사 기록을 남깁니다."
 out_of_scope:
-  - "`scripts/harness-sync.sh`의 링크드 워크트리 모드(--allow-linked-worktree)."
-  - "과거에 갈라진 소비 리포(chats/bonefish) 복구."
-  - "#58 영역: `index.ts`, `backpressure-*.mjs`, repo-root 호출부."
-  - "PR 생성·교차검증 게시·head와 nonce 결정 요청은 커밋 뒤 후속 절차이며 AC 선체크 대상이 아닙니다."
+  - "검증 내용과 작업 트리 해시의 결속 및 서브에이전트 상태 격리(#51)."
+  - "service·비동기 결과 라우팅(#45) 및 verify-commands 분류·레지스트리 변경(#57)."
+  - "커밋·push·PR·closeout은 검증 뒤 절차이며 머지는 새 승인 전 금지합니다."
 assumptions:
-  - "시작 HEAD는 main 0a24c23(2026.88)이고 작업트리는 깨끗했습니다(ingest가 더한 audit.jsonl 1행 제외)."
-  - "메인 워크트리는 `git worktree list --porcelain`의 첫 항목입니다(git 문서 보증). bare 메인이면 경로 없이 STALE (linked worktree) 문구만 냅니다."
-risks:
-  - "남은 low 잔여(리뷰 3라운드 PASS WITH NOTES): `GIT_CONFIG_COUNT` 류로 main이 bare로 보이는 경우, `worktree list`를 `-z` 없이 읽어 개행 포함 경로가 잘리는 경우, 낡은 main 모드 캐시가 있는 워크트리에서 git 자체가 실패하면 기존 안내로 돌아가는 경우(`.omp/state`는 gitignored라 #68 이전 세션이 남긴 캐시에 한함)."
+  - "시작 HEAD는 main 54eabe1f129ae3365344859ab3a1dc31fb6f9049이며 작업 트리는 깨끗했습니다."
+  - "shell 내부의 임의 스크립트나 runner가 실행 도중 바꾸는 cwd는 정적으로 알 수 없습니다."
