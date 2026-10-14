@@ -45,7 +45,7 @@ description: "Markdown as source of truth, docs/sum untracked policy, HTML as de
 - 스킬 디렉터리의 entry 파일은 반드시 `SKILL.md` (대문자 S, K, I, L, L, M, D).
 - 소문자 `skill.md`는 Linux 환경에서 silent failure
   ([anthropics/skills#314](https://github.com/anthropics/skills/issues/314)).
-- 글로벌(`~/.claude/skills/` — OMC 스킬은 OMP에서도 여기서 로드됨)·로컬(`.omp/skills/`) 양쪽 모두 동일.
+- 글로벌(`~/.omp/agent/skills/` — OMP 네이티브 사용자 레벨; `init`·`migrate` 전용)·로컬(`.omp/skills/`) 양쪽 모두 동일.
 
 ### R6. 시점 기록 문서는 경로 이동 뒤에도 옛 경로 인용을 유지
 
