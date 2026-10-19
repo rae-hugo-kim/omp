@@ -1,5 +1,6 @@
 name: adversary-panel-112
-status: approved
+status: done
+completed: 2026-10-19
 version: 1
 task_id: "20261019-134500-112a"
 # 이슈 #112 본문(2026-10-19 사용자 결정 "sol·opus5.5·argon 추가 후 사용 결과로 모델 확정")을 명세로 삼습니다.
