@@ -1,42 +1,36 @@
-name: gh-loop-conditional-auto-merge-105
-status: done
-completed: 2026-10-13
+name: adversary-panel-112
+status: approved
 version: 1
-task_id: "20261013-043500-105a"
-# gh-loop worker Stage 2에 따라 이슈 #105 본문의 정책 조건 1~6·반드시 질문 목록·기록 양식·범위·AC 4건과 "세션에서 직접 결정함" 댓글(2026-10-13)을 명세로 삼습니다.
-# 직전 완료 seed(linked-worktree-version-check-68)는 git 이력에 보존합니다.
+task_id: "20261019-134500-112a"
+# 이슈 #112 본문(2026-10-19 사용자 결정 "sol·opus5.5·argon 추가 후 사용 결과로 모델 확정")을 명세로 삼습니다.
+# 직전 완료 seed(gh-loop-conditional-auto-merge-105)는 git 이력에 보존합니다.
 goal: >
-  #105: gh-loop dispatch 모드의 머지를 "PR별 명시 승인"(10-02 결정)에서 "조건부 자동 머지 + 예외는 승인제"로 개정합니다.
-  gh-loop SKILL 코디네이터 절(Stage 0)에 "조건부 자동 머지" 하위 절을 더해 조건 1~6(워커 추천 A·설계 결정 없음 / CI pass /
-  verifier PASS(WITH NOTES, 미해결 AC 0) / reviewer PASS(WITH NOTES, contested 0) / 변경 파일이 이슈 범위·AC 안 / rebase 뒤 새 head는 검증 4종 보고 + rebased 마커),
-  반드시 질문 목록(발행·force-push·브랜치 보호는 항상 승인제), `## 정책에 따라 자동 머지` 기록 댓글 양식과 auto-merged 마커를 정의합니다.
-  워커 Stage 5 결정 요청 양식에는 조건 체크리스트를 더하고, 통합 계약에 HITL 머지 예외 1단락, gh-fanout 순차 처리 절에 참조 1줄,
-  CHANGELOG [Unreleased]에 항목을 남깁니다. 코드 변경은 없습니다(docs-only).
+  #112 사이클 ①: 3-pass 적대 리뷰의 Pass 2를 `adversary`(@advisor) 단일 스폰에서 같은 프롬프트를 쓰는
+  4개 에이전트(adversary · adversary-sol · adversary-opus · adversary-argon) 병렬 패널로 바꾸고,
+  소스별(reviewer 자신·멤버 4명·code-reviewer) 실측 모델 전부·thinking·상태·소요·verdict·finding별 심각도와 겹친 소스(also)를
+  docs/reviews/review-<ts>.panel.jsonl 행으로 남겨 사이클 ②(모델 확정)의 자료를 만듭니다.
 constraints:
-  - "docs-only입니다 — `.omp/skills/gh-loop/SKILL.md`, `.omp/skills/gh-fanout/SKILL.md`, `.omp/rules/harness-harness_integration_contract.md`, `CHANGELOG.md`, 그리고 워크플로 산출물(`docs/harness/`)만 바꿉니다."
-  - "`index.ts`·backpressure 코드 등 코드 파일은 건드리지 않습니다(#58 변형 세션 3개가 수정 중)."
-  - "발행(범프)·원격 재작성(force-push)·브랜치 보호 변경은 항상 승인제라는 문장을 SKILL 절·결정 요청 양식·통합 계약에 모두 남깁니다."
-  - "코디네이터만 자동 머지를 실행합니다 — 워커는 계속 머지하지 않고 체크리스트를 보고합니다(소유자 1명 원칙 유지)."
-  - "Stage 2의 체크 완료 seed·scope → 문서 커밋 → 리뷰 후속 → closeout 커밋 순서를 따릅니다."
+  - "세 미러 파일 본문은 adversary.md와 바이트 동일해야 합니다 — 프롬프트가 같아야 모델 비교가 공정합니다. 본문은 adversary.md에서만 고치고 다시 미러합니다."
+  - "멤버는 frontmatter model 고정값(openai-codex/gpt-5.6-sol · anthropic/claude-opus-5-5 · google-antigravity/gemini-4-argon)이고 세 미러의 thinkingLevel은 argon 상한에 맞춘 high입니다. 기존 adversary는 @advisor 롤 접미사(:xhigh)를 따라 thinking이 같지 않습니다(실측) — 롤 변경은 범위 밖이고 분석 때 보정합니다."
+  - "완료 = 최종 출력에 파싱 가능한 ## Verdict 라인이 있고 Findings/Clean Areas가 diff의 file:line을 하나 이상 인용함. 그 외(오류·429·인증 회수·404·거부·블로커 메시지·잘린 보고·file:line 없는 verdict)는 failed로 행만 남기고 패널을 막지 않습니다. 사이드카 models는 reviewer 자신의 레코드 전부 + 완료 멤버 각각의 마지막 model_change 모델이고, 이종성은 소스 단위 — 완료 멤버 하나 이상의 마지막 모델이 reviewer의 어느 레코드에도 없는 계열일 때만 성립하며, 그렇지 않으면 null(PASS 계열이면 사이드카 자체를 쓰지 않음)입니다."
+  - "소스별 결과는 리뷰와 같은 basename의 docs/reviews/review-<ts>.panel.jsonl(gitignored)에 남깁니다 — 리뷰 중 추적 파일(audit.jsonl)을 건드리면 staged diff 해시가 어긋납니다(패널 r1 지적). sync 목록에는 미러 파일 3개만 추가합니다."
 acceptance_criteria:
   - id: AC1
-    title: "SKILL 코디네이터 절에 조건 1~6·반드시 질문 목록·`## 정책에 따라 자동 머지` 기록 양식(auto-merged 마커)이 있고, 워커 Stage 5 양식이 조건 체크리스트를 포함하며, 발행·force-push·브랜치 보호 항상 승인제 문장이 있습니다."
+    title: "세 미러 파일(adversary-sol/opus/argon.md)의 본문이 adversary.md와 바이트 동일하고 frontmatter model이 위 세 selector입니다."
   - id: AC2
-    title: "통합 계약(harness-harness_integration_contract)에 HITL 머지 예외 조건 1단락이 있고, gh-fanout 순차 처리 절에 참조 1줄이 있으며, CHANGELOG [Unreleased]에 항목이 있습니다."
+    title: "reviewer.md가 네 멤버를 한 tasks[] batch로 스폰(solutionSpace 포함)하고, reviewer 자신과 멤버별 트랜스크립트 model_change 실측(실행된 모델 전부)·완료/failed 정의(Verdict 라인 + file:line 인용)·소스별 .panel.jsonl 행 스키마(finding별 also)·Cross-Validation 소스 정의·사이드카 element 3 소스 단위 규칙·element 4/5 고정값을 harness-agent_routing·harness-adversarial_review·CHANGELOG과 하나의 정의로 명시합니다."
   - id: AC3
-    title: "node scripts/docs-drift가 0 errors/0 warnings이고 하네스 suite(node --test .omp/extensions/harness/tests/*.test.mjs)가 통과합니다(문서만이라 변화 없음)."
+    title: "세 멤버의 라이브 스폰이 요청 모델로 해결됩니다 — 트랜스크립트 model_change 마지막 레코드가 요청 selector와 같고 resolvedModelIsFallback=false입니다."
   - id: AC4
-    title: "비범위가 지켜집니다 — 자동 발행·범프 승인 생략·option A 러너·gh-loop-record.mjs 이벤트 추가·코드 파일 수정이 diff에 없고, 이 이슈의 dispatch 튜플이 audit.jsonl에 gh_loop_dispatched(issue 105)로 있습니다."
+    title: "review-gate가 세 selector를 gpt/claude/gemini 계열로 파싱하고(gemini-4-argon-disabled는 null), node scripts/docs-drift가 0/0, 하네스 suite(node --test .omp/extensions/harness/tests/*.test.mjs)가 전 항목 통과합니다."
 out_of_scope:
-  - "자동 발행(범프·태그·릴리스)과 범프 승인 생략."
-  - "option A 러너(`gh-loop-runner.mjs`)·`gh-loop-record.mjs` 이벤트 추가(필요하면 후속)."
-  - "README ko/en·`templates/github-workflows/`의 'never auto-merge' 문구 — 이슈 범위 밖이라 PR 본문에 stale 후보로만 보고합니다."
-  - "PR 생성·교차검증 게시·head와 nonce 결정 요청은 커밋 뒤 후속 절차이며 AC 선체크 대상이 아닙니다."
+  - "사이클 ②: docs/reviews/*.panel.jsonl 행 5~10건 집계 후 상시 멤버 확정·탈락 파일 제거(별도 seed)."
+  - "code-reviewer(Pass 3) 모델·@advisor 롤 변경."
+  - "AGENTS.md·claudedocs/CLAUDEKR.md — AGENTS.md 본문이 바뀌지 않아 미러 동기화 대상이 아닙니다."
 assumptions:
-  - "시작 HEAD는 main 54eabe1(PR #104 머지 후)이고 작업트리는 깨끗했습니다(ingest가 더한 audit.jsonl 1행 제외)."
-  - "이슈 조건 6의 `<!-- gh-loop:rebased:N -->` 마커는 저장소 어디에도 정의돼 있지 않았습니다(grep 0건). N을 PR 번호로 정의하고, 기록 댓글 본문에 새 head SHA를 적는 것으로 head 결속을 보강합니다 — 결정 요청에서 사용자에게 확인받습니다."
-  - "조건 3·4의 verdict와 조건 5의 범위 대조는 워커 보고를 코디네이터가 PR 댓글·diff·CI 실측과 대조해 판정합니다(워커 자기 보고만으로 통과시키지 않습니다)."
+  - "시작 HEAD는 main 8c8120b(PR #106 머지 후)이고 작업트리에는 untracked handoff 문서(2026-10-16 마찰 감사, #109~#111이 인용) 1건만 있었습니다 — 같은 커밋에 싣습니다(사용자 승인 2026-10-19)."
+  - "task 스키마에 스폰별 model 필드가 없고 task.agentModelOverrides는 에이전트 이름 단위이므로 이름이 다른 에이전트 파일 3개가 필요합니다(omp://task-agent-discovery.md)."
 risks:
-  - "자기 보고 체크리스트는 위조·오기재 가능성이 있어 코디네이터가 CI·head·변경 파일은 GitHub에서 직접 재조회합니다. verifier·reviewer verdict는 PR에 게시된 근거 확인까지만 가능하고 재실행하지 않습니다 — 통합 계약에 잔여 표면으로 기록합니다."
-  - "SKILL 요약·README·템플릿에 남은 'never auto-merges' 문구는 범위 밖이라 이 PR 이후 stale일 수 있습니다."
-  - "리뷰 라운드 4(r1 FAIL → r2 PASS WITH NOTES → r3 FAIL → r4 FAIL, high 1건 = 머지 큐 경로)는 반복 한도(3회) 이후라 r4 지적(머지 큐 브랜치 정책 제외·PAT 모드 판정·계약 정렬)을 고친 뒤 재리뷰 없이 closeout합니다. 마지막 diff는 reviewer 검증을 받지 않았고 verifier(r4 전 diff 기준 PASS WITH NOTES)와 docs-drift·suite로만 확인했어요."
+  - "리뷰 1건당 Pass 2 스폰이 1→4로 늘어 codex·anthropic·antigravity 쿼터 소모가 커집니다 — 평가 기간 한정 비용으로 받아들입니다."
+  - "argon은 2026-10-19 13:03 프로브에서 6회 연속 429(RESOURCE_EXHAUSTED)였다가 13:40 프로브에서 정상이었습니다 — Google 측 용량 문제라 failed 행이 자주 남을 수 있습니다."
+  - "sol은 Pass 3 code-reviewer 오버라이드(gpt-5.6-sol:xhigh)와 같은 모델이라 Pass 2/3 중복이 있습니다 — '형제 코드네임이 더 잡는가'를 보는 비교 대상으로 의도적으로 둡니다."

@@ -369,6 +369,28 @@ test('het: real version/variant suffixes still map (o3-mini, deepseek-r1, gpt-5.
   });
 });
 
+// #112 adversary panel: the exact selectors the pinned members resolve to must parse as three
+// families through a hyphenated provider segment, and the Antigravity roster's `-disabled`
+// row (a negated id for accounts without Argon access) must stay a non-model.
+test('het: #112 panel selectors — hyphenated provider, three families; `-disabled` roster id rejected', () => {
+  withRepo(HIGH, (dir) => {
+    const hash = stagedHash(dir);
+    const panel = ['anthropic/claude-fable-5-1', 'openai-codex/gpt-6-astra', 'openai-codex/gpt-5.6-sol', 'anthropic/claude-opus-5-5', 'google-antigravity/gemini-4-argon'];
+    writeReview(dir, `review-${TODAY}-120000.json`, evidence(hash, { models: panel }));
+    assert.equal(runGate(dir).status, 0, 'the full panel array is accepted');
+    writeReview(dir, `review-${TODAY}-120000.json`, evidence(hash, { models: ['anthropic/claude-fable-5-1', 'google-antigravity/gemini-4-argon'] }));
+    assert.equal(runGate(dir).status, 0, 'claude + gemini through google-antigravity is two families');
+    writeReview(dir, `review-${TODAY}-120000.json`, evidence(hash, { models: ['openai-codex/gpt-5.6-sol', 'google-antigravity/gemini-4-argon'] }));
+    assert.equal(runGate(dir).status, 0, 'gpt and gemini are distinct families');
+    writeReview(dir, `review-${TODAY}-120000.json`, evidence(hash, { models: ['anthropic/claude-fable-5-1', 'anthropic/claude-opus-5-5'] }));
+    assert.equal(runGate(dir).status, 2, 'reviewer + the opus member alone is ONE family (claude)');
+    writeReview(dir, `review-${TODAY}-120000.json`, evidence(hash, { models: ['anthropic/claude-fable-5-1', 'google-antigravity/gemini-4-argon-disabled'] }));
+    const disabled = runGate(dir);
+    assert.equal(disabled.status, 2, 'a `-disabled` roster id is a negation, not a model');
+    assert.match(String(disabled.stderr), /not a clean model name/, 'rejected as unparseable evidence, not merely non-covering');
+  });
+});
+
 test('het: empty models array / non-string entries are invalid', () => {
   withRepo(HIGH, (dir) => {
     const hash = stagedHash(dir);

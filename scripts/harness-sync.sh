@@ -215,6 +215,9 @@ PATHS=(
   ".omp/skills/gh-fanout"
   # .omp/agents — INDIVIDUAL FILES: consumers add their own agents next to these.
   ".omp/agents/adversary.md"
+  ".omp/agents/adversary-sol.md"
+  ".omp/agents/adversary-opus.md"
+  ".omp/agents/adversary-argon.md"
   ".omp/agents/code-reviewer.md"
   ".omp/agents/reviewer.md"
   ".omp/agents/verifier.md"

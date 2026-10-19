@@ -26,7 +26,7 @@ description: "3-pass adversarial verification layer: reviewer + heterogeneous ad
 
 3-pass 적대 리뷰(`.omp/agents/reviewer.md`)는 실행 토폴로지가 둘이다 — depth 0 세션이 reviewer 에이전트를 스폰하거나, task capability를 가진 depth 1 세션이 프로토콜을 직접 수행한다(진입점 우선순위와 디스패치 preflight: [`.omp/rules/harness-agent_routing.md`](harness-agent_routing.md)). 어느 토폴로지든 아래 3개 불변식이 동일하게 적용된다 — 수행 주체의 유연성(에이전트든 세션이든)은 게이트 우회가 아니다.
 
-1. **이종성 증거는 실측만**: 사이드카의 models 배열은 자식(adversary) 트랜스크립트의 `model_change` 레코드 실측으로만 기재한다. 자기 신고·thread id·세션 id는 증거가 아니다.
+1. **이종성 증거는 실측만**: 사이드카의 models 배열은 reviewer 자신의 `model_change` 레코드 **전부**와 자식(adversary 패널의 각 멤버) 트랜스크립트의 **마지막** `model_change`(최종 출력을 낸 모델)를 실측해 기재한다. 자기 신고·thread id·세션 id는 증거가 아니다. 패널(2026-10-19~, [`.omp/rules/harness-agent_routing.md`](harness-agent_routing.md) "adversary 패널")에서는 **완료**(최종 출력에 파싱 가능한 `## Verdict` 라인이 있고 Findings/Clean Areas가 diff의 `file:line`을 하나 이상 인용함 — 거부·블로커 메시지·잘린 보고·`file:line` 없는 verdict는 실패)된 멤버의 마지막 모델만 배열에 들어가고, 이종성은 소스 단위로 판정한다: 완료된 멤버 하나 이상의 마지막 모델이 reviewer의 어느 레코드에도 속하지 않는 계열일 때만 성립하며, reviewer 자신의 교차 계열 폴백과 멤버의 startup selector는 두 번째 계열이 아니다(소스가 하나면 관점도 하나다). 소스별(멤버 4 + self + code-reviewer) 수치는 리뷰와 같은 basename의 `docs/reviews/review-<ts>.panel.jsonl`이 받는다(추적 파일인 `audit.jsonl`에는 리뷰 중 쓰지 않는다 — diff 해시가 어긋난다).
 2. **리뷰 수행 세션 ≠ 변경 작성 세션**: 세션이 프로토콜을 직접 수행하는 경로에서 Pass 1(셀프 분석)의 독립성 조건이다. 변경을 작성한 세션이 자기 변경을 Pass 1으로 심사하면 self-review bias 제거라는 프로토콜의 목적이 무너진다.
 3. **게이트는 JSON tuple 사이드카만 검증**: review-gate는 `docs/reviews/review-<ts>.json`의 고정 arity tuple만 읽는다. 수행 주체가 무엇이든 증거 형식과 검증 경로는 같다.
 
@@ -34,7 +34,7 @@ description: "3-pass adversarial verification layer: reviewer + heterogeneous ad
 
    실측 근거(2026-07-30, precommit-gate-enforcement 5라운드 전건): `@slow`(=`anthropic/claude-fable-5`)가 **적대 리뷰의 우회 프로브 단계에서 매번 `Refusal (cyber)`를 반환**했고, `retry.fallbackChains`가 세션을 `anthropic/claude-opus-5`로 옮겨 pass 1의 47~80%가 opus에서 수행됐다. 사이드카 5건 모두 primary만 기재해 이 사실이 증거에서 누락됐다. 계열(anthropic)이 같아 이종성 판정은 불변이었으나, **"기록되지 않은 대체"라는 결함 유형 자체가 발생**했다. 거부는 프로브가 공격 도구로 분류되기 때문이며, 회피 대상이 아니라 회계 대상이다 — 폴백을 막지 말고 기재하라.
 
-5. **디스패치 전 라우팅 프로브**: 이종 리뷰가 필요한 커밋에서 reviewer를 스폰하기 전, adversary 경로 원샷 프로브(한 단어 응답 + 트랜스크립트 `model_change` 실측)로 비주계열 프로바이더 인증을 확인한다. 로컬 크리덴셜 존재("로그인됨" 표시)는 서버측 토큰 유효성의 증거가 아니다 — 유효성은 첫 API 호출에서야 판명된다.
+5. **디스패치 전 라우팅 프로브**: 이종 리뷰가 필요한 커밋에서 reviewer를 스폰하기 전, 패널 멤버 경로 원샷 프로브(한 줄 응답 + 트랜스크립트 `model_change` 실측 — 2026-10-19 `ProbeSol`/`ProbeOpus`/`ProbeArgon` 4.7~6.9초)로 비주계열 프로바이더 인증을 확인한다. 로컬 크리덴셜 존재("로그인됨" 표시)는 서버측 토큰 유효성의 증거가 아니다 — 유효성은 첫 API 호출에서야 판명된다.
 
    실측 근거(2026-08-03, docs/sum/session_2026-08-03_pr-cleanup-gate-override-codex-auth.md): openai-codex 토큰이 서버측 회수된 상태에서 adversary/code-reviewer 스폰 5회 전부 1.6~3.9초 만에 0바이트 즉사(`authentication token has been invalidated`), 리뷰어가 7분 완주한 뒤에야 이종성 불성립이 판명되어 감사 오버라이드로 우회했다. 프로브 1회(~5초)가 완주 후 발견보다 싸다.
 
