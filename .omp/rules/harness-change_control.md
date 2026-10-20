@@ -43,7 +43,7 @@ BEHAVIORAL examples:
 ## MUST: test-first for code logic when test infrastructure exists (grade shared with `rule://harness-tdd_policy`)
 
 - If test infrastructure exists and the change is code logic, test-first (RED → GREEN → TIDY) is MUST; skipping it needs the user's explicit approval (`rule://harness-tdd_policy` Exception Protocol).
-- If test infrastructure does not exist, the change is docs/policy-only, or automation is not feasible, provide a deterministic alternative verification artifact (manual reproduction procedure, smoke test, or eval case) — no approval needed.
+- If test infrastructure does not exist, the change is docs/policy-only, or the existing infrastructure cannot exercise the change at all (automation is not feasible), provide a deterministic alternative verification artifact (manual reproduction procedure, smoke test, or eval case) — no approval needed. When infrastructure exists and the change is code logic, the approval path wins: an infeasibility judgement is the reason stated for approval, not a bypass.
 
 ## Self-Check
 - [ ] Does every changed line trace directly to the user's request?

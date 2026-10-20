@@ -5,7 +5,7 @@ description: "RED -> GREEN -> TIDY: MUST for code-logic changes where test infra
 
 ## MUST: test-first for code-logic changes where test infrastructure exists
 
-Code-logic changes in a repo with test infrastructure MUST follow the RED → GREEN → TIDY cycle. Skipping test-first in that case needs the user's explicit approval (Exception Protocol below). Three paths need **no approval** — provide a deterministic alternative verification artifact instead (manual reproduction procedure, smoke test, or eval case; `rule://harness-verification_tests_and_evals`): no test infrastructure in the repo, docs/policy-only changes, and changes where automation is not feasible. `rule://harness-change_control`, `checklists/bugfix.md` and `rule://harness-verification_tests_and_evals` state the same grade and the same exception list.
+Code-logic changes in a repo with test infrastructure MUST follow the RED → GREEN → TIDY cycle. Skipping test-first in that case needs the user's explicit approval (Exception Protocol below). Three paths need **no approval** — provide a deterministic alternative verification artifact instead (manual reproduction procedure, smoke test, or eval case; `rule://harness-verification_tests_and_evals`): no test infrastructure in the repo, docs/policy-only changes, and changes the existing infrastructure cannot exercise at all (automation is not feasible — e.g. a non-code surface, a live external system). **Precedence**: when test infrastructure exists and the change is code logic, the approval path wins — "automation is not feasible" is then the reason you state in Exception Protocol step 1, never a bypass. `rule://harness-change_control`, `checklists/bugfix.md` and `rule://harness-verification_tests_and_evals` state the same grade and the same exception list.
 
 ## Cycle
 
@@ -76,4 +76,4 @@ Approval is required only when test-first was feasible — test infrastructure e
 2. Propose alternative verification (manual steps, smoke test, eval case)
 3. Get the user's explicit approval before proceeding without TDD
 
-No approval is needed when test infrastructure does not exist, the change is docs/policy-only, or automation is not feasible: state the alternative deterministic artifact and proceed.
+No approval is needed when test infrastructure does not exist, the change is docs/policy-only, or the existing infrastructure cannot exercise the change at all: state the alternative deterministic artifact and proceed. If infrastructure exists and the change is code logic, an infeasibility judgement is step 1 above, not this path.

@@ -24,8 +24,10 @@ differs while it still says `status: synced` ("Reference doc claims synced but i
 
 - [ ] In the commit that changes `AGENTS.md`: either leave `source_commit_hash`/`status` untouched
       for the follow-up, or set `status: stale` if the mirror content is not updated yet.
-- [ ] Follow-up commit (no `AGENTS.md` change): set `source_commit_hash` to the hash above and
-      `status: synced`.
+- [ ] Follow-up commit (no `AGENTS.md` change), only once the mirror content is actually synced:
+      set `source_commit_hash` to the hash above and `status: synced`. Push the `AGENTS.md` commit
+      and this follow-up together — a lone push of the first commit fails `docs-drift` in `pre-push`
+      unless the mirror says `status: stale`.
 
 ## Suggested verification commands
 
