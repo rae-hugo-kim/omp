@@ -1,5 +1,6 @@
 name: docs-verification-authority-113
-status: approved
+status: done
+completed: 2026-10-20
 version: 1
 task_id: "20261020-025000-113a"
 # gh-loop worker Stage 2에 따라 이슈 #113 본문(2026-10-20 패널 감사 C1·C2·C6·C13·C20의 file:line 모순 목록과 AC 6건)을 명세로 삼습니다.
@@ -42,4 +43,4 @@ assumptions:
   - "OMC 스킬은 ~/.claude/skills에서 계속 발견됩니다(omp://skills.md:130) — 에이전트와 달리 스킬 서술은 유지합니다."
 risks:
   - "adversarial_review.md의 plan/test/completion-attack 게이트는 담당 에이전트가 레포에 없어 Phase 1(plan-attack)조차 실행 주체가 없습니다 — 이 PR은 상태를 정직하게 적을 뿐 게이트를 구현하거나 삭제하지 않으며, 실제 도입 여부 결정은 사용자 몫으로 남깁니다."
-  - "verifier의 verdict 어휘는 PASS / FAIL / INCOMPLETE(verifier.md:118)이고 reviewer·code-reviewer는 PASS / PASS WITH NOTES / FAIL이라 두 어휘가 공존합니다 — 통일은 범위 밖(C5)이고 문서에는 각자의 어휘를 그대로 인용합니다."
+  - "verifier의 verdict 어휘는 PASS / FAIL / INCOMPLETE(verifier.md:114)이고 reviewer·code-reviewer는 PASS / PASS WITH NOTES / FAIL이라 두 어휘가 공존합니다 — 통일은 범위 밖(C5)이고 문서에는 각자의 어휘를 그대로 인용합니다."
