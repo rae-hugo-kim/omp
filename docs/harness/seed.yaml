@@ -1,5 +1,6 @@
 name: seed-lifecycle-contract-114
-status: approved
+status: done
+completed: 2026-10-21
 version: 1
 task_id: "20261020-025203-da34"
 # gh-loop worker Stage 2에 따라 이슈 #114 본문(패널 감사 C4·C11·C19의 file:line 모순 목록, AC1~AC5, 범위 밖)을 명세로 삼습니다.
