@@ -3,16 +3,17 @@ description: "Required verification artifacts: tests, evals, docs-only path, evi
 ---
 # Verification: Tests + Evals
 
-## Global enforcement assumed (provided by oh-my-claudecode)
+## Harness enforcement (this repo's own extension + git hooks — no external package)
 
-### MUST (owner: global-harness): satisfy harness verification gates before completion
+### MUST (owner: global-harness): satisfy the harness verification gates before completion
 
-The harness enforces these controls mechanically:
-- `acceptance-gate`: Blocks completion claims without passing tests
-- `backpressure-gate`: Slows down after repeated failures
-- Architect verification is required before completion
+The harness enforces the first three controls mechanically, at the **commit boundary** — `.githooks/pre-commit` runs `commit-gates.mjs` in hook mode, which spawns the four commit gates against the staged index (`commit-gates.mjs:56`, `.githooks/pre-commit:58-64`; `index.ts:555-559` no longer runs them at `tool_call` time). The fourth is a policy MUST carried out by agent delegation:
+- `acceptance-gate`: blocks a commit while `docs/harness/current-scope.md` still has an unchecked `- [ ]` acceptance criterion (unless the WIP declaration is set — the one-shot flag `.omp/harness-state/commit-wip`, or the env convenience `OMP_COMMIT_WIP=1` — allowed with a warning, `gates/acceptance-gate.mjs:508-519`), and validates the closeout-landing shape (seed `approved → done`, scope retired, `task_closed` row appended). A closed seed, a seed without AC, or a seed with AC but no scope file falls to the risk backstop (code → BLOCK unless WIP, docs-only → allow; `:107-144,451-470`); with neither seed nor scope the gate only warns (`:472-474`). It reads the AC checkboxes, `seed.yaml` and the 24h `acceptance-done` override — **never test results** (`gates/acceptance-gate.mjs:382-547`).
+- `backpressure-gate`: `low`/`none` risk is allowed before any status is read (`gates/backpressure-gate.mjs:58-61`); for medium and above it reads `.omp/harness-state/backpressure-status` (written by `backpressure-tracker` from a bare `node --test …`/`npm test`-class run) — no record or `UNKNOWN` blocks high/critical and warns medium, `PASS` allows, and a recorded FAIL blocks every commit that reaches this check (`:89-133`; the `docs/harness/backpressure-skip` one-shot pre-empts it, `:63-77`). It is a verdict over recorded state, not a slowdown.
+- `review-gate`: requires second-perspective review evidence for high/critical commits — the reviewer's JSON tuple sidecar in `docs/reviews/`, a human-review sidecar, or an audited override (`gates/review-gate.mjs`).
+- Independent completion verification is **not** a file gate: the `verifier` agent (`.omp/agents/verifier.md`, shipped and synced by the harness) MUST be spawned via the `task` tool before a completion claim when acceptance criteria exist, its verdict MUST have arrived, and only `PASS` supports the claim (`FAIL`/`INCOMPLETE` = not done — `AGENTS.md` Completion Contract; `.omp/rules/harness-agent_routing.md`). Code-quality review is the separate `reviewer` 3-pass protocol (`.omp/agents/reviewer.md`). A session without the `task` tool reports BLOCKED on verification and escalates to a fresh top-level `omp -p` run instead of self-reviewing (`.omp/rules/harness-harness_integration_contract.md` "Fallback Behavior").
 
-This document defines verification *standards*; harness enforces the *process*.
+This document defines verification *standards*; the gates above enforce the *process* (details and residual surfaces: [`.omp/rules/harness-harness_integration_contract.md`](harness-harness_integration_contract.md)).
 
 ---
 
