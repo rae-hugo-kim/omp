@@ -1,5 +1,6 @@
 name: dev-discipline-docs-115
-status: approved
+status: done
+completed: 2026-10-21
 version: 1
 task_id: "20261021-091500-115a"
 # gh-loop worker Stage 2에 따라 이슈 #115 본문(패널 감사 C3·C5·C7·C12·C17, main 538fdcc 기준 file:line)과
@@ -37,3 +38,5 @@ assumptions:
 risks:
   - "C의 조건절('테스트 인프라가 있는 코드 로직 변경')은 판정이 사람·에이전트의 해석에 남습니다 — 게이트가 검사하지 않으므로 문서상 MUST이며, 리뷰가 유일한 집행 지점입니다."
   - "harness-tdd_policy.md의 frontmatter description을 바꿨습니다 — 규칙집 목록 표시가 달라지지만 이름만 참조하는 README·AGENTS.md·CLAUDEKR는 영향이 없습니다(grep 실측)."
+  - "리뷰 r1(PASS WITH NOTES)의 확정 MEDIUM — '자동화 불가 = 무승인'과 '인프라 있음 + 코드 로직 = 승인'의 겹침 — 을 '인프라 있음 + 코드 로직이면 승인 경로 우선, 자동화 불가는 승인 사유'로 봉합했습니다. 결정 C의 취지(TDD가 가능했는데 건너뛸 때만 승인)를 따른 해석이지만 결정 원문의 '수동 재현 경로는 승인 없이'를 좁힌 것이라 머지 결정 요청에 명시해 사용자가 이의를 제기할 수 있게 합니다(r2 opus 충실도 노트)."
+  - "r2(PASS WITH NOTES)의 LOW 3건(tdd_policy :74 'feasible' 중의·:8 예시·verification :27 용어)은 closeout 커밋에 한 줄씩 반영했고 재리뷰하지 않았습니다 — 마지막 diff는 docs-drift·suite·verifier로만 확인했습니다. 범위 밖으로 남긴 LOW: claudedocs/INDEX.md:6 'marked stale' 문구, policy_sync 체크리스트의 squash/rebase 금지 미언급, 단독 push 문장의 메커니즘 과장(pre-push는 HEAD 기준, CI가 잡음)."

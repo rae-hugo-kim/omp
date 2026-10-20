@@ -5,7 +5,7 @@ description: "RED -> GREEN -> TIDY: MUST for code-logic changes where test infra
 
 ## MUST: test-first for code-logic changes where test infrastructure exists
 
-Code-logic changes in a repo with test infrastructure MUST follow the RED → GREEN → TIDY cycle. Skipping test-first in that case needs the user's explicit approval (Exception Protocol below). Three paths need **no approval** — provide a deterministic alternative verification artifact instead (manual reproduction procedure, smoke test, or eval case; `rule://harness-verification_tests_and_evals`): no test infrastructure in the repo, docs/policy-only changes, and changes the existing infrastructure cannot exercise at all (automation is not feasible — e.g. a non-code surface, a live external system). **Precedence**: when test infrastructure exists and the change is code logic, the approval path wins — "automation is not feasible" is then the reason you state in Exception Protocol step 1, never a bypass. `rule://harness-change_control`, `checklists/bugfix.md` and `rule://harness-verification_tests_and_evals` state the same grade and the same exception list.
+Code-logic changes in a repo with test infrastructure MUST follow the RED → GREEN → TIDY cycle. Skipping test-first in that case needs the user's explicit approval (Exception Protocol below). Three paths need **no approval** — provide a deterministic alternative verification artifact instead (manual reproduction procedure, smoke test, or eval case; `rule://harness-verification_tests_and_evals`): no test infrastructure in the repo, docs/policy-only changes, and changes the existing infrastructure cannot exercise at all (automation is not feasible — e.g. a non-code surface such as a rendered layout or a manual operator procedure). **Precedence**: when test infrastructure exists and the change is code logic, the approval path wins — "automation is not feasible" is then the reason you state in Exception Protocol step 1, never a bypass. `rule://harness-change_control`, `checklists/bugfix.md` and `rule://harness-verification_tests_and_evals` state the same grade and the same exception list.
 
 ## Cycle
 
@@ -71,7 +71,7 @@ For each epic/feature, produce a human-testable checklist:
 
 ## Exception Protocol
 
-Approval is required only when test-first was feasible — test infrastructure exists and the change is code logic — and you want to skip it:
+Approval is required only when test infrastructure exists and the change is code logic, and you want to skip test-first:
 1. State why (legacy constraint, untestable seam, etc.)
 2. Propose alternative verification (manual steps, smoke test, eval case)
 3. Get the user's explicit approval before proceeding without TDD
