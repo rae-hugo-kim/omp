@@ -1,37 +1,45 @@
-name: adversary-panel-112
-status: done
-completed: 2026-10-19
+name: docs-verification-authority-113
+status: approved
 version: 1
-task_id: "20261019-134500-112a"
-# 이슈 #112 본문(2026-10-19 사용자 결정 "sol·opus5.5·argon 추가 후 사용 결과로 모델 확정")을 명세로 삼습니다.
-# 직전 완료 seed(gh-loop-conditional-auto-merge-105)는 git 이력에 보존합니다.
+task_id: "20261020-025000-113a"
+# gh-loop worker Stage 2에 따라 이슈 #113 본문(2026-10-20 패널 감사 C1·C2·C6·C13·C20의 file:line 모순 목록과 AC 6건)을 명세로 삼습니다.
+# 직전 완료 seed(adversary-panel-112)는 git 이력에 보존합니다.
 goal: >
-  #112 사이클 ①: 3-pass 적대 리뷰의 Pass 2를 `adversary`(@advisor) 단일 스폰에서 같은 프롬프트를 쓰는
-  4개 에이전트(adversary · adversary-sol · adversary-opus · adversary-argon) 병렬 패널로 바꾸고,
-  소스별(reviewer 자신·멤버 4명·code-reviewer) 실측 모델 전부·thinking·상태·소요·verdict·finding별 심각도와 겹친 소스(also)를
-  docs/reviews/review-<ts>.panel.jsonl 행으로 남겨 사이클 ②(모델 확정)의 자료를 만듭니다.
+  #113: 완료 검증 주체와 게이트 동작 서술을 코드에 맞춥니다(docs-only). 완료 검증 주체를 코퍼스 전체에서
+  `verifier`(+ reviewer 3-pass) 하나로 통일하고, OMC 레거시 에이전트(architect·critic·test-engineer·librarian·executor·Explore)
+  의존을 MUST/필수 경로에서 제거하거나 현존 에이전트(verifier·reviewer·scout·task·security-reviewer)로 치환하며,
+  acceptance/backpressure 게이트와 통합 계약의 배선 서술(항목 3·4·7, review-gate, override·docs-drift·helper·버전 핀)을
+  `.githooks/pre-commit → commit-gates.mjs`의 실제 동작으로 정정하고, attack 게이트의 실제 도입 상태와 code-reviewer verdict 어휘를 정직하게 적습니다.
 constraints:
-  - "세 미러 파일 본문은 adversary.md와 바이트 동일해야 합니다 — 프롬프트가 같아야 모델 비교가 공정합니다. 본문은 adversary.md에서만 고치고 다시 미러합니다."
-  - "멤버는 frontmatter model 고정값(openai-codex/gpt-5.6-sol · anthropic/claude-opus-5-5 · google-antigravity/gemini-4-argon)이고 세 미러의 thinkingLevel은 argon 상한에 맞춘 high입니다. 기존 adversary는 @advisor 롤 접미사(:xhigh)를 따라 thinking이 같지 않습니다(실측) — 롤 변경은 범위 밖이고 분석 때 보정합니다."
-  - "완료 = 최종 출력에 파싱 가능한 ## Verdict 라인이 있고 Findings/Clean Areas가 diff의 file:line을 하나 이상 인용함. 그 외(오류·429·인증 회수·404·거부·블로커 메시지·잘린 보고·file:line 없는 verdict)는 failed로 행만 남기고 패널을 막지 않습니다. 사이드카 models는 reviewer 자신의 레코드 전부 + 완료 멤버 각각의 마지막 model_change 모델이고, 이종성은 소스 단위 — 완료 멤버 하나 이상의 마지막 모델이 reviewer의 어느 레코드에도 없는 계열일 때만 성립하며, 그렇지 않으면 null(PASS 계열이면 사이드카 자체를 쓰지 않음)입니다."
-  - "소스별 결과는 리뷰와 같은 basename의 docs/reviews/review-<ts>.panel.jsonl(gitignored)에 남깁니다 — 리뷰 중 추적 파일(audit.jsonl)을 건드리면 staged diff 해시가 어긋납니다(패널 r1 지적). sync 목록에는 미러 파일 3개만 추가합니다."
+  - "docs-only입니다 — 이슈의 파일 목록(AGENTS.md, claudedocs/CLAUDEKR.md, .omp/rules/harness-{harness_integration_contract,verification_tests_and_evals,agent_routing,adversarial_review,information_discovery,code_review_policy}.md, checklists/{verify,research_before_implement}.md)과 워크플로 산출물(docs/harness/)만 바꿉니다."
+  - "게이트·스크립트 코드는 바꾸지 않습니다 — 문서를 코드에 맞추지 코드를 문서에 맞추지 않습니다(gates/*.mjs 헤더 주석의 stale 'PreToolUse' 표기도 코드 파일이라 손대지 않고 보고만 합니다)."
+  - "각 정정에는 코드 file:line을 인용합니다(acceptance-gate.mjs·backpressure-gate.mjs·review-gate.mjs·commit-gates.mjs·index.ts·.githooks/pre-commit·scripts/docs-drift·harness-sync.sh·omp://task-agent-discovery.md)."
+  - "AGENTS.md를 바꾸므로 claudedocs/CLAUDEKR.md를 같은 PR에서 동기화하고, source_commit_hash 재스탬프는 AGENTS.md를 건드리지 않는 후속 커밋으로 합니다."
+  - "Stage 2의 체크 완료 seed·scope → 문서 커밋(앞에 reviewer 3-pass 사이드카) → 리뷰 후속 → closeout 커밋 순서를 따릅니다."
 acceptance_criteria:
   - id: AC1
-    title: "세 미러 파일(adversary-sol/opus/argon.md)의 본문이 adversary.md와 바이트 동일하고 frontmatter model이 위 세 selector입니다."
+    title: "완료 검증 주체가 코퍼스 전체에서 verifier 하나입니다: 통합 계약 #8·§6·startup 5·폴백 행, harness-verification_tests_and_evals.md 헤더가 architect/OMC 의존 없이 verifier(+ reviewer 3-pass)로 다시 쓰이고, 폴백은 'verifier 스폰 불가(task 툴 부재) → omp -p top-level 재실행'으로 agent_routing 진입점 규칙과 맞습니다."
   - id: AC2
-    title: "reviewer.md가 네 멤버를 한 tasks[] batch로 스폰(solutionSpace 포함)하고, reviewer 자신과 멤버별 트랜스크립트 model_change 실측(실행된 모델 전부)·완료/failed 정의(Verdict 라인 + file:line 인용)·소스별 .panel.jsonl 행 스키마(finding별 also)·Cross-Validation 소스 정의·사이드카 element 3 소스 단위 규칙·element 4/5 고정값을 harness-agent_routing·harness-adversarial_review·CHANGELOG과 하나의 정의로 명시합니다."
+    title: "C6에 열거된 OMC 에이전트 이름이 MUST/필수 경로에서 사라지거나 현존 에이전트(verifier·reviewer·scout·task·security-reviewer)로 치환되고, adversarial_review.md의 plan/test/completion-attack 절이 현재 실제 도입 상태와 담당 에이전트로 정직하게 서술됩니다."
   - id: AC3
-    title: "세 멤버의 라이브 스폰이 요청 모델로 해결됩니다 — 트랜스크립트 model_change 마지막 레코드가 요청 selector와 같고 resolvedModelIsFallback=false입니다."
+    title: "harness-verification_tests_and_evals.md:6-15가 acceptance/backpressure 게이트의 실제 동작(커밋 경계·AC 체크박스·검증 기록·pre-commit)과 일치합니다."
   - id: AC4
-    title: "review-gate가 세 selector를 gpt/claude/gemini 계열로 파싱하고(gemini-4-argon-disabled는 null), node scripts/docs-drift가 0/0, 하네스 suite(node --test .omp/extensions/harness/tests/*.test.mjs)가 전 항목 통과합니다."
+    title: "통합 계약 항목 3·4·7의 배선이 .githooks/pre-commit → commit-gates.mjs로, review-gate가 필수 목록에 추가되고, :113-117·:48·:66·:83·:115가 현행 코드와 대조돼 정정됩니다(각 정정에 코드 file:line 인용)."
+  - id: AC5
+    title: "AGENTS.md를 바꾸므로 claudedocs/CLAUDEKR.md를 같은 PR에서 동기화하고 source_commit_hash 재스탬프는 AGENTS.md를 건드리지 않는 후속 커밋으로 합니다. node scripts/docs-drift 0 errors."
+  - id: AC6
+    title: "하네스 suite(node --test .omp/extensions/harness/tests/*.test.mjs) 전 항목 통과(문서만이라 변화 없음), 변경 파일이 이 이슈의 파일 목록 안입니다."
 out_of_scope:
-  - "사이클 ②: docs/reviews/*.panel.jsonl 행 5~10건 집계 후 상시 멤버 확정·탈락 파일 제거(별도 seed)."
-  - "code-reviewer(Pass 3) 모델·@advisor 롤 변경."
-  - "AGENTS.md·claudedocs/CLAUDEKR.md — AGENTS.md 본문이 바뀌지 않아 미러 동기화 대상이 아닙니다."
+  - "seed/kickoff 생애주기 계약(C4·C11·C19) — 별도 이슈."
+  - "TDD·리뷰 심각도·policy_sync 체크리스트·e2e 위치(C3·C5·C7·C12·C17) — 별도 이슈."
+  - "omp 18.11.1 드리프트(RULES shadow·~/.claude.json·bash isError/env·LSP 도구명·context_management) — #110."
+  - "게이트 코드 변경 — gates/*.mjs 헤더 주석(acceptance-gate.mjs:1, backpressure-gate.mjs:1의 'PreToolUse hook')의 stale 표기는 보고만 합니다."
+  - "이슈 파일 목록 밖의 librarian 언급(harness-anti_hallucination.md:23, harness-mcp_policy.md:15·99·103·165)과 CHANGELOG 항목 — PR 본문에 후속 후보로만 보고합니다."
+  - "PR 생성·교차검증 게시·head와 nonce 결정 요청은 커밋 뒤 후속 절차이며 AC 선체크 대상이 아닙니다."
 assumptions:
-  - "시작 HEAD는 main 8c8120b(PR #106 머지 후)이고 작업트리에는 untracked handoff 문서(2026-10-16 마찰 감사, #109~#111이 인용) 1건만 있었습니다 — 같은 커밋에 싣습니다(사용자 승인 2026-10-19)."
-  - "task 스키마에 스폰별 model 필드가 없고 task.agentModelOverrides는 에이전트 이름 단위이므로 이름이 다른 에이전트 파일 3개가 필요합니다(omp://task-agent-discovery.md)."
+  - "시작 HEAD는 main 538fdcc(2026.89 범프)이고 작업트리는 깨끗했습니다(ingest가 더한 audit.jsonl 1행 제외)."
+  - "omp 18.11.1은 .claude/agents 루트를 건너뛰고(omp://task-agent-discovery.md:148) 번들 에이전트는 scout·reviewer·security-reviewer·task·sonic(:129-136)이며, 하네스가 동기화하는 에이전트는 scripts/harness-sync.sh:216-223의 7종(reviewer·verifier·code-reviewer·adversary×4)뿐입니다 — architect·critic·test-engineer·librarian·executor·Explore는 발견되지 않습니다."
+  - "OMC 스킬은 ~/.claude/skills에서 계속 발견됩니다(omp://skills.md:130) — 에이전트와 달리 스킬 서술은 유지합니다."
 risks:
-  - "리뷰 1건당 Pass 2 스폰이 1→4로 늘어 codex·anthropic·antigravity 쿼터 소모가 커집니다 — 평가 기간 한정 비용으로 받아들입니다."
-  - "argon은 2026-10-19 13:03 프로브에서 6회 연속 429(RESOURCE_EXHAUSTED)였다가 13:40 프로브에서 정상이었습니다 — Google 측 용량 문제라 failed 행이 자주 남을 수 있습니다."
-  - "sol은 Pass 3 code-reviewer 오버라이드(gpt-5.6-sol:xhigh)와 같은 모델이라 Pass 2/3 중복이 있습니다 — '형제 코드네임이 더 잡는가'를 보는 비교 대상으로 의도적으로 둡니다."
+  - "adversarial_review.md의 plan/test/completion-attack 게이트는 담당 에이전트가 레포에 없어 Phase 1(plan-attack)조차 실행 주체가 없습니다 — 이 PR은 상태를 정직하게 적을 뿐 게이트를 구현하거나 삭제하지 않으며, 실제 도입 여부 결정은 사용자 몫으로 남깁니다."
+  - "verifier의 verdict 어휘는 PASS / FAIL / INCOMPLETE(verifier.md:118)이고 reviewer·code-reviewer는 PASS / PASS WITH NOTES / FAIL이라 두 어휘가 공존합니다 — 통일은 범위 밖(C5)이고 문서에는 각자의 어휘를 그대로 인용합니다."
