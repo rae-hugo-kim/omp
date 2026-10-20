@@ -6,16 +6,28 @@
 
 ## 절차 (compr/compush가 **스테이징 직전** 실행)
 
-### 1. 활성 작업 판별 — `docs/harness/seed.yaml`의 top-level `status`
-- seed 없음, 또는 `status`가 `approved`가 **아님**(`draft`/`done`/`superseded`/부재) → **추적 중 아님 → closeout skip**(no-op). 빠른 비-kickoff 작업은 여기서 끝(마찰 0).
-- `status: approved` → 활성 작업, 계속.
+### 1. 마감 대상 판별 — `docs/harness/seed.yaml`의 top-level `status`
+상태의 의미와 active 판정은 `seed_contract.md` §생애주기가 정합니다. closeout 대상은 `approved`뿐이며, 워크트리의 seed와 **HEAD의 seed**(`git show HEAD:docs/harness/seed.yaml`)가 모두 `approved`여야 합니다. acceptance-gate는 HEAD seed가 `approved`일 때만 closeout landing을 인정하기 때문입니다.
+- seed 없음, 또는 `status`가 `approved`가 **아님**(`draft`/`done`/`superseded`/부재) → **closeout skip**(no-op). 빠른 비-kickoff 작업은 여기서 끝(마찰 0).
+  - `draft`는 active seed라 acceptance-gate가 체크박스로 커밋을 막지만 closeout 대상은 아닙니다. 조용히 넘기지 않고 **advisory**("seed가 draft — 사용자 승인 후 approved로 바꿔 커밋하고 closeout 재실행")를 남긴 뒤 skip합니다. 마감하려면 `seed_contract.md` §생애주기의 `draft → approved` 전이(사용자 승인)를 먼저 커밋으로 HEAD에 올린 뒤 closeout을 다시 실행합니다.
+- 워크트리 seed는 `approved`인데 HEAD seed가 `approved`가 아님(승인 줄을 아직 커밋하지 않음) → **advisory**("승인 줄이 HEAD에 없음 — `status` 한 줄을 먼저 커밋") 후 skip.
+- 둘 다 `status: approved` → 활성 작업, 계속.
 
-### 2. 완료 판별 — `docs/harness/current-scope.md`의 `## Acceptance Criteria` 체크박스
-완료 조건은 **`total > 0 && unchecked == 0`** (체크박스가 1개 이상이고 전부 `[x]`). 무엇이 "AC 체크박스"인지는 §3e의 기록 문법 한 곳으로 정한다(게이트·스킬 공통).
+### 2. 완료 판별 — seed 전체 AC를 담은 scope가 전부 체크됨
+closeout은 **seed의 모든 AC가 충족됐을 때만** 실행하며, 그 판정은 은퇴되는 `current-scope.md` 하나로 합니다. 두 조건을 모두 봅니다.
+
+**(i) 체크박스** — `docs/harness/current-scope.md`의 `## Acceptance Criteria` 체크박스가 **`total > 0 && unchecked == 0`** (체크박스가 1개 이상이고 전부 `[x]`). 무엇이 "AC 체크박스"인지는 §3e의 기록 문법 한 곳으로 정한다(게이트·스킬 공통).
 - `current-scope.md` 없음 → 완료 확인 불가 → **advisory**("approved seed인데 current-scope.md 없음 — closeout 생략") 후 skip.
 - `## Acceptance Criteria` 섹션 부재 / 빈 섹션 / **체크박스 0개** → **advisory** 후 skip. (체크박스가 없으면 "전부 `[x]`"가 공허참이 되어 미완 작업을 오-마감하는 것을 막는다.)
-- 체크박스 ≥1개이고 **전부 `- [x]`**(미체크 `- [ ]` 0개) → **작업 완료 → closeout 실행**(§3).
 - `- [ ]` 존재 → **미완 → advisory**("AC N/M 미충족 — 완료면 current-scope.md에서 체크 후 재실행, 중간 작업이면 그대로 진행") 후 skip. **자동으로 닫지 않는다.**
+
+**(ii) 전체 AC 포함** — 은퇴되는 `current-scope.md`가 **현재 seed의 `acceptance_criteria` 전부**를 담고 있어야 합니다. seed의 AC 항목 수와 scope의 AC 체크박스 수가 같고, 객체형 AC면 각 `id`가, 문자열형 AC면 각 문구가 scope 체크박스에 있어야 합니다. kickoff가 만든 scope와 `--ac` 없이 연 `thread-scope open` scope가 이 조건을 만족합니다. seed를 수정한 뒤에는 scope를 함께 동기화하거나(`seed_evolution_policy.md` §수정 절차 4) `thread-scope open`으로 다시 열어 현재 seed의 AC와 맞춥니다.
+
+(ii)를 만족하지 않는 scope — `thread-scope open --ac <subset>`으로 일부 AC만 연 스레드 — 는 체크박스가 전부 `[x]`여도 **부분 스레드 완료**입니다. seed를 닫지 않고 `thread-scope close --verdict <PASS|…>`로 `thread_closed`만 남기며 seed는 `approved`로 둡니다. 이전 스레드의 `thread_closed`는 seed 마감의 근거가 아닙니다. seed를 닫으려면 부분 스레드의 체크 커밋이 착지한 뒤 `thread-scope open`(`--ac` 없이)으로 전체 AC scope를 다시 열고, 모든 AC를 다시 검증해 체크한 뒤 closeout합니다. 남은 AC만 이어서 작업하려면 `thread-scope open --ac <남은 id>`로 엽니다(문자열형 seed는 `--ac`를 쓸 수 없으므로 전체 AC로 엽니다). 어느 쪽이든 다음 코드 커밋 **전에** 엽니다. 체크박스가 전부 `[x]`인 scope가 남아 있는 동안 acceptance-gate는 모든 커밋을 통과시키기 때문입니다. 이때 docs-drift는 체크박스만 보므로 "Closeout pending" 경고를 낼 수 있으나 마감 신호로 읽지 않습니다.
+
+- (i)과 (ii)를 모두 만족 → **작업 완료 → closeout 실행**(§3).
+
+acceptance-gate는 (i)만 판정하고 (ii)는 검사하지 못합니다(§3e가 말하는 "§2의 완료 조건"도 (i)입니다). (ii)는 closeout을 실행하는 에이전트가 seed와 scope의 AC 목록을 대조해 확인하며, 게이트가 검사하지 않는다는 사실은 잔존면으로 기록돼 있습니다(`.omp/rules/harness-harness_integration_contract.md` Known residual surfaces).
 
 ### 3. Closeout 동작 (완료일 때만)
 a. `docs/harness/seed.yaml`: top-level `status`를 `done`으로, `completed: <YYYY-MM-DD>` 추가(`seed_evolution_policy.md`의 `approved → done` 전이). **이 종료 전이는 `version +1` 규칙에서 면제된다**(내용 revision이 아니라 생명주기 종료이며 `task_closed`가 감사 기록). acceptance-gate의 `status` 읽기는 한 문법이다(top-level `status:` 줄의 같은 줄·비어 있지 않은 스칼라, 따옴표 또는 bare, 공백 뒤 `#` 주석만, 대소문자 무시 — `Done`은 `done`, `done-later`는 그 값 그대로, `done#x`처럼 문법에 맞지 않는 줄은 "파싱 불가"; 같은 키의 줄이 여럿이면 하나라도 파싱 불가일 때 전체가 파싱 불가다). HEAD가 `approved`인 seed가 이 커밋에서 `approved`·`draft`·`superseded`가 아닌 **어떤 상태로든** 바뀌면 — 다른 값, 문법에 맞지 않는 `status:` 줄(`done#x`, `done extra`), `status:` 줄 삭제, seed 파일 삭제 모두 — 마감 시도로 보고 §3e를 판정하며, 그 뒤 값이 정확히 `done`이 아니면 미완 마감이다. 미완 마감(§3a′·§3b·§3c 결함)은 디스크의 seed 상태와 무관하게 `HARNESS WARNING` 뒤 곧바로 백스톱으로 간다(코드 변경이면 BLOCK, docs 전용이면 allow)(`approved → superseded`는 대체, `draft → done`은 승인 전 종료라 판정하지 않는다 — 설계 경계; HEAD의 status가 `approved`가 아닌 seed(파싱 불가 포함)는 추적 중인 작업이 아니므로 어떤 전이도 마감으로 판정하지 않는다).
@@ -29,5 +41,5 @@ e. **은퇴되는 AC 기록도 판정한다(#56)**: 이 커밋이 seed를 `appro
 **방향 규칙**: SoT는 omp 템플릿(`.omp/skills/`)이다 — 편집은 항상 템플릿에서 하고, 전역(`~/.claude/skills/`)은 복사로만 갱신하는 미러다. 전역을 직접 편집하지 않는다.
 
 ## 비고
-- closeout은 **종료상태 전이**다. 같은 기능의 반복은 `thread-scope open`이 그 seed를 제자리 reopen(done→approved, version+1, audit `seed_reopened`); 진짜 새 기능만 새 `kickoff`. 종료 이력은 `task_closed`/`seed_reopened` + git이 보존.
-- 검증 레인(docs-drift, PR-4): `current-scope.md` 전부 `[x]`인데 seed `done` 아님(closeout pending) / seed `done`인데 scope 잔존(half-closed) / scope 있는데 seed `approved` 아님(orphan) → WARNING.
+- closeout은 **종료상태 전이**다. 닫힌 seed의 재개 규칙(같은 기능은 `thread-scope open`의 제자리 reopen, 새 기능은 새 `kickoff`)은 `seed_contract.md` §생애주기가 정의합니다. 종료 이력은 `task_closed`/`seed_reopened` + git이 보존한다.
+- 검증 레인(docs-drift `closeoutConsistency`, PR-4)은 `current-scope.md`가 있을 때만 보며 모두 WARNING입니다. seed가 없거나 `status` 줄이 없는데 scope가 있음(orphan) / seed가 `done`·`superseded`인데 scope 잔존(half-closed) / seed가 `approved`이고 scope 체크박스가 전부 `[x]`인데 `done`이 아님(closeout pending). `draft` seed 위의 scope는 orphan도 closeout pending도 아닙니다.

@@ -24,7 +24,7 @@
 
 | 아티팩트 | tier | 생명주기 | 성장 | 충족 |
 |---|---|---|---|---|
-| `seed.yaml` | **durable 작업단위 SSOT** (체크 대상) | feature 단위 durable; revise=`version +1`; `done`/`superseded`로 종료, 같은 기능 반복은 제자리 reopen | bounded — 무관 반복 누적 금지 | R1 "체크할 파일" |
+| `seed.yaml` | **durable 작업단위 SSOT** (체크 대상) | feature 단위 durable; 상태 전이·version 규칙은 `seed_contract.md` §생애주기; `done`/`superseded`로 종료, 같은 기능 반복은 제자리 reopen | bounded — 무관 반복 누적 금지 | R1 "체크할 파일" |
 | `current-scope.md` | **이번 스레드 작업목표** (체크리스트) | 스레드마다 재생성; closeout에서 삭제(은퇴) | bounded — live AC 윈도우만 | R1 "스레드 목표" |
 | `audit.jsonl` | **provenance + satisfaction 원장** | append-only, 영구 | **유일하게 성장이 올바른 곳** | R2 추적 |
 
@@ -33,16 +33,16 @@
 ### `seed.yaml` — durable feature-spec SSOT
 - **에이전트가 작업의 옳고 그름을 *대조하는* 1급 진실원**이다. 실행 판단(AC 충족 여부, 제약 위반 여부, scope drift 여부)은 항상 `seed.yaml` 기준으로 한다.
 - **bounded**: 하나의 feature 단위 명세(`goal` 1개 + 그 AC 집합). 한 파일에 여러 목표를 섞지 않는다.
-- **revise = `version +1`**: 구현 중 명세가 바뀌면 해당 필드만 수정하고 version을 올린 뒤 `audit.jsonl`에 `seed_revised`를 기록한다(절차: `seed_evolution_policy.md`).
-- **종료 가능**: 작업이 main에 도달하면 closeout이 `status`를 `approved → done`으로 마킹한다(`closeout_contract.md`). `done`/`superseded`는 쉼 상태다.
-- **reopen 가능**: 같은 기능의 반복은 새 kickoff가 아니라 `thread-scope open`이 닫힌 seed를 *제자리* reopen한다(`done → approved`, `version +1`, `completed` 제거, `audit.jsonl`에 `seed_reopened`). 종료 이력은 audit + git이 보존한다.
+- **revise = `version +1`**: 구현 중 명세가 바뀌면 해당 필드만 수정하고 version을 올린 뒤 `audit.jsonl`에 `seed_revised`를 기록한다(절차: `seed_evolution_policy.md`). version을 올리는 조건과 면제되는 생애주기 전이는 `seed_contract.md` §생애주기 "version 규칙" 한 곳이 정합니다.
+- **종료 가능**: 작업이 main에 도달하면 closeout이 `status`를 `approved → done`으로 마킹한다(`closeout_contract.md`). closeout 대상은 `approved`뿐이라 kickoff가 쓴 `draft`는 사용자 승인으로 먼저 `approved`가 돼야 합니다(`seed_contract.md` §생애주기). `done`/`superseded`는 쉼 상태다.
+- **reopen 가능**: 같은 기능의 반복은 새 kickoff가 아니라 `thread-scope open`이 닫힌 seed를 *제자리* reopen한다(`done → approved`, `version +1`, `completed` 제거, `audit.jsonl`에 `seed_reopened`). 종료 이력은 audit + git이 보존한다. 재개 경로의 정의는 `seed_contract.md` §생애주기 "닫힌 seed의 재개"입니다.
 - **새 기능 = 새 seed**: 기존 seed와 무관한 새 작업단위는 새 `kickoff`로 별도 seed(새 `task_id`)를 만든다. 기존 seed에 무관 작업을 **누적하지 않는다**(아래 Growth Policy).
 
 ### `current-scope.md` — this thread's bounded objective
 - **이번 스레드의 작업목표/체크리스트**다. 무엇이 *옳은가*가 아니라 무엇을 *이번에 할 것인가*를 담는다.
 - **seed에서 파생**: `seed.yaml`이 원본이고 `current-scope.md`는 그 파생물이다. seed가 바뀌면 함께 갱신한다(`seed_evolution_policy.md` §수정 절차 4).
-- **스레드마다 재생성**: active seed에서 `thread-scope.mjs open`이 `current-scope.md`를 재생성하고 `audit.jsonl`에 `thread_opened`를 기록한다. (kickoff-only 생성이던 과거 갭을 메운 P2 thread-scope 복원.)
-- **bounded live 윈도우**: 이번 스레드가 겨냥하는 AC만 담는다. 완료분을 영구 적재하지 않는다.
+- **스레드마다 재생성**: active seed(`seed_contract.md` §생애주기 — `draft`·`approved`)에서 `thread-scope.mjs open`이 `current-scope.md`를 재생성하고 `audit.jsonl`에 `thread_opened`를 기록한다. (kickoff-only 생성이던 과거 갭을 메운 P2 thread-scope 복원.)
+- **bounded live 윈도우**: 이번 스레드가 겨냥하는 AC만 담는다. 완료분을 영구 적재하지 않는다. 따라서 `--ac`로 일부 AC만 연 스레드의 체크박스가 전부 `[x]`여도 seed가 끝난 것은 아닙니다. 그 스레드는 `thread_closed`로 끝나고, seed closeout은 은퇴되는 scope가 seed의 AC 전부를 담고 전부 `[x]`일 때만 합니다 — 마감하려면 `thread-scope open`(`--ac` 없이)으로 전체 AC를 다시 열어 검증합니다(`closeout_contract.md` §2 (ii)).
 - **closeout에서 은퇴**: 작업이 마감되면 closeout이 이 파일을 **삭제**한다(`closeout_contract.md` §3b). 기록은 seed `done` + audit가 보존하므로 아카이브가 불필요하다.
 
 ### `audit.jsonl` — append-only provenance/satisfaction ledger
@@ -149,7 +149,7 @@ thread_id ──▶ seed_task_id + seed_version   (provenance: 어느 seed의 �
 
 ## Cross-References
 
-- `seed_contract.md` — `seed.yaml` 내부 스키마·필수 필드·검증 규칙(이 문서가 가리키는 "체크 대상"의 정의).
+- `seed_contract.md` — `seed.yaml` 내부 스키마·필수 필드·검증 규칙(이 문서가 가리키는 "체크 대상"의 정의)과 §생애주기(active 판정·상태 전이·닫힌 seed 재개·version 규칙).
 - `seed_evolution_policy.md` — seed revise 절차(`version +1`·`seed_revised`)·금지 사항·reopen(`seed_reopened`) 규칙.
 - `closeout_contract.md` — 작업 마감 시 seed `approved → done`·`current-scope.md` 삭제·`task_closed` 기록(은퇴 메커니즘).
-- `kickoff_output_contract.md` — kickoff family 이벤트(`kickoff_completed`·`seed_generated`·`rubric_evaluated`)와 4산출물 역할.
+- `kickoff_output_contract.md` — kickoff family 이벤트(`kickoff_completed`·`seed_generated`·`rubric_evaluated`·`adversarial_plan_attack`)와 산출물 7종의 역할.

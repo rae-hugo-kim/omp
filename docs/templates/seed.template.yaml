@@ -1,5 +1,6 @@
 version: 1
 status: draft
+task_id: "<YYYYMMDD-HHMMSS-xxxx — kickoff가 생성, 수동 편집 금지>"
 
 goal: >
   <한 문단으로 작업 목표를 적는다>
@@ -29,3 +30,12 @@ references:
     reason: <왜 이 파일을 참조하는지>
   - path: <관련 파일 경로>
     reason: <참조 이유>
+
+# 선택 필드 — 인터뷰 종료 시점의 예측이며 어떤 게이트 판정에도 관여하지 않습니다(seed_contract.md `estimate`).
+# 예측을 남길 때만 주석을 풀어 채웁니다.
+# estimate:
+#   risk: <low|medium|high|critical>
+#   files: <예상 변경 파일 수>
+#   depth: <low|high>
+#   model: <모델 id>
+#   effort: <effort 또는 null>
