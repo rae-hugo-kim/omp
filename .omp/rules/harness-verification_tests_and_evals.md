@@ -24,7 +24,7 @@ For any user-impacting change, provide at least one reproducible verification ar
 
 - A test (unit/integration/e2e), or
 - An eval case + harness run, or
-- A deterministic manual reproduction procedure (only if automation is not feasible)
+- A deterministic manual reproduction procedure (only when test infrastructure does not exist, the change is docs/policy-only, or automation is not feasible — no approval needed; when test infrastructure exists, skipping a test for a code-logic change needs the user's explicit approval: `rule://harness-tdd_policy` Exception Protocol)
 
 ## Goal Transformation Examples
 

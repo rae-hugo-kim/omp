@@ -54,7 +54,7 @@ Includes silent-failure patterns — see [`.omp/rules/harness-code_review_policy
 - [ ] Changed behavior reflected in updated tests
 - [ ] No debug logging (`console.log`, etc.) left in production paths
 
-## Complexity thresholds (MEDIUM — flag if exceeded)
+## Complexity thresholds (HIGH — flag if exceeded)
 
 - [ ] Functions <= 50 lines
 - [ ] Files <= 800 lines
@@ -73,5 +73,5 @@ After review, record verdict:
 | MEDIUM   |       |        |
 | LOW      |       |        |
 
-Verdict: [APPROVE / WARNING / BLOCK]
+Verdict: [PASS / PASS WITH NOTES / FAIL]
 ```

@@ -40,15 +40,15 @@ This policy applies to all code reviews in this repo, whether performed by an ag
 | Severity | Definition | Merge gate |
 |----------|------------|------------|
 | **CRITICAL** | Security vulnerability, potential data loss, crashes in normal use, exposed secrets | Block — must fix before merge |
-| **HIGH** | Definite bugs, performance regressions, missing error handling on failure paths | Warn — should fix before merge |
+| **HIGH** | Definite bugs, performance regressions, missing error handling on failure paths, complexity thresholds exceeded (see below) | Warn — should fix before merge |
 | **MEDIUM** | Maintainability problems, readability gaps, missing tests for new paths | Note — fix in follow-up acceptable |
 | **LOW** | Minor suggestions, naming improvements, TODOs without tickets | Optional |
 
-**Approval criteria:**
+**Verdict** (the same vocabulary the `review-gate` evidence sidecar accepts — `PASS` / `PASS WITH NOTES` / `FAIL`; see `.omp/agents/code-reviewer.md`):
 
-- **Approve**: no CRITICAL or HIGH findings
-- **Warning**: HIGH findings only — may merge with documented caution
-- **Block**: any CRITICAL finding — must resolve before merge
+- **PASS**: no CRITICAL or HIGH findings
+- **PASS WITH NOTES**: HIGH findings only — may merge with documented caution
+- **FAIL**: any CRITICAL finding — must resolve before merge
 
 ## Quantitative complexity thresholds
 
@@ -83,7 +83,6 @@ Flag immediately — these can cause real damage:
 - Nesting depth exceeding 4 levels — flatten with early returns or extracted helpers
 - Debug logging (`console.log`, `print`, etc.) left in production paths
 - Dead code: commented-out blocks, unused imports, unreachable branches
-- Missing tests for new logic paths
 
 ### Silent failures (HIGH)
 
@@ -146,7 +145,7 @@ Group findings by severity (CRITICAL first, LOW last). End every review with a s
 | MEDIUM   | 2     | info   |
 | LOW      | 0     | note   |
 
-Verdict: WARNING — 1 HIGH issue should be resolved before merge.
+Verdict: PASS WITH NOTES — 1 HIGH issue should be resolved before merge.
 ```
 
 If low-confidence observations exist, append them after the summary under a **Notes** heading, clearly labeled as speculative.

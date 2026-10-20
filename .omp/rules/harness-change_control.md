@@ -40,10 +40,10 @@ BEHAVIORAL examples:
 
 - Changing logic, APIs, outputs, business rules, side effects
 
-## SHOULD: method guidance (TDD / Tidy First) is situational
+## MUST: test-first for code logic when test infrastructure exists (grade shared with `rule://harness-tdd_policy`)
 
-- If test infrastructure exists and the change is code logic, prefer test-first or add a regression test early.
-- If tests are not feasible in the repo context, provide a deterministic alternative verification artifact.
+- If test infrastructure exists and the change is code logic, test-first (RED → GREEN → TIDY) is MUST; skipping it needs the user's explicit approval (`rule://harness-tdd_policy` Exception Protocol).
+- If test infrastructure does not exist, the change is docs/policy-only, or automation is not feasible, provide a deterministic alternative verification artifact (manual reproduction procedure, smoke test, or eval case) — no approval needed.
 
 ## Self-Check
 - [ ] Does every changed line trace directly to the user's request?
