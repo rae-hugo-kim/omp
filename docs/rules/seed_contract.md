@@ -138,11 +138,11 @@ seed의 상태 전이와 "active seed"의 정의는 이 절 한 곳에서 정합
 | `draft`/`approved`/`done` → `superseded` | 다른 seed로 대체할 때(seed 자리를 새 작업에 넘길 때 포함) 에이전트가 수정합니다. | 그대로 | `seed_superseded`(관행 — 이 이벤트를 쓰는 코드는 없습니다) + git 커밋 |
 | `done`/`superseded` → `approved` (reopen) | `thread-scope open` | +1 | `seed_reopened` |
 
-**`draft → approved`**: 사용자가 seed를 구현할 명세로 승인했을 때만 바꿉니다. 시점은 startdev preflight입니다. seed가 `draft`면 착수 전에 사용자에게 seed 승인을 묻고, 승인을 받는 즉시 `status` 한 줄만 `approved`로 바꿔 **단독 커밋으로 HEAD에 올립니다**. 이때는 kickoff가 만든 scope의 AC가 모두 미체크라 acceptance-gate Check 3가 docs 전용 커밋도 막으므로 WIP 레인으로 커밋합니다(`OMP_COMMIT_WIP=1 git commit …` 또는 `.omp/harness-state/commit-wip` — 커밋마다 `acceptance_wip` 감사 행이 1건 남습니다). 승인 없이 `approved`로 바꾸지 않습니다. 사용자가 승인을 보류하면 `draft`로 진행할 수 있지만 그 seed는 마감할 수 없으며, 나중에 승인을 받으면 같은 방법(그 줄만 WIP 레인 단독 커밋)으로 올립니다.
+**`draft → approved`**: 사용자가 seed를 구현할 명세로 승인했을 때만 바꿉니다. 시점은 startdev preflight입니다. seed가 `draft`면 착수 전에 사용자에게 seed 승인을 묻고, 승인을 받는 즉시 `status` 한 줄만 `approved`로 바꿔 **단독 커밋으로 HEAD에 올립니다**. kickoff는 산출물을 커밋하지 않으므로 seed가 아직 HEAD에 없으면 이 첫 커밋에 `seed.yaml` 전체(와 kickoff 산출물)가 함께 들어갑니다. 이때는 kickoff가 만든 scope의 AC가 모두 미체크라 acceptance-gate Check 3가 docs 전용 커밋도 막으므로 WIP 레인으로 커밋합니다(`OMP_COMMIT_WIP=1 git commit …` 또는 `.omp/harness-state/commit-wip` — WIP 면제로 통과한 커밋마다 `acceptance_wip` 감사 행이 1건 남습니다). 승인 없이 `approved`로 바꾸지 않습니다. 사용자가 승인을 보류하면 `draft`로 진행할 수 있지만 그 seed는 마감할 수 없으며, 나중에 승인을 받으면 같은 방법(그 줄만 단독 커밋, 미체크 AC가 남았으면 WIP 레인)으로 올립니다.
 
 acceptance-gate는 HEAD seed가 `approved`일 때만 closeout landing을 인정하므로, closeout은 워크트리뿐 아니라 HEAD의 seed도 `approved`인지 확인합니다(`closeout_contract.md` §1). 승인받지 못한 `draft` seed나 승인 줄을 아직 커밋하지 않은 seed는 closeout 대상이 아니며, closeout은 그 사실을 advisory로 알리고 건너뜁니다.
 
-**금지 전이**: `approved → draft`(승인 철회는 kickoff 재실행), `draft → done`(closeout은 `approved`만 마감합니다. 승인 전에 끝난 작업을 마감하려면 먼저 사용자 승인을 받아 `approved`를 거칩니다. acceptance-gate는 HEAD가 `approved`가 아닌 seed의 전이를 마감으로 판정하지 않으므로 이 전이를 막지 않으며, 금지는 이 계약으로만 성립합니다 — `closeout_contract.md` §3a), 종료상태(`done`/`superseded`)를 손으로 되돌리기(reopen은 `thread-scope open`만 수행합니다). 첫째와 셋째는 `seed_evolution_policy.md` 금지 사항에도 있습니다.
+**금지 전이**: `approved → draft`(승인 철회는 kickoff 재실행), `draft → done`(closeout은 `approved`만 마감합니다. 승인 전에 끝난 작업을 마감하려면 먼저 사용자 승인을 받아 `approved`를 거칩니다. acceptance-gate는 HEAD가 `approved`가 아닌 seed의 전이를 마감으로 판정하지 않으므로 docs 전용·WIP 커밋의 이 전이는 막지 않고, 코드 변경을 함께 담으면 닫힌 seed backstop이 막습니다. 금지는 이 계약으로 성립합니다 — `closeout_contract.md` §3a), 종료상태(`done`/`superseded`)를 손으로 되돌리기(reopen은 `thread-scope open`만 수행합니다). 첫째와 셋째는 `seed_evolution_policy.md` 금지 사항에도 있습니다.
 
 ### 닫힌 seed의 재개
 

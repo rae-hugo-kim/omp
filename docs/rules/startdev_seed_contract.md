@@ -34,7 +34,7 @@ docs/harness/seed.yaml
 - `acceptance_criteria` 최소 1개
 - `status`가 active(`draft` 또는 `approved`)인지 확인합니다. active의 정의는 `seed_contract.md` §생애주기입니다.
   - `approved`면 진행합니다.
-  - `draft`면 착수 전에 사용자에게 seed 승인을 묻습니다. 승인을 받는 즉시 `status` 한 줄만 `approved`로 바꿔 WIP 레인(`OMP_COMMIT_WIP=1 git commit …`)으로 단독 커밋해 HEAD에 올린 뒤 진행합니다. kickoff scope의 AC가 모두 미체크라 일반 커밋은 acceptance-gate Check 3가 막기 때문입니다(`seed_contract.md` §생애주기 `draft → approved`). 사용자가 승인을 보류하면 `draft`로 진행할 수 있지만, closeout은 HEAD seed가 `approved`일 때만 마감하므로 closeout 전에 승인을 받아 같은 방법으로 올려야 합니다.
+  - `draft`면 착수 전에 사용자에게 seed 승인을 묻습니다. 승인을 받는 즉시 `status` 한 줄만 `approved`로 바꿔 단독 커밋으로 HEAD에 올린 뒤 진행합니다(seed가 아직 커밋되지 않았으면 `seed.yaml` 전체가 함께 들어갑니다). kickoff scope의 AC가 모두 미체크라 일반 커밋은 acceptance-gate Check 3가 막으므로 WIP 레인(`OMP_COMMIT_WIP=1 git commit …`)으로 커밋합니다(`seed_contract.md` §생애주기 `draft → approved`). 사용자가 승인을 보류하면 `draft`로 진행할 수 있지만, closeout은 HEAD seed가 `approved`일 때만 마감하므로 closeout 전에 승인을 받아 같은 방법으로 올려야 합니다.
   - `done`/`superseded`(종료상태)면 seed 무효가 아니라 닫힌 작업이므로 중단하고 `seed_contract.md` §생애주기 "닫힌 seed의 재개"의 두 경로를 안내합니다. 같은 기능의 반복이면 `thread-scope open`으로 그 seed를 제자리 reopen(`approved`, `version +1`, `seed_reopened`, 같은 `task_id`)한 뒤 다시 시작하고, 새 기능이면 새 `kickoff`로 새 seed(새 `task_id`)를 만듭니다.
 
 seed가 있는데 위 검사(파싱·필수 필드·AC·status 허용값)에 실패하면:
