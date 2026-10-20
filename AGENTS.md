@@ -14,7 +14,7 @@ This file is **always-on** agent policy. Keep it short.
 
 - This policy applies to this repo/workspace when the agent is active.
 - If a linked module conflicts with this file, **this file wins**.
-- **This policy complements user-global rules** (OMP discovers `~/.claude/CLAUDE.md` and OMC skills under `~/.claude/skills` through its Claude user-level sources — opt-in through `enabledProviders` per `omp://context-files.md:59` / `omp://skills.md:122`, though both were loaded on the 2026-10-20 reference host with `enabledProviders` `[]`) — it does not replace them. It does **not** depend on OMC agents: every agent this file names ships in `.omp/agents/` or is bundled with OMP (`rule://harness-agent_routing`).
+- **This policy complements user-global rules** (OMP discovers `~/.claude/CLAUDE.md` and OMC skills under `~/.claude/skills` through its Claude user-level sources, documented as opt-in through `enabledProviders` — `omp://context-files.md:59` / `omp://skills.md:122`; on the 2026-10-20 reference host the skills loaded with `enabledProviders` `[]`, while `~/.claude/CLAUDE.md` was shadowed by the native `~/.omp/agent/AGENTS.md`, `omp://context-files.md:138`) — it does not replace them. It does **not** depend on OMC agents: every agent this file names ships in `.omp/agents/` or is bundled with OMP (`rule://harness-agent_routing`).
 
 ## Ownership, precedence and jurisdiction
 
@@ -125,7 +125,7 @@ The behavioral MUSTs that must survive long sessions — no guessing, risky-acti
 
 ## Completion Contract (MUST)
 
-A "done" report carries the three sections defined in `rule://harness-core`: applied rules/checklists, evidence (file paths + excerpts or command output), verification (what was run and the results). Independent completion verification is delegated to the `verifier` agent (`.omp/agents/verifier.md`) via the `task` tool; declare done only after its verdict has arrived.
+A "done" report carries the three sections defined in `rule://harness-core`: applied rules/checklists, evidence (file paths + excerpts or command output), verification (what was run and the results). Independent completion verification is delegated to the `verifier` agent (`.omp/agents/verifier.md`) via the `task` tool; declare done only after its verdict has arrived **and** it is `PASS` — `FAIL` or `INCOMPLETE` means the task is not done.
 
 ## Exception Protocol (MUST when blocked)
 
@@ -147,7 +147,7 @@ If you cannot comply with any MUST:
 - See `rule://harness-agent_routing` for full routing rules
   (incl. the 2026-06 retirement of the unused MCP delegation matrix).
 - **reviewer**: SHOULD delegate for **high/critical-risk** changes (per `risk-assess`: security/auth/migration files touched, or >100 changed lines of code). Low/medium-risk changes need self-review only — no extra spawn. 3-pass adversarial (self + a four-member heterogeneous adversary panel + code-reviewer — reviewer, adversary / adversary-sol / adversary-opus / adversary-argon and code-reviewer are all defined in `.omp/agents/`, no external plugin required; the reviewer nest-spawns Pass 2/3 via its `spawns:` frontmatter). This matches what `review-gate` enforces: machine evidence is a strict JSON tuple sidecar (`docs/reviews/review-<ts>.json`, `["omp-review-evidence/v1", <hash>, <verdict>, <models|null>, <human|null>, <reviewer>]` — the gate never parses markdown), with second-perspective evidence (a MEASURED >=2-family models array, or a human identity) required only for high/critical commits; the only bypass is an audited override (`docs/harness/review-skip` with `["omp-review-override/v1", <reason>, <approved_by>, <hash>]`, recorded to `docs/harness/audit.jsonl` and consumed). **Dispatch preflight (MUST)**: before spawning the reviewer, verify your own depth and `task`-tool availability — the reviewer needs the `task` tool for Pass 2/3 (recursion cap: depth <= 1), and a session without the `task` tool must not run the review in-session (entry-point priority: `rule://harness-agent_routing`).
-- **verifier**: MUST delegate before claiming task completion when AC exists. The `task` spawn is non-blocking (async job delivery) — **spawning is not completing; declare done only after the verifier's verdict has actually arrived.**
+- **verifier**: MUST delegate before claiming task completion when AC exists. The `task` spawn is non-blocking (async job delivery) — **spawning is not completing; declare done only after the verifier's verdict has actually arrived and reads `PASS`.**
 
 ## Linked Modules
 

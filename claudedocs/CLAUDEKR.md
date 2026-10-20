@@ -25,7 +25,7 @@ source_commit_hash: 9fbe856f165904e86be21dfb9879715b17e3e7b2
 
 - 이 정책은 에이전트가 활성화된 동안 이 리포/워크스페이스에 적용됩니다.
 - 링크된 모듈이 이 파일과 충돌하면 **이 파일이 우선**합니다.
-- **이 정책은 사용자 전역 규칙을 보완합니다**(OMP는 Claude 사용자 레벨 소스로 `~/.claude/CLAUDE.md`와 `~/.claude/skills`의 OMC 스킬을 발견합니다 — `omp://context-files.md:59` / `omp://skills.md:122`는 `enabledProviders` 옵트인이라고 하지만 2026-10-20 기준 호스트에서는 `[]`로도 둘 다 로드됐습니다) — 대체하지 않습니다. OMC 에이전트에는 **의존하지 않습니다**: 이 파일이 이름을 부르는 에이전트는 전부 `.omp/agents/`에 있거나 OMP 번들입니다(`rule://harness-agent_routing`).
+- **이 정책은 사용자 전역 규칙을 보완합니다**(OMP는 Claude 사용자 레벨 소스로 `~/.claude/CLAUDE.md`와 `~/.claude/skills`의 OMC 스킬을 발견하며, 문서상 `enabledProviders` 옵트인입니다 — `omp://context-files.md:59` / `omp://skills.md:122`; 2026-10-20 기준 호스트에서는 스킬은 `[]`로도 로드됐고 `~/.claude/CLAUDE.md`는 네이티브 `~/.omp/agent/AGENTS.md`에 가려졌습니다, `omp://context-files.md:138`) — 대체하지 않습니다. OMC 에이전트에는 **의존하지 않습니다**: 이 파일이 이름을 부르는 에이전트는 전부 `.omp/agents/`에 있거나 OMP 번들입니다(`rule://harness-agent_routing`).
 
 ## 소유·우선순위·관할
 
@@ -126,7 +126,7 @@ OMC의 훅 자동화(매직 키워드, system-reminder 주입)는 OMP에서 **�
 
 ## 완료 계약 (MUST)
 
-"완료" 보고에는 `rule://harness-core`가 정의한 세 절이 있어야 합니다: 적용한 규칙·체크리스트, 근거(파일 경로 + 발췌 또는 명령 출력), 검증(실행한 것과 결과). 독립 완료 검증은 `task` 도구로 `verifier` 에이전트(`.omp/agents/verifier.md`)에 위임하며, verdict가 도착한 뒤에만 완료를 선언합니다.
+"완료" 보고에는 `rule://harness-core`가 정의한 세 절이 있어야 합니다: 적용한 규칙·체크리스트, 근거(파일 경로 + 발췌 또는 명령 출력), 검증(실행한 것과 결과). 독립 완료 검증은 `task` 도구로 `verifier` 에이전트(`.omp/agents/verifier.md`)에 위임하며, verdict가 도착하고 **그 값이 `PASS`일 때만** 완료를 선언합니다 — `FAIL`·`INCOMPLETE`는 미완료입니다.
 
 ## 예외 프로토콜 (막혔을 때 MUST)
 
@@ -147,7 +147,7 @@ OMC의 훅 자동화(매직 키워드, system-reminder 주입)는 OMP에서 **�
 
 - 전체 라우팅 규칙은 `rule://harness-agent_routing`(2026-06에 폐기한 미사용 MCP 위임 매트릭스 포함).
 - **reviewer**: **high/critical 위험** 변경(`risk-assess` 기준: 보안/인증/마이그레이션 파일 접촉, 또는 코드 100줄 초과)에 위임하는 것이 좋습니다. low/medium은 자체 리뷰만 — 추가 스폰 없음. 3-pass 적대 리뷰(self + 이종 adversary 패널 4명 + code-reviewer — reviewer, adversary / adversary-sol / adversary-opus / adversary-argon, code-reviewer 전부 `.omp/agents/`에 정의 — 외부 플러그인 불필요. reviewer가 `spawns:` frontmatter로 Pass 2/3를 중첩 스폰). 이는 `review-gate`가 집행하는 것과 같습니다: 기계 증거는 엄격한 JSON 튜플 사이드카(`docs/reviews/review-<ts>.json`, `["omp-review-evidence/v1", <hash>, <verdict>, <models|null>, <human|null>, <reviewer>]` — 게이트는 마크다운을 읽지 않음)이고, 2차 관점 증거(실측된 2계열 이상 models 배열 또는 사람 신원)는 high/critical 커밋에만 필요하며, 유일한 우회는 감사되는 override(`docs/harness/review-skip`에 `["omp-review-override/v1", <reason>, <approved_by>, <hash>]`, `docs/harness/audit.jsonl`에 기록 후 소비)입니다. **디스패치 preflight (MUST)**: reviewer를 스폰하기 전에 자신의 깊이와 `task` 도구 가용성을 확인합니다 — reviewer는 Pass 2/3에 `task` 도구가 필요하고(재귀 상한: depth <= 1), `task` 도구가 없는 세션은 세션 안에서 리뷰를 수행하면 안 됩니다(진입점 우선순위: `rule://harness-agent_routing`).
-- **verifier**: AC가 있으면 완료 선언 전에 반드시 위임합니다. `task` 스폰은 비차단(비동기 결과 전달) — **스폰은 완료가 아니며, verifier verdict가 실제로 도착한 뒤에만 완료를 선언합니다.**
+- **verifier**: AC가 있으면 완료 선언 전에 반드시 위임합니다. `task` 스폰은 비차단(비동기 결과 전달) — **스폰은 완료가 아니며, verifier verdict가 실제로 도착하고 `PASS`일 때만 완료를 선언합니다.**
 
 ## 링크 모듈
 

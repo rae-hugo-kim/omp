@@ -46,7 +46,7 @@ description: "3-pass adversarial verification layer: reviewer + heterogeneous ad
 
 ## 3개 게이트 정의 (스킬 단계 — 하네스 게이트가 아니다)
 
-세 "게이트"는 `.omp/extensions/harness/gates/`의 파일 게이트가 아니라 kickoff(Step 3.5)·startdev(GATE 1.5, GATE 3 후) 스킬의 **프롬프트 단계**다. 설계 당시(Claude Code + oh-my-claudecode 시절 — 이 문서는 2026-06-10 `8f9d689`에서 OMP로 포팅됐다)의 담당 에이전트는 OMC의 `critic`·`test-engineer`·`architect`였다. 이 하네스는 그 에이전트를 배포하지 않고(정의·동기화 대상은 `scripts/harness-sync.sh:216-223`의 7종), omp는 `.claude/agents` 루트를 건너뛰며 Claude 마켓플레이스 플러그인의 `agents/`는 Claude 플러그인/사용자 소스가 켜져 있을 때만 읽는다(`enabledProviders`에 `claude-plugins` 또는 `claude`, 혹은 `CLAUDE_CONFIG_DIR` 설정 — `omp://task-agent-discovery.md:148,159`; 2026-10-20 기준 호스트는 `[]`). 소비 리포에 그 설정을 전제할 수 없으므로 아래 표는 설계와 **하네스가 보장하는 대응 에이전트**를 나란히 적는다.
+세 "게이트"는 `.omp/extensions/harness/gates/`의 파일 게이트가 아니라 kickoff(Step 3.5)·startdev(GATE 1.5, GATE 3 후) 스킬의 **프롬프트 단계**다. 설계 당시(Claude Code + oh-my-claudecode 시절 — 이 문서는 2026-06-10 `8f9d689`에서 OMP로 포팅됐다)의 담당 에이전트는 OMC의 `critic`·`test-engineer`·`architect`였다. 이 하네스는 그 에이전트를 배포하지 않고(정의·동기화 대상은 `scripts/harness-sync.sh:216-223`의 7종), omp는 `.claude/agents` 루트를 건너뛰며 OMC처럼 사용자 레벨 Claude 마켓플레이스(`~/.claude/plugins`)로 설치된 `agents/`는 Claude 플러그인/사용자 소스가 켜져 있을 때만 읽는다(`enabledProviders`에 `claude-plugins` 또는 `claude`, 혹은 `CLAUDE_CONFIG_DIR` 설정 — `omp://task-agent-discovery.md:148,159`; 프로젝트 범위 플러그인 루트는 `claude-plugins` 프로바이더만 있으면 된다. 2026-10-20 기준 호스트는 `[]`). 소비 리포에 그 설정을 전제할 수 없으므로 아래 표는 설계와 **하네스가 보장하는 대응 에이전트**를 나란히 적는다.
 
 | Gate | 트리거 위치 | 검증 대상 | 설계 담당(OMC — 하네스 미배포) | 하네스가 보장하는 대응 에이전트 | 블로킹 조건 |
 |------|------------|----------|------------------------|------------------------------|------------|
@@ -133,7 +133,7 @@ OMP에서 이 단계들을 다시 살리려면 kickoff·startdev 스킬의 호�
 
 ## completion-attack과 `verifier` 완료 검증의 관계
 
-완료 검증의 주체는 `verifier`다 — `AGENTS.md` Completion Contract와 [`.omp/rules/harness-agent_routing.md`](harness-agent_routing.md)가 요구하는 "AC가 있으면 verifier를 스폰하고 verdict가 도착한 뒤에만 완료 선언"은 **그대로 유지**된다(설계 당시의 OMC 전역 규칙 "NEVER complete without Architect verification"이 이 자리에 있었고, `verifier`가 그 역할을 이어받았다).
+완료 검증의 주체는 `verifier`다 — `AGENTS.md` Completion Contract와 [`.omp/rules/harness-agent_routing.md`](harness-agent_routing.md)가 요구하는 "AC가 있으면 verifier를 스폰하고 verdict가 도착해 `PASS`일 때만 완료 선언"은 **그대로 유지**된다(설계 당시의 OMC 전역 규칙 "NEVER complete without Architect verification"이 이 자리에 있었고, `verifier`가 그 역할을 이어받았다).
 
 completion-attack은 그 위에 추가 계층을 얹는 설계다:
 
@@ -161,6 +161,6 @@ Phase 2는 Phase 1 운영 결과를 확인한 뒤 활성화한다. 미검증 상
 
 - [ ] 해당 게이트의 트리거 조건이 충족되었는가?
 - [ ] CRITICAL 판정 시 3조건 모두 증거와 함께 명시했는가?
-- [ ] override 발생 시 `audit.jsonl`에 `adversarial_override` 이벤트를 기록했는가?
+- [ ] override 발생 시 `audit.jsonl`에 기록했는가? (attack 단계는 `adversarial_override`, 3-pass 리뷰는 `review-skip` tuple → 게이트가 `review_override`로 기록)
 - [ ] 산출물 파일이 올바른 경로에 생성되었는가?
-- [ ] completion-attack을 실행했다면 `verifier`의 AC 검증이 포함되었는가? (실행하지 않았다면 verifier verdict만으로 완료 조건을 채운다)
+- [ ] completion-attack을 실행했다면 `verifier`의 AC 검증이 포함되었는가? (실행하지 않았다면 verifier의 `PASS` verdict만으로 완료 조건을 채운다)
