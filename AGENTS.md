@@ -14,7 +14,7 @@ This file is **always-on** agent policy. Keep it short.
 
 - This policy applies to this repo/workspace when the agent is active.
 - If a linked module conflicts with this file, **this file wins**.
-- **This policy complements user-global rules** (OMP also discovers `~/.claude/CLAUDE.md` and OMC skills/agents) — it does not replace them.
+- **This policy complements user-global rules** (OMP discovers `~/.claude/CLAUDE.md` and OMC skills under `~/.claude/skills` through its Claude user-level sources — opt-in through `enabledProviders` per `omp://context-files.md:59` / `omp://skills.md:122`, though both were loaded on the 2026-10-20 reference host with `enabledProviders` `[]`) — it does not replace them. It does **not** depend on OMC agents: every agent this file names ships in `.omp/agents/` or is bundled with OMP (`rule://harness-agent_routing`).
 
 ## Ownership, precedence and jurisdiction
 
@@ -24,7 +24,7 @@ This file is **always-on** agent policy. Keep it short.
 
 ## Consumer extension points
 
-This file, `.omp/rules/harness-*.md`, `checklists/`, `templates/`, `.omp/extensions/harness/`, the harness skills, and the four harness agents are **harness-owned**: `harness-check` overwrites them (remote wins) on every sync; directory entries are `rm -rf` + copy, and `.omp/rules/harness-*.md` is a file glob (stale `harness-*` files pruned, siblings untouched). A project built from this template keeps its own policy in the places the sync never touches:
+This file, `.omp/rules/harness-*.md`, `checklists/`, `templates/`, `.omp/extensions/harness/`, the harness skills, and the seven harness agents (`reviewer`, `verifier`, `code-reviewer`, `adversary` and its three `adversary-*` mirrors — `scripts/harness-sync.sh`) are **harness-owned**: `harness-check` overwrites them (remote wins) on every sync; directory entries are `rm -rf` + copy, and `.omp/rules/harness-*.md` is a file glob (stale `harness-*` files pruned, siblings untouched). A project built from this template keeps its own policy in the places the sync never touches:
 
 |Need|Put it in|How OMP loads it|
 |---|---|---|
@@ -67,7 +67,9 @@ them. Every other gate is wired by `.omp/extensions/harness/index.ts` (OMP event
 in-process mermaid check needs no node. Known residuals (sparse-checkout, `stash`, `--no-verify`,
 out-of-jurisdiction repos) are enumerated in `rule://harness-harness_integration_contract` ([`.omp/rules/harness-harness_integration_contract.md`](.omp/rules/harness-harness_integration_contract.md)).
 
-OMC relationship: OMC agents and skills installed under `~/.claude` are discovered by OMP and usable via the `task` tool; OMC's hook automation (magic keywords, system-reminder injection) does **not** run under OMP — this extension replaces it for repo-level gating.
+OMC relationship: OMC **skills** installed under `~/.claude/skills` are discovered by OMP through the Claude user-level skill source (`omp://skills.md:122` calls foreign user-level providers opt-in through `enabledProviders`; measured 2026-10-20: they loaded with `enabledProviders` `[]`, so the exact condition is an omp-side detail — do not rely on either reading); OMC **agents** are not relied on — omp skips `.claude/agents` roots, and a user-level marketplace install such as OMC's (`~/.claude/plugins`) contributes agents only when the Claude plugin/user source is enabled (`enabledProviders` with `claude-plugins` or `claude`, or `CLAUDE_CONFIG_DIR` set — `omp://task-agent-discovery.md:148,159`; project-scope plugin roots need only the `claude-plugins` provider), which this harness does not assume. The agents this policy relies on (`verifier`, `reviewer`, `code-reviewer`, the `adversary*` panel — `.omp/agents/`, synced by `scripts/harness-sync.sh`) and OMP's bundled `scout`/`task`/`sonic`/`security-reviewer` are the full set.
+
+OMC's hook automation (magic keywords, system-reminder injection) does **not** run under OMP — this extension replaces it for repo-level gating.
 
 **What this file adds**: Project-specific constraints, evidence standards, and documentation requirements.
 
@@ -136,7 +138,7 @@ If you cannot comply with any MUST:
 ## MCP Server Policy (Trigger-based)
 
 - See `rule://harness-mcp_policy` for full policies on all MCP servers. Servers are registered in OMP's MCP config (`omp://mcp-config.md`).
-- **External library/API truth**: use the `librarian` agent (source-reading) or direct official-doc reads. (Context7 policy retired 2026-08-26 — see `rule://harness-mcp_policy`.)
+- **External library/API truth**: read the library source or official docs directly (`read`), or `web_search`; delegate a broad sweep to the `scout` agent. (Context7 policy retired 2026-08-26 — see `rule://harness-mcp_policy`.)
 - **Supabase**: MUST use migrations for DDL; MAY use direct SQL for queries.
 - **Web Search**: SHOULD use for current events, errors, latest docs.
 
@@ -144,7 +146,7 @@ If you cannot comply with any MUST:
 
 - See `rule://harness-agent_routing` for full routing rules
   (incl. the 2026-06 retirement of the unused MCP delegation matrix).
-- **reviewer**: SHOULD delegate for **high/critical-risk** changes (per `risk-assess`: security/auth/migration files touched, or >100 changed lines of code). Low/medium-risk changes need self-review only — no extra spawn. 3-pass adversarial (self + heterogeneous adversary + code-reviewer, all three defined in `.omp/agents/` — no external plugin required; the reviewer nest-spawns Pass 2/3 via its `spawns:` frontmatter). This matches what `review-gate` enforces: machine evidence is a strict JSON tuple sidecar (`docs/reviews/review-<ts>.json`, `["omp-review-evidence/v1", <hash>, <verdict>, <models|null>, <human|null>, <reviewer>]` — the gate never parses markdown), with second-perspective evidence (a MEASURED >=2-family models array, or a human identity) required only for high/critical commits; the only bypass is an audited override (`docs/harness/review-skip` with `["omp-review-override/v1", <reason>, <approved_by>, <hash>]`, recorded to `docs/harness/audit.jsonl` and consumed). **Dispatch preflight (MUST)**: before spawning the reviewer, verify your own depth and `task`-tool availability — the reviewer needs the `task` tool for Pass 2/3 (recursion cap: depth <= 1), and a session without the `task` tool must not run the review in-session (entry-point priority: `rule://harness-agent_routing`).
+- **reviewer**: SHOULD delegate for **high/critical-risk** changes (per `risk-assess`: security/auth/migration files touched, or >100 changed lines of code). Low/medium-risk changes need self-review only — no extra spawn. 3-pass adversarial (self + a four-member heterogeneous adversary panel + code-reviewer — reviewer, adversary / adversary-sol / adversary-opus / adversary-argon and code-reviewer are all defined in `.omp/agents/`, no external plugin required; the reviewer nest-spawns Pass 2/3 via its `spawns:` frontmatter). This matches what `review-gate` enforces: machine evidence is a strict JSON tuple sidecar (`docs/reviews/review-<ts>.json`, `["omp-review-evidence/v1", <hash>, <verdict>, <models|null>, <human|null>, <reviewer>]` — the gate never parses markdown), with second-perspective evidence (a MEASURED >=2-family models array, or a human identity) required only for high/critical commits; the only bypass is an audited override (`docs/harness/review-skip` with `["omp-review-override/v1", <reason>, <approved_by>, <hash>]`, recorded to `docs/harness/audit.jsonl` and consumed). **Dispatch preflight (MUST)**: before spawning the reviewer, verify your own depth and `task`-tool availability — the reviewer needs the `task` tool for Pass 2/3 (recursion cap: depth <= 1), and a session without the `task` tool must not run the review in-session (entry-point priority: `rule://harness-agent_routing`).
 - **verifier**: MUST delegate before claiming task completion when AC exists. The `task` spawn is non-blocking (async job delivery) — **spawning is not completing; declare done only after the verifier's verdict has actually arrived.**
 
 ## Linked Modules

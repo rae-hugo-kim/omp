@@ -3,10 +3,10 @@ description: "3-pass adversarial verification layer: reviewer + heterogeneous ad
 ---
 # Adversarial Review Policy
 
-<!-- Harness: adversarial gates are automatic triggers, not opt-in -->
+<!-- Harness: the only adversarial layer live under OMP is the 3-pass code review (reviewer + adversary panel + code-reviewer); the plan/test/completion-attack steps are documented below with their actual status -->
 
 이 문서는 하네스 시스템의 적대적 검증(adversarial verification) 계층을 정의한다.
-모든 게이트는 자동 트리거이며, CRITICAL 판정 시 다음 단계 진행을 블로킹한다.
+**현재 실제로 도는 적대 계층은 "3-pass 코드 리뷰"뿐이다** — `reviewer`가 Pass 2로 adversary 패널 4명, Pass 3로 `code-reviewer`를 스폰하고, 그 결과(JSON tuple 사이드카)를 `review-gate`가 high/critical 커밋에서 요구한다. 아래 "3개 게이트 정의"의 plan/test/completion-attack은 kickoff·startdev 스킬 단계이며, 이 하네스가 보장하는 담당 에이전트가 없어 소비 리포에서는 실행 주체를 전제할 수 없다("도입 상태" 참조). 이 문서의 CRITICAL 판정 기준과 심각도 정의는 두 계층에 공통이고, override 기록은 계층마다 다르다(3-pass 리뷰 = `review-skip` tuple → `review_override`, attack 단계 = `adversarial_override` — "블로킹 해제" 참조).
 
 관련 문서: [`.omp/rules/harness-quality_gates.md`](harness-quality_gates.md), [`.omp/rules/harness-harness_integration_contract.md`](harness-harness_integration_contract.md)
 
@@ -14,10 +14,10 @@ description: "3-pass adversarial verification layer: reviewer + heterogeneous ad
 
 ## 원칙
 
-- **자동 트리거**: 모든 적대적 검증은 해당 단계에 자동 실행된다. 옵트인 아님.
+- **3-pass 리뷰는 게이트가 증거를 요구하는 방식으로 강제된다**: high/critical 커밋은 `review-gate`가 2차 관점 증거 없이는 통과시키지 않는다 — 인정되는 증거는 reviewer의 JSON tuple 사이드카, 사람 리뷰 사이드카(`["omp-review-evidence/v1", <hash>, "PASS", null, <이름>, <이름>]`), 감사된 override(`docs/harness/review-skip` tuple → `audit.jsonl` `review_override`) 셋이다(`review-gate.mjs`; 통합 계약 Known-Failure Matrix). reviewer 3-pass는 그 증거를 에이전트가 만드는 경로이며 코드 커밋 앞에 돌리는 것이 SHOULD다(`harness-agent_routing.md`) — 어떤 게이트도 reviewer를 자동 스폰하지 않는다. plan/test/completion-attack 단계의 "자동 실행"은 아래 "도입 상태"의 조건이 충족될 때만 성립한다.
 - **CRITICAL 블로킹**: CRITICAL 판정 시 수정 없이 다음 단계로 진행 불가.
 - **구조적 증거 수집**: 프레이밍(framing)이 아닌 템플릿 기반 반대 증거를 수집한다. (OMC A/B 테스트 #1240 결론 반영)
-- **기존 규칙 확장**: completion-attack은 기존 Mandatory Architect Verification을 대체하지 않고 확장한다.
+- **기존 규칙 확장**: completion-attack은 `verifier`의 독립 완료 검증(`AGENTS.md` Completion Contract)을 대체하지 않고 확장하는 설계다 — 다만 OMP에서는 아직 실행된 적이 없다("도입 상태").
 - **우회 경로 변경의 리뷰 입력**: 게이트에 면제·skip·override 경로를 추가하거나 넓히는 변경은 리뷰 컨텍스트에 위조 시나리오를 명시한다 — 신뢰 근거가 워크트리 파일·환경변수처럼 호출자가 쓸 수 있는 곳에 있는가, env로 삭제·실행 경로가 열리는가. (2026-09-05 provenance 게이트: 이 질문으로 이종 리뷰가 HIGH 2건을 잡음 — docs/decisions/001-consumer-safe-sync.md)
 
 ---
@@ -44,13 +44,25 @@ description: "3-pass adversarial verification layer: reviewer + heterogeneous ad
 
 ---
 
-## 3개 게이트 정의
+## 3개 게이트 정의 (스킬 단계 — 하네스 게이트가 아니다)
 
-| Gate | 트리거 위치 | 검증 대상 | 담당 에이전트 | 블로킹 조건 |
-|------|------------|----------|--------------|------------|
-| `plan-attack` | kickoff `seed.yaml` 생성 후 | `seed.yaml` | critic (opus) | 1회차: WARN만, 2회차+: CRITICAL 시 BLOCK |
-| `test-attack` | startdev GATE 1 후 | `docs/harness/test-plan.md` | test-engineer (sonnet) | CRITICAL 시 즉시 BLOCK |
-| `completion-attack` | startdev GATE 3 후 | 구현 결과 전체 | architect (opus) + security-reviewer (opus) + test-engineer (sonnet) 병렬; 불일치 시 critic (opus) 합의 | CRITICAL 시 BLOCK |
+세 "게이트"는 `.omp/extensions/harness/gates/`의 파일 게이트가 아니라 kickoff(Step 3.5)·startdev(GATE 1.5, GATE 3 후) 스킬의 **프롬프트 단계**다. 설계 당시(Claude Code + oh-my-claudecode 시절 — 이 문서는 2026-06-10 `8f9d689`에서 OMP로 포팅됐다)의 담당 에이전트는 OMC의 `critic`·`test-engineer`·`architect`였다. 이 하네스는 그 에이전트를 배포하지 않고(정의·동기화 대상은 `scripts/harness-sync.sh:216-223`의 7종), omp는 `.claude/agents` 루트를 건너뛰며 Claude 마켓플레이스 플러그인의 `agents/`는 Claude 플러그인/사용자 소스가 켜져 있을 때만 읽는다(`enabledProviders`에 `claude-plugins` 또는 `claude`, 혹은 `CLAUDE_CONFIG_DIR` 설정 — `omp://task-agent-discovery.md:148,159`; 2026-10-20 기준 호스트는 `[]`). 소비 리포에 그 설정을 전제할 수 없으므로 아래 표는 설계와 **하네스가 보장하는 대응 에이전트**를 나란히 적는다.
+
+| Gate | 트리거 위치 | 검증 대상 | 설계 담당(OMC — 하네스 미배포) | 하네스가 보장하는 대응 에이전트 | 블로킹 조건 |
+|------|------------|----------|------------------------|------------------------------|------------|
+| `plan-attack` | kickoff `seed.yaml` 생성 후 | `seed.yaml` | critic (opus) | `adversary` 패널 멤버(`.omp/agents/adversary*.md` — 코드 리뷰 프롬프트라 seed 공격 템플릿은 호출자가 공급) 또는 `task` | 1회차: WARN만, 2회차+: CRITICAL 시 BLOCK |
+| `test-attack` | startdev GATE 1 후 | `docs/harness/test-plan.md` | test-engineer (sonnet) | `task`(테스트 계획 공격 템플릿 공급) | CRITICAL 시 즉시 BLOCK |
+| `completion-attack` | startdev GATE 3 후 | 구현 결과 전체 | architect (opus) + security-reviewer (opus) + test-engineer (sonnet) 병렬; 불일치 시 critic (opus) 합의 | `verifier`(AC 대비 누락 — 기존 architect 역할) + OMP 번들 `security-reviewer` + `task`(테스트 커버리지); 합의 조정자는 미정 | CRITICAL 시 BLOCK |
+
+### 도입 상태 (2026-10-20 실측, `docs/harness/audit.jsonl`)
+
+| 단계 | 실행 기록 | 상태 |
+|------|-----------|------|
+| `plan-attack` | `adversarial_plan_attack` 2건 — 2026-07-10(task 20260710-180439-3771, PASS), 2026-07-29(task 20260729-132948-e510, WARN) — `actor: critic`은 스킬 템플릿이 고정한 값이라(`kickoff/SKILL.md:308`) 어느 에이전트가 실제로 돌았는지의 증거는 아니다 | Phase 1로 도입됐으나 2026-07-29 이후 실행 0건 — 하네스가 보장하는 담당 에이전트 없음 |
+| `test-attack` | `adversarial_test_attack` 1건 — 2026-07-30(task 20260729-132948-e510, BLOCK) — actor `test-engineer` | Phase 2(미승인) 상태에서 1회 실행된 기록만 있음; 이후 0건 |
+| `completion-attack` | `adversarial_completion_attack` 0건 | 실행된 적 없음 |
+
+OMP에서 이 단계들을 다시 살리려면 kickoff·startdev 스킬의 호출 에이전트를 위 "하네스가 보장하는 대응 에이전트" 열로 바꾸는 별도 작업이 필요하다(이슈 #113 범위 밖 — seed/kickoff 생애주기 묶음; 그때까지 두 스킬은 발견되지 않는 에이전트 이름을 그대로 부른다). 그때까지 이 세 단계는 **완료 조건이 아니며**, `checklists/verify.md`도 이를 요구하지 않는다. 완료 검증 주체는 `verifier`, 코드 품질의 적대 검증은 3-pass 리뷰다.
 
 ---
 
@@ -79,7 +91,7 @@ description: "3-pass adversarial verification layer: reviewer + heterogeneous ad
 ## 블로킹 해제
 
 1. **정상 해제**: CRITICAL 항목 수정 후 해당 게이트 재실행.
-2. **사용자 명시적 override**: `docs/harness/audit.jsonl`에 `adversarial_override` 이벤트 기록 후 진행.
+2. **사용자 명시적 override**: attack 단계(plan/test/completion)는 `docs/harness/audit.jsonl`에 `adversarial_override` 이벤트 기록 후 진행. 3-pass 리뷰(`review-gate`)는 이 행을 읽지 않는다 — 그 계층의 override는 `docs/harness/review-skip` tuple이며 게이트가 `review_override`로 기록·소비한다("원칙" 첫 항목, `review-gate.mjs`).
 3. **PASS 이후의 low 항목**: 사이드카는 diff 해시에 바인딩되므로 PASS(WITH NOTES)를 받은 diff는 동결하고, 남은 low·문서 정밀도 항목은 커밋 뒤 **별도 docs 커밋**에서 고친다 — 같은 diff를 손대면 해시가 바뀌어 재리뷰 라운드가 필요하다(2026-09-29 #56 r10, `docs/sum/session_2026-09-29_issue56-closeout-ac-record-pr59.md` D4).
 
 ---
@@ -119,29 +131,29 @@ description: "3-pass adversarial verification layer: reviewer + heterogeneous ad
 
 ---
 
-## completion-attack과 기존 Architect Verification의 관계
+## completion-attack과 `verifier` 완료 검증의 관계
 
-기존 oh-my-claudecode 전역 규칙 "NEVER complete without Architect verification"은 **그대로 유지**된다.
+완료 검증의 주체는 `verifier`다 — `AGENTS.md` Completion Contract와 [`.omp/rules/harness-agent_routing.md`](harness-agent_routing.md)가 요구하는 "AC가 있으면 verifier를 스폰하고 verdict가 도착한 뒤에만 완료 선언"은 **그대로 유지**된다(설계 당시의 OMC 전역 규칙 "NEVER complete without Architect verification"이 이 자리에 있었고, `verifier`가 그 역할을 이어받았다).
 
-completion-attack은 그 위에 추가 계층을 얹는다:
+completion-attack은 그 위에 추가 계층을 얹는 설계다:
 
-- architect 에이전트: 기존 역할 유지 (변경 없음)
-- security-reviewer (opus): 보안 취약점 관점 추가
-- test-engineer (sonnet): 테스트 커버리지·엣지 케이스 관점 추가
-- 3개 에이전트 병렬 실행; 판정 불일치 시 critic (opus)이 합의 조정
+- `verifier`: AC 대비 누락·범위 이탈 확인(기존 architect 역할 — 변경 없음)
+- `security-reviewer`(OMP 번들): 보안 취약점 관점 추가
+- 테스트 커버리지·엣지 케이스 관점: 설계 담당 `test-engineer`는 OMP에 없으므로 `task` 에이전트에 공격 템플릿을 공급해 대신한다
+- 3개 병렬 실행; 판정 불일치 시의 합의 조정자(설계: critic)는 OMP에서 미정
 
-즉, completion-attack = 기존 architect verification + security + test 관점 병렬화.
+즉, completion-attack = verifier 완료 검증 + security + test 관점 병렬화 — 단, OMP에서 실행된 적은 없다("도입 상태").
 
 ---
 
-## 롤아웃 계획
+## 롤아웃 계획과 현재 위치
 
-| Phase | 내용 | 전제 조건 |
-|-------|------|---------|
-| Phase 1 | `plan-attack`만 먼저 도입 | - |
-| Phase 2 | `test-attack` + `completion-attack` 추가 | Phase 1 검증 완료 후 |
+| Phase | 내용 | 전제 조건 | 현재 위치(2026-10-20) |
+|-------|------|---------|----------------------|
+| Phase 1 | `plan-attack`만 먼저 도입 | - | 2회 실행 기록(2026-07-10·07-29, audit `actor: critic`); 이후 하네스가 보장하는 담당 에이전트가 없어 0회 |
+| Phase 2 | `test-attack` + `completion-attack` 추가 | Phase 1 검증 완료 후 | 미승인. `test-attack`은 2026-07-30 1회 실행 기록이 있으나 Phase 1 검증 완료 판정은 없었다; `completion-attack`은 0회 |
 
-Phase 2는 Phase 1 운영 결과를 확인한 뒤 활성화한다. 미검증 상태에서 Phase 2를 활성화하지 않는다.
+Phase 2는 Phase 1 운영 결과를 확인한 뒤 활성화한다. 미검증 상태에서 Phase 2를 활성화하지 않는다. OMP에서 Phase 1을 다시 살리는 것(kickoff 스킬의 호출 에이전트 교체)은 별도 작업이다.
 
 ---
 
@@ -151,4 +163,4 @@ Phase 2는 Phase 1 운영 결과를 확인한 뒤 활성화한다. 미검증 상
 - [ ] CRITICAL 판정 시 3조건 모두 증거와 함께 명시했는가?
 - [ ] override 발생 시 `audit.jsonl`에 `adversarial_override` 이벤트를 기록했는가?
 - [ ] 산출물 파일이 올바른 경로에 생성되었는가?
-- [ ] completion-attack 실행 시 architect 에이전트가 여전히 포함되었는가?
+- [ ] completion-attack을 실행했다면 `verifier`의 AC 검증이 포함되었는가? (실행하지 않았다면 verifier verdict만으로 완료 조건을 채운다)

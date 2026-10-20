@@ -1,8 +1,8 @@
 <!-- policy-sync-warning:start -->
 warning_type: reference_only
 non_normative_reference_only: true
-last_sync_date: 2026-10-07
-status: synced
+last_sync_date: 2026-10-20
+status: stale
 source_of_truth: ../AGENTS.md
 source_commit_hash: 9fbe856f165904e86be21dfb9879715b17e3e7b2
 <!-- policy-sync-warning:end -->
@@ -25,7 +25,7 @@ source_commit_hash: 9fbe856f165904e86be21dfb9879715b17e3e7b2
 
 - 이 정책은 에이전트가 활성화된 동안 이 리포/워크스페이스에 적용됩니다.
 - 링크된 모듈이 이 파일과 충돌하면 **이 파일이 우선**합니다.
-- **이 정책은 사용자 전역 규칙을 보완합니다**(OMP는 `~/.claude/CLAUDE.md`와 OMC 스킬/에이전트도 발견합니다) — 대체하지 않습니다.
+- **이 정책은 사용자 전역 규칙을 보완합니다**(OMP는 Claude 사용자 레벨 소스로 `~/.claude/CLAUDE.md`와 `~/.claude/skills`의 OMC 스킬을 발견합니다 — `omp://context-files.md:59` / `omp://skills.md:122`는 `enabledProviders` 옵트인이라고 하지만 2026-10-20 기준 호스트에서는 `[]`로도 둘 다 로드됐습니다) — 대체하지 않습니다. OMC 에이전트에는 **의존하지 않습니다**: 이 파일이 이름을 부르는 에이전트는 전부 `.omp/agents/`에 있거나 OMP 번들입니다(`rule://harness-agent_routing`).
 
 ## 소유·우선순위·관할
 
@@ -35,7 +35,7 @@ source_commit_hash: 9fbe856f165904e86be21dfb9879715b17e3e7b2
 
 ## 소비자 확장점
 
-이 파일, `.omp/rules/harness-*.md`, `checklists/`, `templates/`, `.omp/extensions/harness/`, 하네스 스킬, 하네스 에이전트 4종은 **하네스 소유**입니다: `harness-check`가 동기화 때마다 원격본으로 덮어쓰고(remote wins), 디렉터리 항목은 `rm -rf` + 복사, `.omp/rules/harness-*.md`는 파일 글롭(낡은 `harness-*` 파일은 제거, 형제 파일은 비접촉)입니다. 이 템플릿으로 만든 프로젝트는 동기화가 건드리지 않는 자리에 자체 정책을 둡니다:
+이 파일, `.omp/rules/harness-*.md`, `checklists/`, `templates/`, `.omp/extensions/harness/`, 하네스 스킬, 하네스 에이전트 7종(`reviewer`, `verifier`, `code-reviewer`, `adversary`와 그 미러 `adversary-*` 3개 — `scripts/harness-sync.sh`)은 **하네스 소유**입니다: `harness-check`가 동기화 때마다 원격본으로 덮어쓰고(remote wins), 디렉터리 항목은 `rm -rf` + 복사, `.omp/rules/harness-*.md`는 파일 글롭(낡은 `harness-*` 파일은 제거, 형제 파일은 비접촉)입니다. 이 템플릿으로 만든 프로젝트는 동기화가 건드리지 않는 자리에 자체 정책을 둡니다:
 
 |필요|위치|OMP가 읽는 방식|
 |---|---|---|
@@ -68,7 +68,9 @@ source_commit_hash: 9fbe856f165904e86be21dfb9879715b17e3e7b2
 
 커밋 집행은 git 자체 경계에서 돕니다: **`.githooks/pre-commit`**이 `commit-gates` 디스패처를 훅 모드로 호출하므로, 커밋 게이트 4종은 실제 커밋 대상 리포의 staged 인덱스를 판정합니다 — 어떤 철자로 호출하든, 사람 커밋이든 에이전트 커밋이든. `core.hooksPath`가 `.githooks`를 가리켜야 합니다(bootstrap/migrate가 설정). 명령 계층에는 위의 우회 tripwire만 남습니다. 통합 경로(merge 자동 커밋, cherry-pick, revert, rebase)는 의도적으로 차단하지 않습니다 — 원 커밋 시점에 이미 게이트를 통과한 커밋을 옮기는 것이고, post-commit/post-merge 권고가 관찰합니다. 나머지 게이트는 `.omp/extensions/harness/index.ts`가 배선합니다(OMP 이벤트: `tool_call`, `tool_result`, `before_agent_start`, `session_start`). 게이트는 PATH의 `node`가 필요하며, pre-commit 훅은 node가 없으면 **fail-closed**입니다(`OMP_NODE_BIN`이 nvm/GUI/cron 환경의 탈출구). in-process mermaid 검사는 node가 필요 없습니다. 알려진 잔존(sparse-checkout, `stash`, `--no-verify`, 관할 밖 리포)은 `rule://harness-harness_integration_contract`([`.omp/rules/harness-harness_integration_contract.md`](../.omp/rules/harness-harness_integration_contract.md))에 열거돼 있습니다.
 
-OMC 관계: `~/.claude` 아래 설치된 OMC 에이전트·스킬은 OMP가 발견해 `task` 도구로 쓸 수 있습니다. OMC의 훅 자동화(매직 키워드, system-reminder 주입)는 OMP에서 **동작하지 않으며**, 리포 수준 게이팅은 이 확장이 대신합니다.
+OMC 관계: `~/.claude/skills`에 설치된 OMC **스킬**은 OMP가 Claude 사용자 레벨 스킬 소스로 발견합니다(`omp://skills.md:122`는 외부 사용자 레벨 프로바이더를 `enabledProviders` 옵트인이라고 하지만, 2026-10-20 실측에서는 `[]`로도 로드됐습니다 — 정확한 조건은 omp 쪽 세부라 어느 쪽도 전제하지 않습니다). OMC **에이전트**에는 의존하지 않습니다 — omp는 `.claude/agents` 루트를 건너뛰고, OMC처럼 사용자 레벨 마켓플레이스(`~/.claude/plugins`)로 설치된 에이전트는 Claude 플러그인/사용자 소스가 켜져 있을 때만 읽는데(`enabledProviders`에 `claude-plugins` 또는 `claude`, 혹은 `CLAUDE_CONFIG_DIR` 설정 — `omp://task-agent-discovery.md:148,159`; 프로젝트 범위 플러그인 루트는 `claude-plugins` 프로바이더만 있으면 됩니다) 이 하네스는 그 설정을 전제하지 않습니다. 이 정책이 의존하는 에이전트는 `verifier`·`reviewer`·`code-reviewer`·`adversary*` 패널(`.omp/agents/`, `scripts/harness-sync.sh`가 동기화)과 OMP 번들 `scout`/`task`/`sonic`/`security-reviewer`가 전부입니다.
+
+OMC의 훅 자동화(매직 키워드, system-reminder 주입)는 OMP에서 **동작하지 않으며**, 리포 수준 게이팅은 이 확장이 대신합니다.
 
 **이 파일이 더하는 것**: 프로젝트 고유 제약, 근거 기준, 문서화 요건.
 
@@ -137,14 +139,14 @@ OMC 관계: `~/.claude` 아래 설치된 OMC 에이전트·스킬은 OMP가 발�
 ## MCP 서버 정책 (트리거 기반)
 
 - 전체 정책은 `rule://harness-mcp_policy`. 서버는 OMP의 MCP 설정(`omp://mcp-config.md`)에 등록돼 있습니다.
-- **외부 라이브러리/API 진실**: `librarian` 에이전트(소스 읽기) 또는 공식 문서 직접 읽기. (Context7 정책은 2026-08-26 폐기 — `rule://harness-mcp_policy` 참조.)
+- **외부 라이브러리/API 진실**: 라이브러리 소스나 공식 문서를 직접 읽거나(`read`) `web_search`를 쓰고, 넓은 탐색은 `scout` 에이전트에 위임합니다. (Context7 정책은 2026-08-26 폐기 — `rule://harness-mcp_policy` 참조.)
 - **Supabase**: DDL은 반드시 migration으로. 조회는 직접 SQL도 가능합니다.
 - **웹 검색**: 최신 사건, 오류, 최신 문서에 사용하는 것이 좋습니다.
 
 ## 에이전트 라우팅 정책 (트리거 기반)
 
 - 전체 라우팅 규칙은 `rule://harness-agent_routing`(2026-06에 폐기한 미사용 MCP 위임 매트릭스 포함).
-- **reviewer**: **high/critical 위험** 변경(`risk-assess` 기준: 보안/인증/마이그레이션 파일 접촉, 또는 코드 100줄 초과)에 위임하는 것이 좋습니다. low/medium은 자체 리뷰만 — 추가 스폰 없음. 3-pass 적대 리뷰(self + 이종 adversary + code-reviewer, 셋 다 `.omp/agents/`에 정의 — 외부 플러그인 불필요. reviewer가 `spawns:` frontmatter로 Pass 2/3를 중첩 스폰). 이는 `review-gate`가 집행하는 것과 같습니다: 기계 증거는 엄격한 JSON 튜플 사이드카(`docs/reviews/review-<ts>.json`, `["omp-review-evidence/v1", <hash>, <verdict>, <models|null>, <human|null>, <reviewer>]` — 게이트는 마크다운을 읽지 않음)이고, 2차 관점 증거(실측된 2계열 이상 models 배열 또는 사람 신원)는 high/critical 커밋에만 필요하며, 유일한 우회는 감사되는 override(`docs/harness/review-skip`에 `["omp-review-override/v1", <reason>, <approved_by>, <hash>]`, `docs/harness/audit.jsonl`에 기록 후 소비)입니다. **디스패치 preflight (MUST)**: reviewer를 스폰하기 전에 자신의 깊이와 `task` 도구 가용성을 확인합니다 — reviewer는 Pass 2/3에 `task` 도구가 필요하고(재귀 상한: depth <= 1), `task` 도구가 없는 세션은 세션 안에서 리뷰를 수행하면 안 됩니다(진입점 우선순위: `rule://harness-agent_routing`).
+- **reviewer**: **high/critical 위험** 변경(`risk-assess` 기준: 보안/인증/마이그레이션 파일 접촉, 또는 코드 100줄 초과)에 위임하는 것이 좋습니다. low/medium은 자체 리뷰만 — 추가 스폰 없음. 3-pass 적대 리뷰(self + 이종 adversary 패널 4명 + code-reviewer — reviewer, adversary / adversary-sol / adversary-opus / adversary-argon, code-reviewer 전부 `.omp/agents/`에 정의 — 외부 플러그인 불필요. reviewer가 `spawns:` frontmatter로 Pass 2/3를 중첩 스폰). 이는 `review-gate`가 집행하는 것과 같습니다: 기계 증거는 엄격한 JSON 튜플 사이드카(`docs/reviews/review-<ts>.json`, `["omp-review-evidence/v1", <hash>, <verdict>, <models|null>, <human|null>, <reviewer>]` — 게이트는 마크다운을 읽지 않음)이고, 2차 관점 증거(실측된 2계열 이상 models 배열 또는 사람 신원)는 high/critical 커밋에만 필요하며, 유일한 우회는 감사되는 override(`docs/harness/review-skip`에 `["omp-review-override/v1", <reason>, <approved_by>, <hash>]`, `docs/harness/audit.jsonl`에 기록 후 소비)입니다. **디스패치 preflight (MUST)**: reviewer를 스폰하기 전에 자신의 깊이와 `task` 도구 가용성을 확인합니다 — reviewer는 Pass 2/3에 `task` 도구가 필요하고(재귀 상한: depth <= 1), `task` 도구가 없는 세션은 세션 안에서 리뷰를 수행하면 안 됩니다(진입점 우선순위: `rule://harness-agent_routing`).
 - **verifier**: AC가 있으면 완료 선언 전에 반드시 위임합니다. `task` 스폰은 비차단(비동기 결과 전달) — **스폰은 완료가 아니며, verifier verdict가 실제로 도착한 뒤에만 완료를 선언합니다.**
 
 ## 링크 모듈

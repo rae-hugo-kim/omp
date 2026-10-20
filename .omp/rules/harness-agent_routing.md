@@ -4,7 +4,7 @@ description: "When to delegate to reviewer/verifier/other subagents; model and e
 # Agent Routing Policy
 
 프로젝트 전용 서브에이전트의 호출 기준을 정의한다.
-이 에이전트들은 `.omp/agents/`에 정의되어 있다. OMC 에이전트(executor, architect, verifier 등)는 OMP의 task 도구가 디스커버리해 호출한다 — OMC의 훅 자동화(매직 키워드, system-reminder 주입 등)는 OMP에서 동작하지 않으며, 라우팅은 본 정책과 에이전트 정의로만 이뤄진다.
+이 에이전트들은 `.omp/agents/`에 정의되어 있고 OMP의 task 도구가 디스커버리해 호출한다 — 하네스가 정의·동기화하는 에이전트는 `reviewer`·`verifier`·`code-reviewer`·`adversary`(+ `adversary-sol`·`adversary-opus`·`adversary-argon`) 7종뿐이고(`scripts/harness-sync.sh:216-223`), 그 밖에는 OMP 번들 에이전트 `scout`·`security-reviewer`·`task`·`sonic`이 있다(`omp://task-agent-discovery.md:129-136`; 번들에도 `reviewer`가 있지만 프로젝트 `.omp/agents/reviewer.md`가 이름 우선순위로 가린다). OMC(oh-my-claudecode)의 `executor`·`architect`·`critic`·`test-engineer`·`librarian` 같은 에이전트에는 **이 정책이 의존하지 않는다** — omp는 `.claude/agents` 루트를 의도적으로 건너뛰고(`omp://task-agent-discovery.md:148`), OMC처럼 사용자 레벨 Claude 마켓플레이스(`~/.claude/plugins`)로 설치된 `agents/`는 Claude 플러그인/사용자 소스가 켜져 있을 때만 들어온다(`enabledProviders`에 `claude-plugins` 또는 `claude`, 혹은 `CLAUDE_CONFIG_DIR` 설정 — `:159`; 프로젝트 범위 플러그인 루트는 `claude-plugins` 프로바이더만 있으면 된다. 2026-10-20 실측 omp 18.11.1 `omp config get enabledProviders` → `[]`, 세션 에이전트 목록에 없음). 소비 리포에 그 설정을 보장할 수 없으므로 MUST 경로는 위 7종 + 번들만 쓴다. OMC의 훅 자동화(매직 키워드, system-reminder 주입 등)도 OMP에서 동작하지 않으며, 라우팅은 본 정책과 에이전트 정의로만 이뤄진다.
 
 ## 라우팅 기준
 
@@ -16,7 +16,7 @@ description: "When to delegate to reviewer/verifier/other subagents; model and e
 high/critical 위험 코드 변경의 품질 리뷰 필요?
   → reviewer (3-pass 적대적 리뷰; low/medium은 셀프 리뷰로 충분)
 그 외 (탐색/조사/구현)?
-  → 직접 처리 또는 빌트인 에이전트 사용 (scout, task, OMC executor 등)
+  → 직접 처리 또는 빌트인 에이전트 사용 (scout, task, sonic, security-reviewer)
 ```
 
 ### 에이전트별 트리거
