@@ -1,42 +1,47 @@
-name: dev-discipline-docs-115
-status: done
-completed: 2026-10-21
+name: seed-lifecycle-contract-114
+status: approved
 version: 1
-task_id: "20261021-091500-115a"
-# gh-loop worker Stage 2에 따라 이슈 #115 본문(패널 감사 C3·C5·C7·C12·C17, main 538fdcc 기준 file:line)과
-# "세션에서 직접 결정함" 댓글(2026-10-21, AC1 = C 범위 한정 MUST + 생략 시 승인)을 명세로 삼습니다.
-# 직전 완료 seed(adversary-panel-112)는 git 이력에 보존합니다.
+task_id: "20261020-025203-da34"
+# gh-loop worker Stage 2에 따라 이슈 #114 본문(패널 감사 C4·C11·C19의 file:line 모순 목록, AC1~AC5, 범위 밖)을 명세로 삼습니다.
+# 이슈 본문이 사용자 승인 명세이므로 처음부터 approved로 씁니다. 직전 완료 seed(dev-discipline-docs-115, 그 앞 #113 seed 포함)는 git 이력에 보존합니다.
 goal: >
-  #115: 개발 규율 문서 다섯 묶음의 모순을 코드(게이트·스크립트)에 맞춰 해소합니다 — TDD 규범 등급을
-  하나로(C: 테스트 인프라가 있는 코드 로직 변경은 test-first MUST, 생략은 사용자 승인; 인프라 없음·docs-only·
-  자동화 불가는 승인 없이 결정적 대체 산출물), policy_sync 체크리스트를 docs-drift·pre-push 동작에 맞추고,
-  코드 리뷰 severity와 verdict 어휘를 review-gate가 소비하는 PASS / PASS WITH NOTES / FAIL로 통일하며,
-  e2e 체크리스트 위치를 소비자 공간으로, eval 저장 경로를 한 곳으로 맞춥니다. docs-only입니다.
+  #114: seed/kickoff 생애주기 계약 문서를 스킬·게이트·스크립트 코드에 맞춥니다 — rubric 5차원과 kickoff 산출물 7종,
+  seed 템플릿의 task_id·estimate, active seed와 draft→approved 전이의 단일 정의, 닫힌 seed 재개와 version 규칙의 통일,
+  부분 AC 스레드가 seed 전체를 닫지 않는 closeout 조건(C19)과 그 잔존면.
 constraints:
-  - "docs-only: 게이트·스크립트 코드는 바꾸지 않고 문서를 코드에 맞춥니다. 변경 파일은 이슈 AC5의 목록 안에 둡니다(docs/harness/ seed·scope·audit는 워크플로 산출물로 범위 안)."
-  - "TDD 등급은 사용자 결정 C(2026-10-21)대로 — tdd_policy·change_control·bugfix 체크리스트·verification 규칙이 같은 등급과 같은 예외 목록(인프라 없음·docs/policy-only·자동화 불가 = 무승인, 인프라 있는 코드 로직에서 생략 = 승인)을 서술합니다."
-  - "verdict 어휘는 review-gate.mjs:128 VERDICTS(PASS / PASS WITH NOTES / FAIL)를 따르고, severity는 정책이 두 번 명시한 복잡도 초과 = HIGH, 정책 표·MEDIUM 목록·체크리스트가 일치하는 테스트 누락 = MEDIUM으로 맞춥니다."
-  - "AGENTS.md를 바꾸지 않으므로 claudedocs/CLAUDEKR.md 동기화·재스탬프는 발생하지 않습니다. claudedocs/CLAUDE_original.md는 동결 스냅샷(status: stale, doc_standards R6)이라 건드리지 않습니다."
+  - "docs-only입니다 — 게이트·스크립트·스킬 코드는 바꾸지 않고, 어긋나는 쪽은 문서를 코드(acceptance-gate.mjs·thread-scope.mjs·scripts/docs-drift)에 맞춥니다."
+  - "변경 파일은 docs/rules/·docs/templates/·docs/checklists/·.omp/rules/harness-harness_integration_contract.md(잔존면 1단락)와 gh-loop Stage 2 워크플로 산출물(docs/harness/) 안에 둡니다."
+  - "kickoff 스킬이 정본이며 계약을 스킬에 맞춥니다."
 acceptance_criteria:
   - id: AC1
-    title: "TDD의 규범 등급이 하나입니다 — tdd_policy·change_control·checklists/bugfix.md·verification_tests_and_evals가 결정 C(테스트 인프라가 있는 코드 로직 변경은 test-first MUST, 생략은 사용자 명시 승인; 인프라 없음·docs/policy-only·자동화 불가는 승인 없이 결정적 대체 산출물)와 같은 예외 목록을 서술합니다."
+    title: "docs/templates/seed.template.yaml에 task_id와 선택 estimate가 있고, kickoff 출력 계약·rubric 템플릿·rubric 체크리스트가 5차원(coverage 포함)과 산출물 7종(kickoff-done·kickoff-summary.md·seed.yaml·plan-attack-report.md·rubric-report.md·current-scope.md·audit.jsonl)을 스킬과 같게 정의합니다."
   - id: AC2
-    title: "templates/policy_sync_checklist.md와 INDEX.md의 Policy sync process가 claudedocs/CLAUDEKR.md만 동기화하고, CLAUDE_original.md는 동결임을 명시하며, source_commit_hash + status: synced 재스탬프는 AGENTS.md를 건드리지 않는 후속 커밋에서(같은 커밋이면 status: stale) 한다고 서술합니다."
+    title: "active seed와 draft→approved 전이가 seed_contract.md §생애주기 한 곳에 정의되고 closeout·startdev·artifact_roles 계약이 그 정의를 인용하며, docs-drift closeoutConsistency·acceptance-gate·thread-scope 동작과 어긋나던 서술(orphan 정의 등)이 코드에 맞춰집니다."
   - id: AC3
-    title: "복잡도 초과(HIGH)·테스트 누락(MEDIUM)의 severity와 verdict 어휘(PASS / PASS WITH NOTES / FAIL)가 harness-code_review_policy 본문·severity 표·checklists/code_review.md·.omp/agents/code-reviewer.md에서 하나입니다."
+    title: "닫힌 seed 재개 규칙이 '같은 기능이면 thread-scope open, 새 기능이면 kickoff'로 startdev 계약 preflight까지 통일되고, version 증가 조건이 seed_contract·seed_evolution_policy·artifact_roles에서 하나(seed_contract §생애주기 version 규칙)입니다."
   - id: AC4
-    title: "e2e 체크리스트 위치가 소비자 공간(docs/checklists/e2e_<feature>.md)으로 바뀌고, eval 저장 경로가 checklists/eval.md와 verification 규칙에서 같습니다(eval/cases/ 구조)."
+    title: "closeout 계약 §2가 seed의 모든 AC 충족 근거를 요구하고, 현 게이트가 그것을 검증하지 못한다는 사실이 harness-harness_integration_contract.md Known residual surfaces에 한 단락으로 적혀 있습니다."
   - id: AC5
-    title: "node scripts/docs-drift 0 errors, 하네스 suite(node --test .omp/extensions/harness/tests/*.test.mjs) 전 항목 통과, 변경 파일이 .omp/rules/harness-{tdd_policy,change_control,verification_tests_and_evals,code_review_policy,doc_standards}.md·checklists/{bugfix,code_review,eval}.md·templates/policy_sync_checklist.md·INDEX.md·.omp/agents/code-reviewer.md(+ docs/harness/ 워크플로 산출물) 안입니다."
+    title: "node scripts/docs-drift가 0 errors, 하네스 suite(node --test .omp/extensions/harness/tests/*.test.mjs)가 전 항목 통과하고, 변경 파일이 허용 목록 안에 있습니다."
 out_of_scope:
-  - "완료 검증 주체·게이트 서술(verification 규칙 :11-13의 acceptance-gate·Architect 문구 — 별도 이슈), seed/kickoff 계약(별도 이슈), omp 드리프트(#110)."
-  - "게이트 코드로 TDD를 강제하는 기능 추가."
-  - "checklists/code_review.md:55 디버그 로깅(Tests MEDIUM 아래) vs 정책 HIGH 목록 — AC3가 지목한 복잡도·테스트 누락 밖이라 관찰만 보고합니다."
+  - "thread-scope.mjs·acceptance-gate.mjs·docs-drift 코드 변경(필요하면 후속 이슈로 제안만 합니다)."
+  - "kickoff·startdev 스킬 본문 변경 — 스킬이 정본입니다."
+  - "AGENTS.md·claudedocs/CLAUDEKR.md — AGENTS.md를 바꾸지 않으므로 미러 동기화 대상이 아닙니다."
+  - "docs/glossary.yaml의 'seed의 4차원 품질 판정' 서술 — AC5 허용 목록 밖이라 후속 제안으로 남깁니다."
 assumptions:
-  - "시작 HEAD는 main 538fdcc(이슈 file:line 기준 커밋)이고 워크트리 브랜치는 gh-fanout-issue-115입니다."
-  - "C17의 통일 방향(규칙의 eval/ 4단 구조)과 C7의 복잡도 등급(정책의 HIGH)은 규범 티어 문서를 기준으로 워커가 골랐고 결정 요청 댓글의 Context에 근거를 적었습니다 — 이슈가 '하나로'만 요구했기 때문입니다."
+  - "시작 HEAD는 main 538fdcc이고 이슈의 file:line은 그 커밋 기준입니다."
+  - "draft→approved를 수행하는 스크립트·게이트는 없으며(리포 전체 grep), gh-loop 워커는 이슈 본문을 승인된 명세로 보고 seed를 approved로 착지시켜 왔습니다(#105·#112 seed 이력)."
 risks:
-  - "C의 조건절('테스트 인프라가 있는 코드 로직 변경')은 판정이 사람·에이전트의 해석에 남습니다 — 게이트가 검사하지 않으므로 문서상 MUST이며, 리뷰가 유일한 집행 지점입니다."
-  - "harness-tdd_policy.md의 frontmatter description을 바꿨습니다 — 규칙집 목록 표시가 달라지지만 이름만 참조하는 README·AGENTS.md·CLAUDEKR는 영향이 없습니다(grep 실측)."
-  - "리뷰 r1(PASS WITH NOTES)의 확정 MEDIUM — '자동화 불가 = 무승인'과 '인프라 있음 + 코드 로직 = 승인'의 겹침 — 을 '인프라 있음 + 코드 로직이면 승인 경로 우선, 자동화 불가는 승인 사유'로 봉합했습니다. 결정 C의 취지(TDD가 가능했는데 건너뛸 때만 승인)를 따른 해석이지만 결정 원문의 '수동 재현 경로는 승인 없이'를 좁힌 것이라 머지 결정 요청에 명시해 사용자가 이의를 제기할 수 있게 합니다(r2 opus 충실도 노트)."
-  - "r2(PASS WITH NOTES)의 LOW 3건(tdd_policy :74 'feasible' 중의·:8 예시·verification :27 용어)은 closeout 커밋에 한 줄씩 반영했고 재리뷰하지 않았습니다 — 마지막 diff는 docs-drift·suite·verifier로만 확인했습니다. 범위 밖으로 남긴 LOW: claudedocs/INDEX.md:6 'marked stale' 문구, policy_sync 체크리스트의 squash/rebase 금지 미언급, 단독 push 문장의 메커니즘 과장(pre-push는 HEAD 기준, CI가 잡음)."
+  - "startdev 스킬 Phase 0.5는 done/superseded에서 kickoff만 안내해 새 계약 preflight(thread-scope open 경로 포함)와 문구가 다릅니다 — 스킬 변경은 범위 밖이라 후속 제안으로 남깁니다."
+  - "closeout §2 (ii)는 게이트가 검사하지 못하는 에이전트 책임이라 잔존면으로만 남습니다."
+references:
+  - path: docs/rules/seed_contract.md
+    reason: 생애주기 단일 정의 위치
+  - path: .omp/skills/kickoff/SKILL.md
+    reason: kickoff 산출물·rubric 정본
+  - path: .omp/extensions/harness/thread-scope.mjs
+    reason: active·reopen 동작 근거
+  - path: .omp/extensions/harness/gates/acceptance-gate.mjs
+    reason: active·closeout landing 판정 근거
+  - path: scripts/docs-drift
+    reason: closeoutConsistency 검증 레인 근거
