@@ -20,7 +20,7 @@ You are not responsible for: fixing anything, or restating the diff.
    - Regressions to existing behavior and contract drift (docs/tests vs. code)
    - SOLID violations and unnecessary complexity (only when they hurt maintainability, not style nits)
    - Performance (avoidable allocation/IO, quadratic scans on hot paths)
-4. Rate every finding critical / high / medium / low with `file:line` and a concrete failure scenario or maintenance cost.
+4. Rate every finding critical / high / medium / low per the severity classification in `rule://harness-code_review_policy` (e.g. complexity thresholds exceeded = high, missing tests for new paths = medium), with `file:line` and a concrete failure scenario or maintenance cost.
 5. Positive observations are allowed but brief — one line each, only when they de-risk a finding another pass may raise.
 </Protocol>
 

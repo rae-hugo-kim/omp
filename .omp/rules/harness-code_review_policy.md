@@ -40,15 +40,15 @@ This policy applies to all code reviews in this repo, whether performed by an ag
 | Severity | Definition | Merge gate |
 |----------|------------|------------|
 | **CRITICAL** | Security vulnerability, potential data loss, crashes in normal use, exposed secrets | Block — must fix before merge |
-| **HIGH** | Definite bugs, performance regressions, missing error handling on failure paths | Warn — should fix before merge |
+| **HIGH** | Definite bugs, performance regressions, missing error handling on failure paths, complexity thresholds exceeded (see below) | Warn — should fix before merge |
 | **MEDIUM** | Maintainability problems, readability gaps, missing tests for new paths | Note — fix in follow-up acceptable |
 | **LOW** | Minor suggestions, naming improvements, TODOs without tickets | Optional |
 
-**Approval criteria** (the agent's verdict words are `PASS / PASS WITH NOTES / FAIL` — `.omp/agents/code-reviewer.md:43-44`; the labels below map onto them and are not a separate vocabulary):
+**Verdict** (the same vocabulary the `review-gate` evidence sidecar accepts and the `code-reviewer` agent emits — `PASS` / `PASS WITH NOTES` / `FAIL`; `.omp/agents/code-reviewer.md:43-44`. There is no separate Approve/Warning/Block vocabulary):
 
-- **Approve** → `PASS`: no CRITICAL or HIGH findings
-- **Warning** → `PASS WITH NOTES`: HIGH findings only — may merge with documented caution
-- **Block** → `FAIL`: any CRITICAL finding — must resolve before merge
+- **PASS**: no CRITICAL or HIGH findings
+- **PASS WITH NOTES**: HIGH findings only — may merge with documented caution
+- **FAIL**: any CRITICAL finding — must resolve before merge
 
 ## Quantitative complexity thresholds
 
@@ -83,7 +83,6 @@ Flag immediately — these can cause real damage:
 - Nesting depth exceeding 4 levels — flatten with early returns or extracted helpers
 - Debug logging (`console.log`, `print`, etc.) left in production paths
 - Dead code: commented-out blocks, unused imports, unreachable branches
-- Missing tests for new logic paths
 
 ### Silent failures (HIGH)
 
