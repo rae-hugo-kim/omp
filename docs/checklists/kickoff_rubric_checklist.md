@@ -3,12 +3,13 @@
 ## Purpose
 이 체크리스트는 `kickoff`가 끝났을 때 바로 구현에 들어가도 되는지 판정하기 위한 최소 기준이다.
 
-판정 축은 4개다.
+판정 축은 5개입니다(명확도 4축 + `coverage`). kickoff 스킬 Step 4와 `docs/rules/kickoff_output_contract.md` Rubric Gate가 같은 5축을 씁니다.
 
 - `goal_clarity`
 - `constraint_clarity`
 - `success_criteria_clarity`
 - `context_clarity`
+- `coverage`
 
 ## Rating Scale
 
@@ -67,9 +68,21 @@
 - MEDIUM: 일부 맥락은 있으나 더 확인 필요
 - LOW: 맥락이 거의 없어 구현 방향이 흔들릴 수 있음
 
+### 5. Coverage
+- [ ] 원본 요구(doc-ingest면 원본 문서의 요구, 인터뷰만 했으면 Scope의 MUST/SHOULD)마다 AC가 1개 이상 매핑돼 있다
+- [ ] 매핑하지 않은 요구는 `out_of_scope`에 명시 배제돼 있다
+- [ ] doc-ingest로 도출한 AC는 출처 앵커(`source:` 또는 인라인 `src:`)를 가진다
+- [ ] 미매핑 잔차가 `rubric-report.md`의 "Unmapped Requirements (Residual)"에 적혀 있다(없으면 "없음")
+
+판정:
+- HIGH: 모든 원본 요구가 AC 1개 이상으로 매핑되고 잔차가 0이다
+- MEDIUM: 대부분 매핑됐고 소수 잔차를 명시했다
+- LOW: 다수 요구가 미매핑이거나 매핑표가 없다
+
 ## Decision Rule
 
 - `LOW`가 하나라도 있으면 기본은 follow-up 질문
+- `coverage`가 `LOW`면 미매핑 요구를 AC로 추가 추출하거나 `out_of_scope`로 배제한 뒤 재판정한다(잔차 0까지)
 - 전부 `HIGH` 또는 `MEDIUM`이면 통과
 - override 시 이유를 `rubric-report.md`와 `audit.jsonl`에 남긴다
 
@@ -82,6 +95,10 @@
 - constraint_clarity: HIGH|MEDIUM|LOW
 - success_criteria_clarity: HIGH|MEDIUM|LOW
 - context_clarity: HIGH|MEDIUM|LOW
+- coverage: HIGH|MEDIUM|LOW (매핑 <mapped>/<전체 요구 − out_of_scope>, 잔차 <N>)
+
+## Unmapped Requirements (Residual)
+- ...
 
 ## Blocking Issues
 - ...
