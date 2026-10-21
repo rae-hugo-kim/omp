@@ -79,9 +79,16 @@ test('W3: whitelist directory entries are harness-owned; shared dirs are listed 
     const ok = HARNESS_OWNED_DIRS.has(p) || /^\.omp\/skills\/[^/]+$/.test(p);
     assert.ok(ok, `directory entry "${p}" is not a harness-owned directory (rm -rf on sync would sweep consumer files)`);
   }
-  // Every harness agent that exists in the source repo must be listed, or it silently stops syncing.
-  for (const f of readdirSync(join(repoRoot, '.omp', 'agents')).filter((n) => n.endsWith('.md'))) {
-    assert.ok(paths.includes(`.omp/agents/${f}`), `.omp/agents/${f} exists in the source repo but is not on the whitelist`);
+  // Every harness agent that exists in the SOURCE repo must be listed, or it silently stops syncing.
+  // Consumers are exempt: they may keep their own agents next to the harness ones (AGENTS.md
+  // "Custom agents") and a retired harness agent the sync does not delete (adversary-sol, #112) —
+  // both would otherwise fail this synced test in every consumer suite. Same source/consumer
+  // marker as harness-version-check.mjs: a consumer's harness-meta.json carries `source_remote`.
+  const meta = JSON.parse(readFileSync(join(repoRoot, '.omp', 'extensions', 'harness', 'harness-meta.json'), 'utf8'));
+  if (!meta.source_remote) {
+    for (const f of readdirSync(join(repoRoot, '.omp', 'agents')).filter((n) => n.endsWith('.md'))) {
+      assert.ok(paths.includes(`.omp/agents/${f}`), `.omp/agents/${f} exists in the source repo but is not on the whitelist`);
+    }
   }
   // Same for harness rulebook files in consumer-space .omp/rules: a harness-* file must be
   // covered by a glob entry, and a consumer-shaped name must be covered by nothing.

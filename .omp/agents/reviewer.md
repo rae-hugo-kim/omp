@@ -145,7 +145,7 @@ After all passes. Sources are: self, each panel member that completed (named by 
 - **High confidence**: 2+ sources flagged the same issue → report as confirmed
 - **Needs review**: 1 source flagged it → report with source attribution
 - **Contradictions**: sources disagree → note both perspectives
-Panel members that share a family (two GPT members; the opus member vs a Claude reviewer) still
+Panel members that share a family (the opus member vs a Claude reviewer; `adversary` vs a GPT-backed code-reviewer) still
 count as separate sources for attribution — whether same-family agreement is worth anything is
 exactly what the `.panel.jsonl` rows are collected to answer. Attribution and the gate are
 separate questions: agreement between sources never changes element 3, which is decided only

@@ -11,7 +11,7 @@ constraints:
   - "docs/agent 정의만 바꿉니다 — 게이트·스크립트 로직은 harness-sync.sh 화이트리스트 한 줄 삭제 외에는 건드리지 않습니다."
   - "남는 미러 2개(adversary-opus·adversary-argon)의 본문은 adversary.md와 바이트 동일을 유지합니다."
   - "AGENTS.md를 바꾸면 claudedocs/CLAUDEKR.md를 같은 변경에서 동기화하고, source_commit_hash 재스탬프는 AGENTS.md를 건드리지 않는 후속 커밋으로 합니다."
-  - "sync에는 파일 단위 퇴역 경로가 없으므로 소비 리포의 adversary-sol.md는 남습니다 — 스폰 목록에서 빠져 무해하며 CHANGELOG에 수동 삭제 안내만 남깁니다(퇴역 메커니즘은 범위 밖)."
+  - "sync에는 파일 단위 퇴역 경로가 없으므로 소비 리포의 adversary-sol.md는 남습니다 — 스폰 목록에서 빠지고, 동기화된 W3 테스트가 그 파일로 깨지지 않도록 W3의 에이전트 완전성 검사를 소스 리포로 한정합니다(패널 r1 지적). CHANGELOG에 수동 삭제 안내를 남깁니다(퇴역 삭제 메커니즘은 범위 밖)."
 acceptance_criteria:
   - id: AC1
     title: ".omp/agents/adversary-sol.md가 삭제되고, reviewer.md의 spawns·패널 표·스폰 템플릿·대기 문구·행 스키마 예시·Cross-Validation 소스·element 3 예시·보고 템플릿이 3인 패널을 서술합니다."
@@ -27,6 +27,13 @@ out_of_scope:
   - "review-gate 테스트의 gpt-5.6-sol 토큰(모델명 파싱 케이스라 패널 구성과 무관)."
 assumptions:
   - "시작 HEAD는 main ea171a3(PR #118 머지 후)이고 작업트리는 깨끗했습니다."
+references:
+  - issue: "#112"
+    reason: 사이클 ② 명세("후속 (사이클 ②, 별도 seed)" 절)
+  - path: docs/reviews/panel-cycle2-2026-10-21.md
+    reason: 상시 멤버 결정의 집계 근거(gitignored)
+  - path: docs/reviews/review-2026-10-21-185655.md
+    reason: 상시 3인 패널 첫 리뷰(PASS WITH NOTES) — 후속 커밋 지적의 출처
 risks:
   - "표본: high 이상은 최종 목록 4건뿐이고 reviewer(self)가 Claude라 opus 재현율이 부풀었을 수 있습니다 — 근거 문단에 교란 요인으로 명시합니다."
   - "codex 인증이 죽으면 GPT 계열은 @advisor 하나라, 그때 이종성은 argon(gemini) 하나에 의존합니다."

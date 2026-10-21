@@ -3,7 +3,7 @@ description: "What to review, severity classification and output format for code
 ---
 # Code Review Policy
 
-<!-- Harness: this policy is prompt guidance for the `code-reviewer` agent (Pass 3 of the 3-pass review) and for human reviewers; nothing enforces the finding format mechanically. The agent's own Output_Format is `## Findings / ## Clean Areas / ## Verdict` with the vocabulary `PASS / PASS WITH NOTES / FAIL` (.omp/agents/code-reviewer.md:34-45). Its only consumer is the `reviewer` agent, which takes the Pass 3 output as one source in cross-validation (.omp/agents/reviewer.md:144-149) and attributes each finding to its source (:162); review-gate reads only the reviewer's JSON tuple sidecar, never this format. -->
+<!-- Harness: this policy is prompt guidance for the `code-reviewer` agent (Pass 3 of the 3-pass review) and for human reviewers; nothing enforces the finding format mechanically. The agent's own Output_Format is `## Findings / ## Clean Areas / ## Verdict` with the vocabulary `PASS / PASS WITH NOTES / FAIL` (.omp/agents/code-reviewer.md:34-45). Its only consumer is the `reviewer` agent, which takes the Pass 3 output as one source in cross-validation (.omp/agents/reviewer.md:142-147) and attributes each finding to its source (:162); review-gate reads only the reviewer's JSON tuple sidecar, never this format. -->
 
 ## Scope
 
@@ -133,7 +133,7 @@ Description: API key "sk-abc..." is hardcoded. It will be committed to git histo
 Suggestion: Move to an environment variable (process.env.API_KEY) and add the key to .env.example with a placeholder.
 ```
 
-Group findings by severity (CRITICAL first, LOW last). End every review with a summary table and a `## Verdict` line that uses the agent vocabulary (`PASS / PASS WITH NOTES / FAIL`) — the same shape the `reviewer` agent requires of its Pass 2 panel members (`.omp/agents/reviewer.md:85-86`: a parseable `## Verdict` line plus at least one `file:line` from the diff) and cross-validates Pass 3 against (`:144-149`):
+Group findings by severity (CRITICAL first, LOW last). End every review with a summary table and a `## Verdict` line that uses the agent vocabulary (`PASS / PASS WITH NOTES / FAIL`) — the same shape the `reviewer` agent requires of its Pass 2 panel members (`.omp/agents/reviewer.md:83-84`: a parseable `## Verdict` line plus at least one `file:line` from the diff) and cross-validates Pass 3 against (`:142-147`):
 
 ```
 ## Review Summary

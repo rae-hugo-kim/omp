@@ -1,10 +1,10 @@
 <!-- policy-sync-warning:start -->
 warning_type: reference_only
 non_normative_reference_only: true
-last_sync_date: 2026-10-20
+last_sync_date: 2026-10-21
 status: synced
 source_of_truth: ../AGENTS.md
-source_commit_hash: ae4ae1b2677d50a9791c3080a3a25102af4f4f34
+source_commit_hash: e1b2901e3b890fe7f066fa0736ebdccc332495ba
 <!-- policy-sync-warning:end -->
 
 # AGENTS.md 한국어 미러 (에이전트 규칙 - 계층형)
