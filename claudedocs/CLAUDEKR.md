@@ -35,7 +35,7 @@ source_commit_hash: ae4ae1b2677d50a9791c3080a3a25102af4f4f34
 
 ## 소비자 확장점
 
-이 파일, `.omp/rules/harness-*.md`, `checklists/`, `templates/`, `.omp/extensions/harness/`, 하네스 스킬, 하네스 에이전트 7종(`reviewer`, `verifier`, `code-reviewer`, `adversary`와 그 미러 `adversary-*` 3개 — `scripts/harness-sync.sh`)은 **하네스 소유**입니다: `harness-check`가 동기화 때마다 원격본으로 덮어쓰고(remote wins), 디렉터리 항목은 `rm -rf` + 복사, `.omp/rules/harness-*.md`는 파일 글롭(낡은 `harness-*` 파일은 제거, 형제 파일은 비접촉)입니다. 이 템플릿으로 만든 프로젝트는 동기화가 건드리지 않는 자리에 자체 정책을 둡니다:
+이 파일, `.omp/rules/harness-*.md`, `checklists/`, `templates/`, `.omp/extensions/harness/`, 하네스 스킬, 하네스 에이전트 6종(`reviewer`, `verifier`, `code-reviewer`, `adversary`와 그 미러 `adversary-*` 2개 — `scripts/harness-sync.sh`)은 **하네스 소유**입니다: `harness-check`가 동기화 때마다 원격본으로 덮어쓰고(remote wins), 디렉터리 항목은 `rm -rf` + 복사, `.omp/rules/harness-*.md`는 파일 글롭(낡은 `harness-*` 파일은 제거, 형제 파일은 비접촉)입니다. 이 템플릿으로 만든 프로젝트는 동기화가 건드리지 않는 자리에 자체 정책을 둡니다:
 
 |필요|위치|OMP가 읽는 방식|
 |---|---|---|
@@ -146,7 +146,7 @@ OMC의 훅 자동화(매직 키워드, system-reminder 주입)는 OMP에서 **�
 ## 에이전트 라우팅 정책 (트리거 기반)
 
 - 전체 라우팅 규칙은 `rule://harness-agent_routing`(2026-06에 폐기한 미사용 MCP 위임 매트릭스 포함).
-- **reviewer**: **high/critical 위험** 변경(`risk-assess` 기준: 보안/인증/마이그레이션 파일 접촉, 또는 코드 100줄 초과)에 위임하는 것이 좋습니다. low/medium은 자체 리뷰만 — 추가 스폰 없음. 3-pass 적대 리뷰(self + 이종 adversary 패널 4명 + code-reviewer — reviewer, adversary / adversary-sol / adversary-opus / adversary-argon, code-reviewer 전부 `.omp/agents/`에 정의 — 외부 플러그인 불필요. reviewer가 `spawns:` frontmatter로 Pass 2/3를 중첩 스폰). 이는 `review-gate`가 집행하는 것과 같습니다: 기계 증거는 엄격한 JSON 튜플 사이드카(`docs/reviews/review-<ts>.json`, `["omp-review-evidence/v1", <hash>, <verdict>, <models|null>, <human|null>, <reviewer>]` — 게이트는 마크다운을 읽지 않음)이고, 2차 관점 증거(실측된 2계열 이상 models 배열 또는 사람 신원)는 high/critical 커밋에만 필요하며, 유일한 우회는 감사되는 override(`docs/harness/review-skip`에 `["omp-review-override/v1", <reason>, <approved_by>, <hash>]`, `docs/harness/audit.jsonl`에 기록 후 소비)입니다. **디스패치 preflight (MUST)**: reviewer를 스폰하기 전에 자신의 깊이와 `task` 도구 가용성을 확인합니다 — reviewer는 Pass 2/3에 `task` 도구가 필요하고(재귀 상한: depth <= 1), `task` 도구가 없는 세션은 세션 안에서 리뷰를 수행하면 안 됩니다(진입점 우선순위: `rule://harness-agent_routing`).
+- **reviewer**: **high/critical 위험** 변경(`risk-assess` 기준: 보안/인증/마이그레이션 파일 접촉, 또는 코드 100줄 초과)에 위임하는 것이 좋습니다. low/medium은 자체 리뷰만 — 추가 스폰 없음. 3-pass 적대 리뷰(self + 이종 adversary 패널 3명 + code-reviewer — reviewer, adversary / adversary-opus / adversary-argon, code-reviewer 전부 `.omp/agents/`에 정의 — 외부 플러그인 불필요. reviewer가 `spawns:` frontmatter로 Pass 2/3를 중첩 스폰). 이는 `review-gate`가 집행하는 것과 같습니다: 기계 증거는 엄격한 JSON 튜플 사이드카(`docs/reviews/review-<ts>.json`, `["omp-review-evidence/v1", <hash>, <verdict>, <models|null>, <human|null>, <reviewer>]` — 게이트는 마크다운을 읽지 않음)이고, 2차 관점 증거(실측된 2계열 이상 models 배열 또는 사람 신원)는 high/critical 커밋에만 필요하며, 유일한 우회는 감사되는 override(`docs/harness/review-skip`에 `["omp-review-override/v1", <reason>, <approved_by>, <hash>]`, `docs/harness/audit.jsonl`에 기록 후 소비)입니다. **디스패치 preflight (MUST)**: reviewer를 스폰하기 전에 자신의 깊이와 `task` 도구 가용성을 확인합니다 — reviewer는 Pass 2/3에 `task` 도구가 필요하고(재귀 상한: depth <= 1), `task` 도구가 없는 세션은 세션 안에서 리뷰를 수행하면 안 됩니다(진입점 우선순위: `rule://harness-agent_routing`).
 - **verifier**: AC가 있으면 완료 선언 전에 반드시 위임합니다. `task` 스폰은 비차단(비동기 결과 전달) — **스폰은 완료가 아니며, verifier verdict가 실제로 도착하고 `PASS`일 때만 완료를 선언합니다.**
 
 ## 링크 모듈

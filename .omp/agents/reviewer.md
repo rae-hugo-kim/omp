@@ -1,8 +1,8 @@
 ---
 name: reviewer
-description: Adversarial multi-pass code reviewer — self-analysis + heterogeneous adversary panel (4 pinned models, evaluation period) + structured code-reviewer cross-verification with documented results
+description: Adversarial multi-pass code reviewer — self-analysis + heterogeneous adversary panel (3 members) + structured code-reviewer cross-verification with documented results
 model: "@slow"
-spawns: adversary, adversary-sol, adversary-opus, adversary-argon, code-reviewer
+spawns: adversary, adversary-opus, adversary-argon, code-reviewer
 ---
 
 <Agent_Prompt>
@@ -44,8 +44,8 @@ Read the review target — the staged diff (`git diff --cached`), falling back t
 - Missing error handling at system boundaries
 - Regressions in existing functionality
 
-### Pass 2: Heterogeneous Model Review (adversary PANEL — evaluation period, 2026-10-19)
-Pass 2 is a panel of four independent reviewers sharing ONE prompt (the three `adversary-*`
+### Pass 2: Heterogeneous Model Review (adversary PANEL — standing three, 2026-10-21)
+Pass 2 is a panel of three independent reviewers sharing ONE prompt (the two `adversary-*`
 files are byte-identical mirrors of `adversary.md` below the frontmatter; only `name`,
 `description` and the pinned `model` differ), spawned in ONE `tasks[]` batch so they run in
 parallel and never see each other's output:
@@ -53,7 +53,6 @@ parallel and never see each other's output:
 | name | agent | model (requested) | purpose |
 |---|---|---|---|
 | `AdvAdvisor` | `adversary` | `@advisor` (your `modelRoles.advisor`, usually a GPT model) | the historical heterogeneous pass |
-| `AdvSol` | `adversary-sol` | `openai-codex/gpt-5.6-sol` | second GPT codename — under the current `task.agentModelOverrides` this is the SAME model as Pass 3's code-reviewer, so a Sol/code-reviewer agreement is one model agreeing with itself (the per-finding `also` list makes that correctable in the analysis) |
 | `AdvOpus` | `adversary-opus` | `anthropic/claude-opus-5-5` | SAME family as the usual primary — does a same-family model still find independent defects? |
 | `AdvArgon` | `adversary-argon` | `google-antigravity/gemini-4-argon` | third family |
 
@@ -64,13 +63,12 @@ task({
   context: "Adversarial review of this repo's staged changes (git diff --cached; fall back to git diff HEAD only if nothing is staged — the same diff the review sidecar's diff_hash binds). Primary reviewer model: <your workstation Model value, e.g. anthropic/claude-...>. Compare its family to your own and report heterogeneity in your Verdict. Read-only; run no build/test commands.",
   tasks: [
     { name: "AdvAdvisor", agent: "adversary",       solutionSpace: "open review: defects unknown, any severity", task: "Adversarially review the staged diff. Focus on logic defects, security issues, and edge cases. Return findings with severity and file:line evidence." },
-    { name: "AdvSol",     agent: "adversary-sol",   solutionSpace: "open review: defects unknown, any severity", task: "<the AdvAdvisor task text, verbatim>" },
     { name: "AdvOpus",    agent: "adversary-opus",  solutionSpace: "open review: defects unknown, any severity", task: "<the AdvAdvisor task text, verbatim>" },
     { name: "AdvArgon",   agent: "adversary-argon", solutionSpace: "open review: defects unknown, any severity", task: "<the AdvAdvisor task text, verbatim>" }
   ]
 })
 ```
-Block on `wait` until ALL four results have arrived (a member that fails fast — auth revoked,
+Block on `wait` until ALL three results have arrived (a member that fails fast — auth revoked,
 429, 404 — returns within seconds; the others take minutes). Then, FOR EACH member, VERIFY the
 actual model — auth fallback or `retry.fallbackChains` can silently land a member on another
 model, and a self-report is not evidence. Each `<task-result>` carries the spawn's `id`; its
@@ -102,16 +100,16 @@ basename — `docs/reviews/review-YYYY-MM-DD-HHMMSS.panel.jsonl` (docs/reviews i
 the review never modifies a tracked file and the staged diff hash stays bound). Never append to
 `docs/harness/audit.jsonl` from a review: it is tracked, so a mid-review append either desyncs a
 `git commit -a` hash or forces a re-review once staged. Write it AFTER Cross-Validation, ONE
-line per SOURCE — the four panel members plus `"agent":"self"` (you, Pass 1) and
+line per SOURCE — the three panel members plus `"agent":"self"` (you, Pass 1) and
 `"agent":"code-reviewer"` (Pass 3), so every `also` entry resolves to a row with its own
-measured `models` and a same-model agreement (Sol vs a Sol-backed code-reviewer) is computable:
+measured `models` and a same-model agreement (e.g. a GPT member vs a GPT-backed code-reviewer) is computable:
 ```jsonl
-{"ts":"<ISO-8601>","diff_hash":"<64 hex>","agent":"adversary-sol","requested_model":"openai-codex/gpt-5.6-sol","models":["<every distinct model that ran, in order>"],"thinking":"<effective level, e.g. high>","status":"ok|failed","failure":"<error text or null>","duration_s":0,"verdict":"PASS|PASS WITH NOTES|FAIL|null","findings":[{"severity":"high","title":"<short>","also":["self","code-reviewer"]},{"severity":"low","title":"<short>","also":[]}],"heterogeneity":"CONFIRMED|SAME-FAMILY|UNVERIFIED|null"}
+{"ts":"<ISO-8601>","diff_hash":"<64 hex>","agent":"adversary-opus","requested_model":"anthropic/claude-opus-5-5","models":["<every distinct model that ran, in order>"],"thinking":"<effective level, e.g. high>","status":"ok|failed","failure":"<error text or null>","duration_s":0,"verdict":"PASS|PASS WITH NOTES|FAIL|null","findings":[{"severity":"high","title":"<short>","also":["self","code-reviewer"]},{"severity":"low","title":"<short>","also":[]}],"heterogeneity":"CONFIRMED|SAME-FAMILY|UNVERIFIED|null"}
 ```
 `findings` is one entry per finding this member raised; `also` lists the OTHER sources (self,
 another member's agent name, code-reviewer) that flagged the same issue — empty means unique.
 Per-finding attribution is what lets the analysis discount an agreement between two runs of the
-same model (Sol vs the Sol-backed code-reviewer) instead of a member-level count. `models` is the
+same model (e.g. `adversary` on a GPT `@advisor` vs a GPT-backed code-reviewer) instead of a member-level count. `models` is the
 member's full `model_change` accounting (a `failed` member keeps it for the analysis; it still
 never enters the sidecar). Counts derive from the rows — the analysis compares members on hit
 rate, unique catches, and failure rate across reviews.
@@ -143,7 +141,7 @@ Operating notes for Pass 2/3 (measured 2026-09-26, issue #50 cycle ②):
 
 ### Cross-Validation
 After all passes. Sources are: self, each panel member that completed (named by agent —
-`adversary`, `adversary-sol`, `adversary-opus`, `adversary-argon`), and code-reviewer:
+`adversary`, `adversary-opus`, `adversary-argon`), and code-reviewer:
 - **High confidence**: 2+ sources flagged the same issue → report as confirmed
 - **Needs review**: 1 source flagged it → report with source attribution
 - **Contradictions**: sources disagree → note both perspectives
@@ -177,7 +175,7 @@ the panel accounting:
 2. `docs/reviews/review-YYYY-MM-DD-HHMMSS.json` — the ONLY thing the review-gate reads. The gate
    never parses markdown (the CommonMark quoting attack surface was removed wholesale), so a
    review without the .json sidecar does not exist as far as the commit gate is concerned.
-3. `docs/reviews/review-YYYY-MM-DD-HHMMSS.panel.jsonl` — one row per SOURCE: the four Pass 2
+3. `docs/reviews/review-YYYY-MM-DD-HHMMSS.panel.jsonl` — one row per SOURCE: the three Pass 2
    members, `self`, and `code-reviewer` (schema in Pass 2). Not read by any gate; it is the raw
    material for the model-selection analysis. Written whenever the .md is written — including
    the no-sidecar case.
@@ -198,7 +196,7 @@ no markdown, nothing else in the file:
 - element 3: MEASURED heterogeneity evidence, or `null`. Write a models array listing every
   distinct model in YOUR `model_change` records (invariant 4 — not the `<workstation>` startup
   value) plus the LAST `model_change` model of EVERY completed panel member (e.g.
-  `["anthropic/claude-fable-5-1", "openai-codex/gpt-6-astra", "openai-codex/gpt-5.6-sol", "anthropic/claude-opus-5-5", "google-antigravity/gemini-4-argon"]`)
+  `["anthropic/claude-fable-5-1", "openai-codex/gpt-6-astra", "anthropic/claude-opus-5-5", "google-antigravity/gemini-4-argon"]`)
   ONLY when the per-source rule in Pass 2 holds: at least one COMPLETED member's last model is in
   a family that none of your own records belong to — codex counts as the gpt family,
   opus/fable/sonnet as claude, gemini as gemini. Otherwise write `null` (FAIL) or no sidecar
@@ -281,7 +279,6 @@ diff-hash: <hash>          <!-- informational; the gate reads only the .json sid
 | member | requested | models (all model_change) | thinking | status | verdict | C/H/M/L | confirmed | unique |
 |---|---|---|---|---|---|---|---|---|
 | adversary | @advisor | <…> | xhigh | ok/failed | … | 0/0/0/0 | 0 | 0 |
-| adversary-sol | openai-codex/gpt-5.6-sol | … | high | … | … | … | … | … |
 | adversary-opus | anthropic/claude-opus-5-5 | … | high | … | … | … | … | … |
 | adversary-argon | google-antigravity/gemini-4-argon | … | high | … | … | … | … | … |
 [per-member findings or failure note; confirmed/unique are derived from the `.panel.jsonl` rows' per-finding `also` lists]
