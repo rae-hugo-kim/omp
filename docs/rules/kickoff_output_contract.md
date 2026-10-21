@@ -37,6 +37,7 @@
 ### `plan-attack-report.md`
 - 적대적 계획 검증(Plan Attack Gate) 결과
 - CRITICAL·HIGH·MEDIUM 발견과 PASS·WARN·BLOCK 판정을 남깁니다(`.omp/rules/harness-adversarial_review.md`).
+- 스킬 Step 3.5가 만드는 산출물이지만, `harness-adversarial_review.md` "도입 상태"에 따라 하네스가 담당 에이전트를 보장하지 않는 동안 Plan Attack은 **kickoff 완료 조건이 아닙니다**. 그래서 이 파일과 `adversarial_plan_attack` 행은 Plan Attack을 실행했을 때만 요구합니다.
 
 ### `rubric-report.md`
 - kickoff 품질 판정 보고서
@@ -55,8 +56,8 @@
 
 아래를 모두 만족해야 `kickoff completed`로 간주한다.
 
-- Required Outputs 7개 파일이 모두 있음
-- `audit.jsonl`에 `kickoff_completed`·`seed_generated`·`rubric_evaluated`·`adversarial_plan_attack` 기록
+- Required Outputs 중 `plan-attack-report.md`를 뺀 6개 파일이 모두 있음(`plan-attack-report.md`는 Plan Attack을 실행했을 때만 — 위 Output Roles)
+- `audit.jsonl`에 `kickoff_completed`·`seed_generated`·`rubric_evaluated` 기록(Plan Attack을 실행했으면 `adversarial_plan_attack`도)
 - Rubric Gate 5개 차원이 모두 `HIGH`/`MEDIUM`이거나 override 기록이 있음
 
 ## Rubric Gate
@@ -95,11 +96,11 @@ override가 발생하면 아래를 반드시 남긴다.
 
 아래 중 하나라도 해당하면 `kickoff`는 미완료다.
 
-- Required Outputs 7개 중 하나라도 없음
+- Required Outputs 중 `plan-attack-report.md`를 뺀 6개 중 하나라도 없음
 - 필수 필드 누락
 - rubric 결과가 없거나 5개 차원 중 하나라도 빠짐
 - `LOW`가 있는데 follow-up 또는 override 기록이 없음
-- Plan Attack이 `BLOCK`인데 보완 또는 `adversarial_override` 기록이 없음
+- Plan Attack을 실행해 `BLOCK`이 나왔는데 보완 또는 `adversarial_override` 기록이 없음
 - `kickoff-summary.md`와 `seed.yaml`이 서로 다른 목표를 가리킴
 
 ## Recommended Flow
