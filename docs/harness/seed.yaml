@@ -1,6 +1,6 @@
 name: adversary-panel-cycle2-112
 status: approved
-version: 1
+version: 2
 task_id: "20261021-140000-112b"
 # 이슈 #112 사이클 ②(상시 멤버 확정). 사용자 결정 2026-10-21 코디네이터 세션: "sol 제외 → astra·opus·argon 3인".
 # 근거는 docs/reviews/panel-cycle2-2026-10-21.md(gitignored) — 리뷰 17회·멤버 실행 68회 집계. 직전 완료 seed(seed-lifecycle-contract-114)는 git 이력에 보존합니다.
@@ -8,7 +8,7 @@ goal: >
   #112 사이클 ②: Pass 2 adversary 패널을 평가 기간 4인에서 상시 3인(adversary=@advisor · adversary-opus · adversary-argon)으로
   확정하고 adversary-sol을 퇴역시킵니다. 근거 수치를 규칙에 남기고, 에이전트 정의·스폰 목록·동기화 목록·소유 에이전트 수 서술을 모두 맞춥니다.
 constraints:
-  - "docs/agent 정의만 바꿉니다 — 게이트·스크립트 로직은 harness-sync.sh 화이트리스트 한 줄 삭제 외에는 건드리지 않습니다."
+  - "docs/agent 정의만 바꿉니다 — 게이트·스크립트 로직은 harness-sync.sh 화이트리스트 한 줄 삭제 외에는 건드리지 않습니다. 예외(v2, 패널 r1 지적): 동기화되는 테스트 tests/harness-wiring.test.mjs W3의 에이전트 완전성 검사를 소스 리포로 한정하는 변경과 그 회귀 테스트 — 이것 없이는 퇴역한 sol 파일이 소비 리포 suite를 깨뜨립니다."
   - "남는 미러 2개(adversary-opus·adversary-argon)의 본문은 adversary.md와 바이트 동일을 유지합니다."
   - "AGENTS.md를 바꾸면 claudedocs/CLAUDEKR.md를 같은 변경에서 동기화하고, source_commit_hash 재스탬프는 AGENTS.md를 건드리지 않는 후속 커밋으로 합니다."
   - "sync에는 파일 단위 퇴역 경로가 없으므로 소비 리포의 adversary-sol.md는 남습니다 — 스폰 목록에서 빠지고, 동기화된 W3 테스트가 그 파일로 깨지지 않도록 W3의 에이전트 완전성 검사를 소스 리포로 한정합니다(패널 r1 지적). CHANGELOG에 수동 삭제 안내를 남깁니다(퇴역 삭제 메커니즘은 범위 밖)."
@@ -20,7 +20,7 @@ acceptance_criteria:
   - id: AC3
     title: "scripts/harness-sync.sh 화이트리스트에서 adversary-sol.md가 빠지고, CHANGELOG [Unreleased]에 퇴역 항목과 소비 리포 수동 삭제 안내가 있습니다."
   - id: AC4
-    title: "남는 미러 2개의 본문이 adversary.md와 바이트 동일하고, grep으로 adversary-sol·AdvSol 참조가 정의·규칙·스킬·AGENTS.md·CLAUDEKR.md에 0건(CHANGELOG·이력 서술 제외)이며, node scripts/docs-drift 0 errors·하네스 suite 전 항목 통과입니다."
+    title: "남는 미러 2개의 본문이 adversary.md와 바이트 동일하고, grep으로 adversary-sol·AdvSol 참조가 정의·규칙·스킬·AGENTS.md·CLAUDEKR.md에 0건(CHANGELOG·이력 서술·퇴역 파일 수동 삭제 안내 제외 — routing:42 근거, harness-check SKILL:77 안내, adversarial_review:37의 2026-10-19 ProbeSol 실측 기록은 날짜가 박힌 이력이라 유지)이며, node scripts/docs-drift 0 errors·하네스 suite 전 항목 통과입니다."
 out_of_scope:
   - "harness-sync.sh의 파일 단위 RETIRED 메커니즘 추가."
   - "@advisor 롤·code-reviewer(Pass 3) 모델 변경."
@@ -28,12 +28,14 @@ out_of_scope:
 assumptions:
   - "시작 HEAD는 main ea171a3(PR #118 머지 후)이고 작업트리는 깨끗했습니다."
 references:
-  - issue: "#112"
+  - path: https://github.com/rae-hugo-kim/omp/issues/112
     reason: 사이클 ② 명세("후속 (사이클 ②, 별도 seed)" 절)
   - path: docs/reviews/panel-cycle2-2026-10-21.md
     reason: 상시 멤버 결정의 집계 근거(gitignored)
   - path: docs/reviews/review-2026-10-21-185655.md
     reason: 상시 3인 패널 첫 리뷰(PASS WITH NOTES) — 후속 커밋 지적의 출처
+  - path: docs/reviews/review-2026-10-21-191235.md
+    reason: round 2(PASS WITH NOTES) — v2 개정(seed 개정 절차·CRLF·W3 회귀 픽스처)의 출처
 risks:
   - "표본: high 이상은 최종 목록 4건뿐이고 reviewer(self)가 Claude라 opus 재현율이 부풀었을 수 있습니다 — 근거 문단에 교란 요인으로 명시합니다."
   - "codex 인증이 죽으면 GPT 계열은 @advisor 하나라, 그때 이종성은 argon(gemini) 하나에 의존합니다."

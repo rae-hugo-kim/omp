@@ -16,6 +16,19 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..', '..', '..');
 
+// Agents under <root>/.omp/agents that the sync whitelist does not list — enforced only in the
+// SOURCE repo. Consumers are exempt: they may keep their own agents next to the harness ones
+// (AGENTS.md "Custom agents") and a retired harness agent the sync does not delete
+// (adversary-sol, #112) — both would otherwise fail this synced test in every consumer suite.
+// Same source/consumer marker as harness-version-check.mjs: a consumer's harness-meta.json
+// carries `source_remote`; a missing meta file is treated as the source repo (strict side).
+function unlistedHarnessAgents(root, paths) {
+  const metaPath = join(root, '.omp', 'extensions', 'harness', 'harness-meta.json');
+  const meta = existsSync(metaPath) ? JSON.parse(readFileSync(metaPath, 'utf8')) : {};
+  if (meta.source_remote) return [];
+  return readdirSync(join(root, '.omp', 'agents')).filter((n) => n.endsWith('.md') && !paths.includes(`.omp/agents/${n}`));
+}
+
 // W1: every enforcement hook is on the sync whitelist.
 test('W1: harness-sync ships the enforcement hooks', () => {
   const sync = readFileSync(join(repoRoot, 'scripts', 'harness-sync.sh'), 'utf8');
@@ -80,15 +93,8 @@ test('W3: whitelist directory entries are harness-owned; shared dirs are listed 
     assert.ok(ok, `directory entry "${p}" is not a harness-owned directory (rm -rf on sync would sweep consumer files)`);
   }
   // Every harness agent that exists in the SOURCE repo must be listed, or it silently stops syncing.
-  // Consumers are exempt: they may keep their own agents next to the harness ones (AGENTS.md
-  // "Custom agents") and a retired harness agent the sync does not delete (adversary-sol, #112) —
-  // both would otherwise fail this synced test in every consumer suite. Same source/consumer
-  // marker as harness-version-check.mjs: a consumer's harness-meta.json carries `source_remote`.
-  const meta = JSON.parse(readFileSync(join(repoRoot, '.omp', 'extensions', 'harness', 'harness-meta.json'), 'utf8'));
-  if (!meta.source_remote) {
-    for (const f of readdirSync(join(repoRoot, '.omp', 'agents')).filter((n) => n.endsWith('.md'))) {
-      assert.ok(paths.includes(`.omp/agents/${f}`), `.omp/agents/${f} exists in the source repo but is not on the whitelist`);
-    }
+  for (const f of unlistedHarnessAgents(repoRoot, paths)) {
+    assert.fail(`.omp/agents/${f} exists in the source repo but is not on the whitelist`);
   }
   // Same for harness rulebook files in consumer-space .omp/rules: a harness-* file must be
   // covered by a glob entry, and a consumer-shaped name must be covered by nothing.
@@ -102,6 +108,26 @@ test('W3: whitelist directory entries are harness-owned; shared dirs are listed 
   for (const consumer of ['.omp/rules/consumer-x.md', '.omp/rules/harness/x.md', '.omp/rules/xharness-core.md']) {
     assert.ok(!globs.some((re) => re.test(consumer)), `whitelist glob would sweep consumer file ${consumer}`);
   }
+});
+
+// W3c (#112 cycle ②): the agent-coverage rule above is source-repo only. Fixed both ways so a
+// dropped guard (consumer suites fail on custom/retired agents) or an always-skip (an unlisted
+// harness agent silently stops syncing) both turn this red.
+test('W3c: unlisted agents fail the source repo but not a consumer (custom + retired agents)', () => {
+  const listed = ['.omp/agents/reviewer.md'];
+  const tree = (meta) => {
+    const root = mkdtempSync(join(tmpdir(), 'w3c-'));
+    mkdirSync(join(root, '.omp', 'agents'), { recursive: true });
+    for (const n of ['reviewer.md', 'adversary-sol.md', 'consumer-custom.md', 'notes.txt']) writeFileSync(join(root, '.omp', 'agents', n), 'x');
+    if (meta) {
+      mkdirSync(join(root, '.omp', 'extensions', 'harness'), { recursive: true });
+      writeFileSync(join(root, '.omp', 'extensions', 'harness', 'harness-meta.json'), JSON.stringify(meta));
+    }
+    return root;
+  };
+  assert.deepEqual(unlistedHarnessAgents(tree({ version: '2026.90' }), listed).sort(), ['adversary-sol.md', 'consumer-custom.md'], 'source repo (no source_remote): every unlisted .md agent is reported');
+  assert.deepEqual(unlistedHarnessAgents(tree(null), listed).sort(), ['adversary-sol.md', 'consumer-custom.md'], 'missing meta is treated as the source repo (strict)');
+  assert.deepEqual(unlistedHarnessAgents(tree({ version: '2026.90', source_remote: 'git@github.com:rae-hugo-kim/omp.git' }), listed), [], 'consumer (source_remote set): custom and retired agents are not failures');
 });
 
 // W3b (#35-7): the kickoff/init skills read these consumer-space files directly; if any drops off
