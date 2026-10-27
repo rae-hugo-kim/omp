@@ -82,7 +82,7 @@ if (existsSync(skipFile)) {
 if (risk.level === 'unknown') {
   log('Risk assessment failed (git error), blocking conservatively');
   console.error('HARNESS BLOCK: Could not assess change risk (git error).');
-  console.error('Run build/test/lint and ensure they pass, or create docs/harness/backpressure-skip to override.');
+  console.error('Run build/test/lint and ensure they pass (a project-specific runner can be registered in docs/harness/verify-commands.json), or create docs/harness/backpressure-skip to override.');
   process.exit(2);
 }
 
@@ -92,7 +92,7 @@ if (!existsSync(statusFile)) {
   if (risk.level === 'critical' || risk.level === 'high') {
     log('No status file + high risk, blocking');
     console.error('HARNESS BLOCK: No build/test verification for high-risk changes.');
-    console.error('Run tests first, or create docs/harness/backpressure-skip to override.');
+    console.error('Run tests first (a project-specific runner can be registered in docs/harness/verify-commands.json — see .omp/rules/harness-harness_integration_contract.md §3), or create docs/harness/backpressure-skip to override.');
     process.exit(2);
   }
   log('No status file + medium risk, warning');
@@ -117,7 +117,7 @@ if (status === 'UNKNOWN') {
   if (risk.level === 'critical' || risk.level === 'high') {
     log('Status UNKNOWN + high risk, blocking');
     console.error('HARNESS BLOCK: No build/test verification in this session for high-risk changes.');
-    console.error('Run build/test/lint and ensure they pass, or create docs/harness/backpressure-skip to override.');
+    console.error('Run build/test/lint and ensure they pass (a project-specific runner can be registered in docs/harness/verify-commands.json), or create docs/harness/backpressure-skip to override.');
     process.exit(2);
   }
   log(`Status UNKNOWN + ${risk.level} risk, warning`);

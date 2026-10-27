@@ -55,7 +55,7 @@ test('isWipCommit is imported from git-commit-detect (same lexer as the gates)',
 
 test('bash tool_result: nudge sits behind the commit-success guard and skips WIP commits', () => {
   const bash = bashBranch();
-  const guard = bash.search(/isGitCommit\(command\)\s*&&\s*!bashRunFailed\(event\)/);
+  const guard = bash.search(/if \(landed\) \{/);
   assert.notEqual(guard, -1, 'the nudge must share the commit-success guard with the drift recheck');
   const wipGuarded = bash.search(/if \(!isWipCommit\(command\)\) notes\.push\(CYCLE_BOUNDARY_NOTE\)/);
   assert.notEqual(wipGuarded, -1,

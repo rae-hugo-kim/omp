@@ -89,6 +89,14 @@ Use constants, configuration, or environment variables instead of magic numbers 
 
 ---
 
+## SHOULD: Shell scripts that ship to consumers
+
+(2026-09-26, harness-sync 3-pass review ×9 rounds) Target bash 3.2 (macOS): no `mapfile`/`readarray`/associative arrays. Frame file-name streams with NUL (`printf '%s\0'` + `read -r -d ''`) — a newline in a matched name otherwise becomes a second `rm` target. Under `set -euo pipefail`, wrap any grep that may legitimately match nothing in `{ grep … || true; }` — an empty result silently aborts the script. Reuse the script's existing containment/wrapper helpers (`_realdir`, `git_literal`) for every new file or git call instead of re-deriving them.
+
+## MUST: Gates never emulate document structure
+
+(2026-09-29, acceptance-gate #56 3-pass review ×10 rounds; same conclusion as review-gate's retired CommonMark evidence parser) A gate that decides by parsing markdown structure — fence boundaries, heading sections, HTML comments/blocks — is a non-convergent attack surface: every review round produced a fresh valid-markdown shape that hid a real item. Judge by a rule that has no boundary to spoof (a strict JSON tuple; "every checkbox from the first `Acceptance Criteria` heading to end of file"), and let a mistake err toward counting MORE, never fewer. Session record: `docs/sum/session_2026-09-29_issue56-closeout-ac-record-pr59.md` D2. The same holds for diff text: a header line is identified by position — everything before the first `@@` hunk — never by a `--- `/`+++ ` prefix; a removed content row that starts with `-- ` prints as `--- …` and slipped through a prefix test (2026-10-01, #62 r1 high; `acceptance-gate.mjs` `hunkLines`; session record `docs/sum/session_2026-10-01_restart-pr59-web-merge-ghloop62-pr64.md` Fix 2).
+
 ## Self-Check
 
 Before marking code complete:

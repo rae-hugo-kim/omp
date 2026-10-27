@@ -52,6 +52,7 @@
 import { readFileSync, readSync, existsSync, appendFileSync, mkdirSync, opendirSync, unlinkSync, openSync, fstatSync, lstatSync, closeSync, writeFileSync, constants as fsConstants } from 'fs';
 import { join } from 'path';
 import { execSync } from 'child_process';
+import { createHash } from 'crypto';
 import { assessRisk } from './risk-assess.mjs';
 import { isGitCommit, parseCommitForm } from './git-commit-detect.mjs';
 import { ESTIMATE_FILE, parseEstimate, countFailsSince, buildEstimateEvent, SESSION_LOG_TAIL_BYTES } from './estimate.mjs';
@@ -255,7 +256,7 @@ function parseOverride(text, currentHash, form) {
     if (dh !== currentHash) problems.push(`diff_hash mismatch: the flag has ${dh} but the effective committed diff is ${currentHash} (the staged/committed content changed since the flag was written)`);
   } else if (dh !== 'UNVERIFIABLE') {
     problems.push(form.verifiable
-      ? 'the effective diff hash could not be computed (git/shasum error) — write "UNVERIFIABLE" as element 3 to acknowledge overriding an unhashable commit'
+      ? 'the effective diff hash could not be computed (git diff failed) — write "UNVERIFIABLE" as element 3 to acknowledge overriding an unhashable commit'
       : 'this commit form is unverifiable (pathspec/--amend/compound line/...) so no hash exists — write "UNVERIFIABLE" as element 3 to acknowledge, or use a standalone plain `git commit`');
   }
   if (problems.length > 0) return { fields: null, problems };
@@ -521,8 +522,16 @@ const skipFile = join(cwd, 'docs', 'harness', 'review-skip');
 // LOCAL date (not toISOString's UTC): reviewer docs are named by the author's local
 // date, so a UTC "today" mismatched real reviews between local midnight and the UTC
 // offset (e.g. 00:00–08:59 KST → still "yesterday" in UTC), falsely failing coverage.
+// The scan window is today AND yesterday (#48-2): a sidecar written at 23:5x for a commit
+// that lands after midnight is still the SAME diff — the hash binding (diff_hash ===
+// currentHash) is what makes evidence relevant, the date only bounds the scan. Two days is
+// the smallest window that removes the midnight edge; older sidecars stay out so a stale
+// covering FAIL/PASS for an identical re-staged diff does not resurface weeks later.
+const localDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const now = new Date();
-const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+const today = localDate(now);
+const yesterday = localDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
+const inWindow = (f) => (f.startsWith(`review-${today}`) || f.startsWith(`review-${yesterday}`)) && f.endsWith('.json');
 
 // Hash the EFFECTIVE committed diff. Computed BEFORE the override check because the override must
 // bind to this hash, and every BLOCK message prints it so evidence can be written from the message
@@ -534,13 +543,19 @@ const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0'
 // form (pathspec, --amend, --include/-i, -p, --pathspec-from-file, a commit behind
 // bash -c, >1 commit in one line, or a repo-redirecting global like -C) is UNVERIFIABLE:
 // currentHash stays null and the gate fails closed on high/critical (see the
-// matchedCurrent !== true branch below). execSync runs through a shell, so the pipe
-// needs no `shell` option; both diff commands are constant (no user input on the line).
+// matchedCurrent !== true branch below). The hash is sha256 over the raw stdout BYTES of the
+// diff command (no encoding — a Buffer), which is exactly what `git diff … | shasum -a 256`
+// produces, so sidecars written that way keep matching; hashing in-process removes the
+// `shasum` dependency that made every high/critical commit fail closed on Windows (#93).
+// maxBuffer is lifted because the whole diff is now captured (the pipe used to leave only
+// the digest line in stdout — the cost is O(diff) memory for the gate's lifetime); both diff
+// commands are constant (no user input on the line). A failing git now throws here (→ null →
+// fail-closed); the old `sh` pipe had no pipefail, so a git error hashed EMPTY stdout instead.
 let currentHash = null;
 const diffCmd = form.all ? 'git diff HEAD' : 'git diff --cached';
 if (form.verifiable) {
   try {
-    currentHash = execSync(`${diffCmd} | shasum -a 256`, { cwd, encoding: 'utf-8' }).trim().split(/\s+/)[0];
+    currentHash = createHash('sha256').update(execSync(diffCmd, { cwd, maxBuffer: Infinity })).digest('hex');
   } catch {
     currentHash = null;
   }
@@ -636,15 +651,15 @@ if (existsSync(skipFile)) {
   }
 }
 
-// Machine evidence: today's .json sidecars ONLY. Same-basename .md files are human reports the
-// gate never reads. Invalid sidecars are warned about and IGNORED (they grant nothing and they
-// veto nothing) — fail-closed both ways.
+// Machine evidence: the .json sidecars of today and yesterday (local date) ONLY. Same-basename
+// .md files are human reports the gate never reads. Invalid sidecars are warned about and
+// IGNORED (they grant nothing and they veto nothing) — fail-closed both ways.
 //
 // The scan is INCREMENTAL (opendirSync) with two fail-closed bounds, so the enumeration work
 // itself stays bounded — a readdirSync of the whole directory would materialize and sort every
 // entry BEFORE any cap could run, so a big enough flood could push the gate past the dispatcher
 // budget without the cap ever firing (3rd-round review):
-//   - the moment the (MAX_SIDECARS+1)th same-day sidecar is seen the gate BLOCKS: selecting any
+//   - the moment the (MAX_SIDECARS+1)th in-window sidecar is seen the gate BLOCKS: selecting any
 //     bounded subset would let an attacker push a covering FAIL out of the window while a
 //     covering PASS stays in (2nd-round review, CRITICAL 3), and no plausible legitimate day
 //     produces this many sidecars;
@@ -666,11 +681,11 @@ if (existsSync(reviewDir)) {
         process.exit(2);
       }
       const f = ent.name;
-      if (!f.startsWith(`review-${today}`) || !f.endsWith('.json')) continue;
+      if (!inWindow(f)) continue;
       todaySidecars.push(f);
       if (todaySidecars.length > MAX_SIDECARS) {
-        log(`BLOCKED: ${todaySidecars.length} same-day sidecars exceed the scan cap (${MAX_SIDECARS})`);
-        console.error(`HARNESS BLOCK: ${todaySidecars.length} sidecars named review-${today}*.json exceed the scan cap (${MAX_SIDECARS}) — an implausible volume that could hide covering evidence, so the gate fails closed. Clean docs/reviews/ down to today's real review sidecars and retry.`);
+        log(`BLOCKED: ${todaySidecars.length} sidecars in the two-day window exceed the scan cap (${MAX_SIDECARS})`);
+        console.error(`HARNESS BLOCK: ${todaySidecars.length} sidecars named review-${yesterday}*.json / review-${today}*.json exceed the scan cap (${MAX_SIDECARS}) — an implausible volume that could hide covering evidence, so the gate fails closed. Clean docs/reviews/ down to the real review sidecars of the last two days and retry.`);
         process.exit(2);
       }
     }
@@ -741,7 +756,7 @@ if (matchedCurrent !== true) {
   const detail = currentHash
     ? 'no valid review evidence matches the current changes'
     : (form.verifiable
-        ? 'could not compute the diff hash (git/shasum error)'
+        ? 'could not compute the diff hash (git diff failed)'
         : 'the commit form is unverifiable (an output redirection like `2>&1`, a compound `&&`/`;` line, a pathspec, --amend, or -a with unstaged changes) — run a STANDALONE `git commit` (no trailing `2>&1`/`; …`, no `cd … &&` prefix) so the staged diff can be hashed');
   if (risk.level === 'critical' || risk.level === 'high') {
     log(`BLOCKED: ${detail}`);

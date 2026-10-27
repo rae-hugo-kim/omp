@@ -47,6 +47,10 @@ description: "Markdown as source of truth, docs/sum untracked policy, HTML as de
   ([anthropics/skills#314](https://github.com/anthropics/skills/issues/314)).
 - 글로벌(`~/.claude/skills/` — OMC 스킬은 OMP에서도 여기서 로드됨)·로컬(`.omp/skills/`) 양쪽 모두 동일.
 
+### R6. 시점 기록 문서는 경로 이동 뒤에도 옛 경로 인용을 유지
+
+- 원본 스냅샷(`claudedocs/CLAUDE_original.md`), 분석·업그레이드 기록, `docs/handoff/`, 보관 seed(`docs/harness/archive/`), CHANGELOG 과거 항목, `docs/sum/`은 작성 시점을 인용하는 문서다. 파일이 옮겨져도(예: 2026-09-26 `rules/` → `.omp/rules/harness-*.md`) 이들 안의 경로는 치환하지 않는다 — 살아 있는 문서(AGENTS.md, README, 스킬, 규칙, 현행 계약)만 치환한다.
+
 ## Local Archives (untracked + vault backup)
 
 세션 서사 아카이브 — `docs/sum/`(세션 요약), `docs/reviews/`(리뷰 문서),

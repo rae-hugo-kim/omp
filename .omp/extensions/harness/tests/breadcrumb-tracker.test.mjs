@@ -27,12 +27,14 @@ function log(dir) {
   return existsSync(f) ? readFileSync(f, 'utf-8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
 }
 
-test('bash commit -> commit breadcrumb', () => {
+test('bash commit without a landed verdict -> commit breadcrumb UNVERIFIED, never a guessed hash', () => {
   withDir((dir) => {
     assert.equal(run('Bash', { command: 'git commit -m "feat: x"' }, dir).status, 0);
     const e = log(dir);
     assert.equal(e.length, 1);
     assert.equal(e[0].kind, 'commit');
+    assert.equal(e[0].result, 'UNVERIFIED');
+    assert.equal(e[0].hash, undefined, 'the session cwd HEAD is the #22 misattribution — not recorded');
     assert.match(e[0].cmd, /git commit/);
   });
 });
@@ -132,4 +134,40 @@ test('breadcrumb gates make NO LLM/network call (no-LLM guarantee)', () => {
     const src = readFileSync(join(GATES, g), 'utf-8');
     assert.doesNotMatch(src, /fetch\(|https?:\/\/|\bmodel\b|completion|anthropic|openai|sendMessage/i, `${g} must stay no-LLM`);
   }
+});
+
+// --- #48-6 / #22: index.ts passes the target repo's HEAD movement (`landed` + `hash`).
+// A gate-blocked commit exits non-zero but a `| tail` / `; echo` masks that; HEAD not moving
+// is the ground truth, and the hash must be the TARGET repo's (git -C other), never the
+// session cwd's. Without `landed` the legacy exit-code path stays as-is.
+
+test('bash commit with landed: false -> result BLOCKED, no hash (even when exit looked ok)', () => {
+  withDir((dir) => {
+    run('Bash', { command: 'git commit -m x 2>&1 | tail -5', failed: false, landed: false }, dir);
+    const e = log(dir);
+    assert.equal(e.length, 1);
+    assert.equal(e[0].kind, 'commit');
+    assert.equal(e[0].result, 'BLOCKED');
+    assert.equal(e[0].hash, undefined);
+  });
+});
+
+test('bash commit with landed: true -> the passed hash is recorded, not the session HEAD', () => {
+  withDir((dir) => {
+    run('Bash', { command: 'git -C /elsewhere commit -m x', failed: false, landed: true, hash: 'abc1234' }, dir);
+    const e = log(dir);
+    assert.equal(e.length, 1);
+    assert.equal(e[0].kind, 'commit');
+    assert.equal(e[0].hash, 'abc1234');
+    assert.equal(e[0].result, undefined);
+  });
+});
+
+test('bash commit landed: true but non-zero exit (post-commit hook failed) -> still a commit with hash', () => {
+  withDir((dir) => {
+    run('Bash', { command: 'git commit -m x', failed: true, landed: true, hash: 'def5678' }, dir);
+    const e = log(dir);
+    assert.equal(e[0].hash, 'def5678');
+    assert.equal(e[0].result, undefined);
+  });
 });

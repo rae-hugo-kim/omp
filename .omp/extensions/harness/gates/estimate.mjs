@@ -20,8 +20,9 @@ const nonEmpty = (v) => typeof v === 'string' && v.trim() !== '';
 // none of which the intake rule (.omp/rules/harness-cycle_definition.md) allows for the record's ts.
 const ISO_TS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:?\d{2})$/;
 // Shape alone lets a calendar overflow through (2026-02-30 parses as Mar 2 and shifts the FAIL
-// window); the UTC round-trip must reproduce the same calendar day.
-function isIsoTimestamp(v) {
+// window); the UTC round-trip must reproduce the same calendar day. Shared with gh-loop-record.mjs
+// (the dispatch tuple carries the same kind of ts).
+export function isIsoTimestamp(v) {
   if (!nonEmpty(v) || !ISO_TS.test(v)) return false;
   const ms = Date.parse(v);
   if (Number.isNaN(ms)) return false;

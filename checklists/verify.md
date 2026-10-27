@@ -6,11 +6,13 @@
 - [ ] Any skipped gates are listed with rationale and risk
 - [ ] Evidence is cited for version/command/API claims
 
-## Adversarial Verification
+## Independent Verification
 
-- [ ] plan-attack gate passed (or override recorded in audit.jsonl)
-- [ ] test-attack gate passed (or override recorded)
-- [ ] completion-attack gate passed (or override recorded)
+- [ ] `verifier` agent spawned via the `task` tool when acceptance criteria exist, its verdict has actually arrived before the completion claim, and the verdict is `PASS` (`FAIL` / `INCOMPLETE` = not done) — `AGENTS.md` Completion Contract; a session without `task` reports BLOCKED and escalates to a top-level `omp -p` run (`rule://harness-harness_integration_contract` "Fallback Behavior")
+- [ ] high/critical code change: `review-gate` evidence exists for the committed diff — the `reviewer` 3-pass sidecar (`docs/reviews/review-<ts>.json`, run before the code commit), a human-review sidecar, or an audited override with its reason (`rule://harness-agent_routing`, `rule://harness-harness_integration_contract` "4) review-gate")
+- [ ] any `review_override` / `adversarial_override` used is recorded in `docs/harness/audit.jsonl`
+
+(The plan-attack / test-attack / completion-attack steps are not completion conditions under OMP — see `rule://harness-adversarial_review` "도입 상태".)
 
 
 ## Docs/Policy-Only Change Mode

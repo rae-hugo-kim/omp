@@ -12,16 +12,16 @@ This folder contains a layered agent policy set (entry + modules + checklists + 
 
 - Agent policy (English): [`AGENTS.md`](AGENTS.md)
 - Source-repo-only references (`claudedocs/` is not synced to consumer repos and `init` removes it; paths are plain text so consumers do not inherit dead links):
-  - Korean mirror of the agent policy (reference only, marked stale): `claudedocs/CLAUDEKR.md`
-  - Original long-form candidate (verbatim, reference only): `claudedocs/CLAUDE_original.md`
+  - Korean mirror of the agent policy (reference only; the only synced reference doc — sync status in its metadata header): `claudedocs/CLAUDEKR.md`
+  - Original long-form candidate (verbatim frozen snapshot, `status: stale`, reference only — never re-synced): `claudedocs/CLAUDE_original.md`
   - Bootstrap guide (legacy, see `/skill:bootstrap`): `claudedocs/bootstrap_oh_my_claudecode.md`
 
 ## Policy sync process
 
-Run policy sync whenever `AGENTS.md` changes (same PR) and refresh both reference docs or explicitly mark them stale.
+Run policy sync whenever `AGENTS.md` changes (same PR): refresh the Korean mirror or explicitly mark it `status: stale`. The `source_commit_hash` + `status: synced` re-stamp lands in a follow-up commit that does not touch `AGENTS.md` (the same commit can never match its own hash — `scripts/docs-drift` fails it as "claims synced but is stale").
 
 - Checklist: [`templates/policy_sync_checklist.md`](templates/policy_sync_checklist.md)
-- References to sync (source repo only): `claudedocs/CLAUDEKR.md`, `claudedocs/CLAUDE_original.md`
+- Reference to sync (source repo only): `claudedocs/CLAUDEKR.md` only — `claudedocs/CLAUDE_original.md` is a frozen snapshot (`rule://harness-doc_standards` R6) and is not synced
 
 ## Navigation
 

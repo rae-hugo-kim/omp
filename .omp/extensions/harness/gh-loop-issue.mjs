@@ -36,10 +36,14 @@ function hash8(s) {
   return (h >>> 0).toString(16).padStart(8, '0');
 }
 
-// Compare key: case-insensitive, whitespace-collapsed. Two findings whose titles differ only by
-// case/spacing are the same finding (cheap dedup beyond the exact marker).
+// Compare key: case-insensitive, whitespace-collapsed, leading `#N ` number prefix ignored. Two
+// findings whose titles differ only by case/spacing are the same finding (cheap dedup beyond the
+// exact marker). Agent-created issues get a `#N ` prefix AFTER creation (`gh issue edit N --title
+// "#N <title>"` — #78; N is unknown before create), so a re-seen finding's bare title must still
+// match the already-prefixed open issue. The prefix is stripped before the marker hash too: the marker
+// stays the same whether or not the prefix was applied.
 export function normalizeTitle(t) {
-  return String(t == null ? '' : t).toLowerCase().replace(/\s+/g, ' ').trim();
+  return String(t == null ? '' : t).toLowerCase().replace(/\s+/g, ' ').trim().replace(/^#\d+ /, '');
 }
 
 // Stable per-finding marker embedded in the issue body (HTML comment, invisible in rendered md).

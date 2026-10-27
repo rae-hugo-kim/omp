@@ -28,16 +28,22 @@ docs/harness/seed.yaml
 
 `startdev` 시작 전에 아래를 확인한다.
 
-- `seed.yaml` 존재
+- `seed.yaml` 존재(없을 때는 아래 "seed가 없을 때" 규칙을 따릅니다)
 - YAML 파싱 성공
 - 필수 필드 존재
 - `acceptance_criteria` 최소 1개
-- `status`가 `draft` 또는 `approved` (active)
-  - `done`/`superseded`(종료상태)면 완료/대체된 작업이므로 seed 무효가 아니라 **새 `kickoff`로 새 작업(새 task_id) 생성**을 유도
+- `status`가 active(`draft` 또는 `approved`)인지 확인합니다. active의 정의는 `seed_contract.md` §생애주기입니다.
+  - `approved`면 진행합니다.
+  - `draft`면 착수 전에 사용자에게 seed 승인을 묻습니다. 승인을 받는 즉시 `status` 한 줄만 `approved`로 바꿔 단독 커밋으로 HEAD에 올린 뒤 진행합니다(seed가 아직 커밋되지 않았으면 `seed.yaml` 전체가 함께 들어갑니다). kickoff scope의 AC가 모두 미체크라 일반 커밋은 acceptance-gate Check 3가 막으므로 WIP 레인(`OMP_COMMIT_WIP=1 git commit …`)으로 커밋합니다(`seed_contract.md` §생애주기 `draft → approved`). 사용자가 승인을 보류하면 `draft`로 진행할 수 있지만, closeout은 HEAD seed가 `approved`일 때만 마감하므로 closeout 전에 승인을 받아 같은 방법으로 올려야 합니다.
+  - `done`/`superseded`(종료상태)면 seed 무효가 아니라 닫힌 작업이므로 중단하고 `seed_contract.md` §생애주기 "닫힌 seed의 재개"의 두 경로를 안내합니다. 같은 기능의 반복이면 `thread-scope open`으로 그 seed를 제자리 reopen(`approved`, `version +1`, `seed_reopened`, 같은 `task_id`)한 뒤 다시 시작하고, 새 기능이면 새 `kickoff`로 새 seed(새 `task_id`)를 만듭니다.
 
-실패 시:
+seed가 있는데 위 검사(파싱·필수 필드·AC·status 허용값)에 실패하면:
 - 바로 중단
 - `kickoff` 또는 `kickoff --revision`을 요구
+
+seed가 없을 때는 입력에 epic 패턴이 있으면 seed 없는 fallback 경로로 진행하고, 입력이 없으면 중단한 뒤 `kickoff`를 요구합니다(`seed_contract.md` Operational Rules).
+
+현재 startdev 스킬(`.omp/skills/startdev/SKILL.md` Phase 0.5)은 이 절과 두 군데가 다릅니다. `draft`를 승인 질문 없이 진행하고, 종료상태 seed에서는 새 `kickoff`만 안내합니다. 스킬 문구를 이 계약에 맞추는 일은 #114 범위 밖이라 후속 이슈로 남깁니다. 그 전이라도 같은 기능의 반복이면 `thread-scope open` 경로를 쓸 수 있고(`seed_contract.md` §생애주기), `draft` seed는 closeout 전에 승인을 받아 `approved` 줄을 HEAD에 올려야 마감됩니다.
 
 ## How Each Field Is Used
 

@@ -23,6 +23,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, readdirSyn
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { skipUnless } from './helpers/capabilities.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..', '..', '..');
@@ -45,7 +46,6 @@ function git(cwd, args) {
 }
 
 const NEW_ENTRY = 'docs/rules/new-item.md';
-const NEW_ENTRY_LINE = `  "${NEW_ENTRY}"\n)`;
 
 // Minimal harness tree copied from this repo: enough for the script's PATHS loop to
 // have real things to copy, without dragging the whole repo into every fixture.
@@ -66,7 +66,9 @@ function seedTree(dir, { withNewEntry }) {
   if (withNewEntry) {
     // Append one whitelist entry at the end of PATHS=( ... ). The file it names is
     // under docs/ (consumer space) so the copy path is the individual-file branch.
-    text = text.replace(/\n\)\n/, `\n${NEW_ENTRY_LINE}\n`);
+    // `\r?\n` + captured EOLs: a CRLF checkout (core.autocrlf=true, #92) must not defeat the
+    // injection. (.gitattributes pins *.sh to LF so bash can still run the copy.)
+    text = text.replace(/(\r?\n)\)(\r?\n)/, `$1  "${NEW_ENTRY}"$1)$2`);
     assert.ok(text.includes(`"${NEW_ENTRY}"`), 'fixture: failed to inject the new PATHS entry');
     mkdirSync(join(dir, 'docs', 'rules'), { recursive: true });
     writeFileSync(join(dir, NEW_ENTRY), '# shipped by the target tag\n');
@@ -538,7 +540,7 @@ test('ADR002: a harness-* file whose name contains a newline cannot make the pru
 // Round-2 review: containment must hold through ANY symlink on the path (leaf or ancestor),
 // and a matched name that is itself a symlink or a directory must never be written through.
 for (const where of ['.omp/rules', '.omp']) {
-  test(`ADR002: a symlinked ${where} is not followed — the glob entry is skipped, nothing under it is pruned or written`, () => {
+  test(`ADR002: a symlinked ${where} is not followed — the glob entry is skipped, nothing under it is pruned or written`, { skip: skipUnless('symlink') }, () => {
     withFixture({}, (fx) => {
       publishRulebooks(fx, { 'harness-core.md': '# core\n' });
       const outside = mkdtempSync(join(tmpdir(), 'hsync-outside-'));
@@ -566,7 +568,21 @@ for (const where of ['.omp/rules', '.omp']) {
   });
 }
 
-test('ADR002: a matched name that is a symlink is unlinked (target kept); a matched name that is a directory is left alone', () => {
+test('ADR002: a matched name that is a directory is left alone (never written into)', () => {
+  withFixture({}, (fx) => {
+    publishRulebooks(fx, { 'harness-core.md': '# core v2\n' });
+    const rules = join(fx.consumer, '.omp', 'rules');
+    mkdirSync(rules, { recursive: true });
+    mkdirSync(join(rules, 'harness-core.md'));                                   // a DIRECTORY with the rule's name
+    writeFileSync(join(rules, 'harness-core.md', 'inner.md'), '# inside\n');
+    const r = runSync(fx.consumer);
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(existsSync(join(rules, 'harness-core.md', 'inner.md')), 'a directory bearing the name is never written into');
+    assert.match(r.stderr, /harness-core\.md is a directory/);
+  });
+});
+
+test('ADR002: a matched name that is a symlink is unlinked (target kept); a stale link to a directory is pruned as a link', { skip: skipUnless('symlink') }, () => {
   withFixture({}, (fx) => {
     publishRulebooks(fx, { 'harness-core.md': '# core v2\n', 'harness-old.md': '# old v2\n' });
     const rules = join(fx.consumer, '.omp', 'rules');
@@ -575,16 +591,12 @@ test('ADR002: a matched name that is a symlink is unlinked (target kept); a matc
     writeFileSync(join(outside, 'target.md'), '# precious\n');
     symlinkSync(join(outside, 'target.md'), join(rules, 'harness-old.md'));     // link -> file outside
     symlinkSync(outside, join(rules, 'harness-gone.md'));                       // stale link -> dir outside
-    mkdirSync(join(rules, 'harness-core.md'));                                   // a DIRECTORY with the rule's name
-    writeFileSync(join(rules, 'harness-core.md', 'inner.md'), '# inside\n');
     const r = runSync(fx.consumer);
     assert.equal(r.status, 0, r.stderr);
     assert.equal(readFileSync(join(outside, 'target.md'), 'utf-8'), '# precious\n', 'unlinking must not touch the link target');
     assert.ok(existsSync(join(outside, 'target.md')) && readdirSync(outside).length === 1, 'nothing written or removed outside');
     assert.equal(readFileSync(join(rules, 'harness-old.md'), 'utf-8'), '# old v2\n', 'the link is replaced by the source file');
     assert.ok(!existsSync(join(rules, 'harness-gone.md')), 'a stale link (even to a directory) is pruned as a link');
-    assert.ok(existsSync(join(rules, 'harness-core.md', 'inner.md')), 'a directory bearing the name is never written into');
-    assert.match(r.stderr, /harness-core\.md is a directory/);
     rmSync(outside, { recursive: true, force: true });
   });
 });
@@ -661,7 +673,11 @@ function publishRetiredRulesTag(fx) {
   git(work, ['push', '-q', '-f', fx.bare, 'HEAD:refs/heads/main', 'refs/tags/harness/2026.100']);
 }
 
-test('ADR002 retire: pristine harness rules/ is removed on the sync that drops it; consumer-owned files survive with an advisory', () => {
+// `withSymlink` swaps rules/sub for a symlink to a directory OUTSIDE the repo that holds a
+// blob-identical c.md (round-1 review: an intermediate symlink must never let the retire step
+// delete outside). Without it, the same flow runs on a plain rules/sub — so a host that cannot
+// create symlinks still exercises everything except the link-specific safety assertions.
+function retireRulesScenario({ withSymlink }) {
   withFixture({}, (fx) => {
     publishLegacyRulesTag(fx);
     const first = runSync(fx.consumer);
@@ -670,15 +686,16 @@ test('ADR002 retire: pristine harness rules/ is removed on the sync that drops i
     git(fx.consumer, ['add', '-A']);
     git(fx.consumer, ['commit', '-q', '-m', 'sync 2026.99']);
 
-    // Consumer edits one shipped file and adds one of its own before the next version lands;
-    // rules/sub becomes a symlink to a directory OUTSIDE the repo holding a blob-identical c.md
-    // (round-1 review: an intermediate symlink must never let the retire step delete outside).
+    // Consumer edits one shipped file and adds one of its own before the next version lands.
     writeFileSync(join(fx.consumer, 'rules', 'b.md'), '# b (edited by the consumer)\n');
     writeFileSync(join(fx.consumer, 'rules', 'mine.md'), '# mine\n');
-    const outside = mkdtempSync(join(tmpdir(), 'hsync-outside-'));
-    writeFileSync(join(outside, 'c.md'), '# c (harness, nested)\n');
-    rmSync(join(fx.consumer, 'rules', 'sub'), { recursive: true, force: true });
-    symlinkSync(outside, join(fx.consumer, 'rules', 'sub'));
+    let outside;
+    if (withSymlink) {
+      outside = mkdtempSync(join(tmpdir(), 'hsync-outside-'));
+      writeFileSync(join(outside, 'c.md'), '# c (harness, nested)\n');
+      rmSync(join(fx.consumer, 'rules', 'sub'), { recursive: true, force: true });
+      symlinkSync(outside, join(fx.consumer, 'rules', 'sub'));
+    }
 
     publishRetiredRulesTag(fx);
     const dry = runSync(fx.consumer, ['--dry-run']);
@@ -690,12 +707,25 @@ test('ADR002 retire: pristine harness rules/ is removed on the sync that drops i
     assert.ok(!existsSync(join(fx.consumer, 'rules', 'a.md')), 'pristine harness file removed');
     assert.equal(readFileSync(join(fx.consumer, 'rules', 'b.md'), 'utf-8'), '# b (edited by the consumer)\n', 'edited file kept');
     assert.ok(existsSync(join(fx.consumer, 'rules', 'mine.md')), 'consumer-added file kept');
-    assert.match(second.stdout, /advisory: rules\/ is no longer a harness directory .*1 harness file\(s\) removed/);
+    if (!withSymlink) assert.ok(!existsSync(join(fx.consumer, 'rules', 'sub', 'c.md')), 'the pristine nested harness file is retired too (the second removed file)');
+    assert.match(second.stdout, withSymlink
+      ? /advisory: rules\/ is no longer a harness directory .*1 harness file\(s\) removed/
+      : /advisory: rules\/ is no longer a harness directory .*2 harness file\(s\) removed/);
     assert.match(second.stdout, /\.omp\/rules\/harness-<name>\.md/);
-    assert.ok(existsSync(join(outside, 'c.md')), 'a blob-identical file behind an intermediate symlink is never removed');
-    assert.ok(existsSync(join(fx.consumer, 'rules', 'sub')), 'the symlink itself is left alone');
-    rmSync(outside, { recursive: true, force: true });
+    if (withSymlink) {
+      assert.ok(existsSync(join(outside, 'c.md')), 'a blob-identical file behind an intermediate symlink is never removed');
+      assert.ok(existsSync(join(fx.consumer, 'rules', 'sub')), 'the symlink itself is left alone');
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
+}
+
+test('ADR002 retire: pristine harness rules/ is removed on the sync that drops it; consumer-owned files survive with an advisory', () => {
+  retireRulesScenario({ withSymlink: false });
+});
+
+test('ADR002 retire: an intermediate symlink in rules/ never lets the retire step delete outside the repo', { skip: skipUnless('symlink') }, () => {
+  retireRulesScenario({ withSymlink: true });
 });
 
 test('ADR002 retire: an all-pristine rules/ disappears entirely; without a previous synced tree nothing is removed', () => {
@@ -723,3 +753,74 @@ test('ADR002 retire: an all-pristine rules/ disappears entirely; without a previ
     assert.match(again.stdout, /advisory: rules\/ is not a harness directory any more .*no earlier synced harness tree attributes/);
   });
 });
+
+// #100: the retire step compares `_realfile` output (pwd -P) with "$REPO_ROOT/<path>". On Git for
+// Windows `git rev-parse --show-toplevel` prints `C:/…` while MSYS pwd -P prints `/c/…`, so the
+// comparison was always false and nothing was deleted — but only when the script was NOT handing
+// off (the hand-off child normalizes REPO_ROOT via _realdir), which is why the other retire tests
+// never saw it. A `git` shim on PATH makes `rev-parse --show-toplevel` answer with a different
+// spelling of the SAME directory (`<root>/.`), the Linux stand-in for that notation skew.
+function skewedGitEnv(binDir, marker) {
+  const realGit = spawnSync('bash', ['-c', 'command -v git'], { encoding: 'utf-8' }).stdout.trim();
+  assert.ok(realGit, 'fixture: git not found on PATH');
+  const shim = join(binDir, 'git');
+  // Paths travel through the environment, never interpolated into the shim source: a temp or git
+  // install directory containing a quote must not break the shell syntax.
+  writeFileSync(shim, [
+    '#!/bin/sh',
+    'if [ "$1" = rev-parse ] && [ "$2" = --show-toplevel ] && [ "$#" -eq 2 ]; then',
+    '  out=$("$HSYNC_REAL_GIT" "$@") || exit $?',
+    '  : > "$HSYNC_SHIM_MARKER"',
+    '  printf "%s\\n" "$out/."',
+    '  exit 0',
+    'fi',
+    'exec "$HSYNC_REAL_GIT" "$@"',
+    '',
+  ].join('\n'));
+  chmodSync(shim, 0o755);
+  return cleanEnv({
+    PATH: `${binDir}${process.platform === 'win32' ? ';' : ':'}${process.env.PATH}`,
+    HSYNC_REAL_GIT: realGit,
+    HSYNC_SHIM_MARKER: marker,
+  });
+}
+
+for (const mode of ['hand-off', 'local script (no hand-off)']) {
+  test(`#100 retire: pristine rules/ is removed with a skewed REPO_ROOT spelling — ${mode}`, () => {
+    withFixture({}, (fx) => {
+      publishLegacyRulesTag(fx);
+      assert.equal(runSync(fx.consumer).status, 0);
+      git(fx.consumer, ['add', '-A']);
+      git(fx.consumer, ['commit', '-q', '-m', 'sync 2026.99']);
+      publishRetiredRulesTag(fx);
+      const consumerScript = join(fx.consumer, 'scripts', 'harness-sync.sh');
+      if (mode === 'hand-off') {
+        // An older consumer's script hands a NON-canonical root to the fetched child. Strip the
+        // parent-side normalization so only the child's own `_realdir` (the hand-off path) can
+        // rescue the retire comparison; otherwise losing the child's line would go unnoticed.
+        const text = readFileSync(consumerScript, 'utf-8');
+        const stripped = text.replace('REPO_ROOT="$(_realdir "$REPO_ROOT")"\n', '');
+        assert.notEqual(stripped, text, 'fixture: the parent-side REPO_ROOT normalization line must be present to strip');
+        writeFileSync(consumerScript, stripped);
+      } else {
+        // The consumer already carries the target tag's script: step 4b finds it byte-equal and
+        // does not hand off, so THIS process computes REPO_ROOT itself.
+        cpSync(join(fx.root, 'source-work', 'scripts', 'harness-sync.sh'), consumerScript);
+      }
+      const binDir = mkdtempSync(join(tmpdir(), 'hsync-shim-'));
+      try {
+        const marker = join(binDir, 'shim-hit');
+        const r = spawnSync('bash', [join(fx.consumer, 'scripts', 'harness-sync.sh')], {
+          cwd: fx.consumer, encoding: 'utf-8', env: skewedGitEnv(binDir, marker),
+        });
+        assert.equal(r.status, 0, r.stderr);
+        assert.ok(existsSync(marker), 'fixture: the shim must have skewed `rev-parse --show-toplevel`');
+        assert.equal(/own sync script/.test(r.stdout), mode === 'hand-off', `hand-off expectation for mode "${mode}"`);
+        assert.ok(!existsSync(join(fx.consumer, 'rules')), 'the pristine harness rules/ must be deleted, not skipped by the path comparison');
+        assert.match(r.stdout, /retired rules\/: 3 harness file\(s\) removed/);
+      } finally {
+        rmSync(binDir, { recursive: true, force: true });
+      }
+    });
+  });
+}

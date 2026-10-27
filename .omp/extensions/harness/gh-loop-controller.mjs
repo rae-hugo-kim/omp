@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 // gh-loop-controller.mjs — the multisession fan-out controller's DECISION logic (autonomy Q3): how
 // many worker sessions to run, which task each takes, when to scale, and which issues are free to
-// claim. It is the testable core of a THIN RPC orchestrator (analysis Q3) — NOT a daemon/dashboard.
+// claim. It is the testable core of a THIN on-demand orchestrator (analysis Q3) — NOT a daemon/dashboard.
 //
-// The controller spawns each worker as a separate `omp --mode rpc` process in its own git worktree
-// (one worktree/branch/issue), observes via GitHub (labels + throttled comments + a tracking issue),
-// and never auto-merges. Those git/spawn/gh calls are SEAMS owned by the controller skill; THIS file
-// is pure decision logic so it is unit-testable with no processes or network.
+// The controller skill launches omp workers in Orca-managed worktrees (one worktree/branch/issue),
+// observes GitHub labels/comments plus Orca cards, and never auto-merges. Orca/gh calls are SEAMS
+// owned by that skill; THIS file is pure decision logic with no processes or network.
 //
 //   planPool(tasks, { cap })        -> { workers:[{taskId,kind,role}], queued:[...], cap }
 //   nextScale(state, { cap })       -> { action:"up"|"down"|"hold", delta?, retire? }
@@ -63,8 +62,10 @@ export function nextScale(state = {}, { cap = 3 } = {}) {
   return { action: 'hold' };
 }
 
-// Which open issues are free to claim. An issue is "claimed" if it is in `claimed` (numbers or
-// {number}) OR carries the in-progress label — preventing two workers grabbing the same issue.
+// Which open issues are free to claim. Only an issue WITHOUT a status label is agent backlog (gh-loop
+// SKILL.md "상태 라벨"): one in `claimed` (numbers or {number}) or carrying `agent-working` is held by a
+// worker — two workers never grab the same issue — and `needs-decision` / `needs-review` wait for a human.
+const HUMAN_STATUS_LABELS = ['needs-decision', 'needs-review'];
 export function assign(issues, { claimed = [] } = {}) {
   const num = (x) => (x && x.number != null ? x.number : x);
   const key = (x) => String(num(x)); // normalize so 1 and "1" match (cross-source type drift)
@@ -79,8 +80,10 @@ export function assign(issues, { claimed = [] } = {}) {
     const k = String(n);
     if (seen.has(k)) { skipped.push({ issue: n, reason: 'duplicate in list' }); continue; } // never double-assign
     seen.add(k);
-    const inProgress = Array.isArray(iss.labels) && iss.labels.some((l) => labelName(l) === 'gh-loop:in-progress');
-    if (claimedSet.has(k) || inProgress) skipped.push({ issue: n, reason: 'already claimed' });
+    const names = Array.isArray(iss.labels) ? iss.labels.map(labelName) : [];
+    const waiting = HUMAN_STATUS_LABELS.find((l) => names.includes(l));
+    if (claimedSet.has(k) || names.includes('agent-working')) skipped.push({ issue: n, reason: 'already claimed' });
+    else if (waiting) skipped.push({ issue: n, reason: `awaiting human (${waiting})` });
     else assignable.push({ issue: n });
   }
   return { assignable, skipped };

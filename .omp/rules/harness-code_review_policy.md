@@ -3,7 +3,7 @@ description: "What to review, severity classification and output format for code
 ---
 # Code Review Policy
 
-<!-- Harness: code-reviewer agent enforces this automatically -->
+<!-- Harness: this policy is prompt guidance for the `code-reviewer` agent (Pass 3 of the 3-pass review) and for human reviewers; nothing enforces the finding format mechanically. The agent's own Output_Format is `## Findings / ## Clean Areas / ## Verdict` with the vocabulary `PASS / PASS WITH NOTES / FAIL` (.omp/agents/code-reviewer.md:34-45). Its only consumer is the `reviewer` agent, which takes the Pass 3 output as one source in cross-validation (.omp/agents/reviewer.md:142-147) and attributes each finding to its source (:160); review-gate reads only the reviewer's JSON tuple sidecar, never this format. -->
 
 ## Scope
 
@@ -40,15 +40,15 @@ This policy applies to all code reviews in this repo, whether performed by an ag
 | Severity | Definition | Merge gate |
 |----------|------------|------------|
 | **CRITICAL** | Security vulnerability, potential data loss, crashes in normal use, exposed secrets | Block — must fix before merge |
-| **HIGH** | Definite bugs, performance regressions, missing error handling on failure paths | Warn — should fix before merge |
+| **HIGH** | Definite bugs, performance regressions, missing error handling on failure paths, complexity thresholds exceeded (see below) | Warn — should fix before merge |
 | **MEDIUM** | Maintainability problems, readability gaps, missing tests for new paths | Note — fix in follow-up acceptable |
 | **LOW** | Minor suggestions, naming improvements, TODOs without tickets | Optional |
 
-**Approval criteria:**
+**Verdict** (the same vocabulary the `review-gate` evidence sidecar accepts and the `code-reviewer` agent emits — `PASS` / `PASS WITH NOTES` / `FAIL`; `.omp/agents/code-reviewer.md:43-44`. There is no separate Approve/Warning/Block vocabulary):
 
-- **Approve**: no CRITICAL or HIGH findings
-- **Warning**: HIGH findings only — may merge with documented caution
-- **Block**: any CRITICAL finding — must resolve before merge
+- **PASS**: no CRITICAL or HIGH findings
+- **PASS WITH NOTES**: HIGH findings only — may merge with documented caution
+- **FAIL**: any CRITICAL finding — must resolve before merge
 
 ## Quantitative complexity thresholds
 
@@ -83,7 +83,6 @@ Flag immediately — these can cause real damage:
 - Nesting depth exceeding 4 levels — flatten with early returns or extracted helpers
 - Debug logging (`console.log`, `print`, etc.) left in production paths
 - Dead code: commented-out blocks, unused imports, unreachable branches
-- Missing tests for new logic paths
 
 ### Silent failures (HIGH)
 
@@ -134,7 +133,7 @@ Description: API key "sk-abc..." is hardcoded. It will be committed to git histo
 Suggestion: Move to an environment variable (process.env.API_KEY) and add the key to .env.example with a placeholder.
 ```
 
-Group findings by severity (CRITICAL first, LOW last). End every review with a summary table:
+Group findings by severity (CRITICAL first, LOW last). End every review with a summary table and a `## Verdict` line that uses the agent vocabulary (`PASS / PASS WITH NOTES / FAIL`) — the same shape the `reviewer` agent requires of its Pass 2 panel members (`.omp/agents/reviewer.md:83-84`: a parseable `## Verdict` line plus at least one `file:line` from the diff) and cross-validates Pass 3 against (`:142-147`):
 
 ```
 ## Review Summary
@@ -146,8 +145,11 @@ Group findings by severity (CRITICAL first, LOW last). End every review with a s
 | MEDIUM   | 2     | info   |
 | LOW      | 0     | note   |
 
-Verdict: WARNING — 1 HIGH issue should be resolved before merge.
+## Verdict
+PASS WITH NOTES — 1 HIGH issue should be resolved before merge.
 ```
+
+When running as the `code-reviewer` agent, its Output_Format (`## Findings` with `### [severity] Title — file:line`, `## Clean Areas`, `## Verdict`; `.omp/agents/code-reviewer.md:34-45`) takes precedence over the per-finding block above — the severity ladder, confidence gate and consolidation rules of this policy still apply.
 
 If low-confidence observations exist, append them after the summary under a **Notes** heading, clearly labeled as speculative.
 

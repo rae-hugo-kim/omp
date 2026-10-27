@@ -8,7 +8,7 @@ Eval-Driven Development: define expected behavior before implementation, then ve
 - [ ] Grader type selected: code-based (deterministic), model-based, or human review
 - [ ] Pass criteria set: pass@k threshold specified (e.g., pass@3 > 90%)
 - [ ] Baseline recorded (if replacing or modifying existing behavior)
-- [ ] Eval storage location created: `.omp/evals/{feature}.md`
+- [ ] Eval storage location created: `eval/cases/<feature>/` (full layout — `eval/cases/`, `eval/harness/`, `eval/baselines/`, `eval/reports/` — in `rule://harness-verification_tests_and_evals` §Suggested eval structure)
 
 
 ## During Implementation

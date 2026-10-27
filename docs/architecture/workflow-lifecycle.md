@@ -48,7 +48,7 @@ flowchart TD
     SKIP_RV --> COMMIT_OK
     
     COMMIT_OK --> DONE([완료])
-    DONE -.->|머지 후 수동 1회, 자동 아님| BUMP[harness-version-bump<br/>버전 범프 + 태그]
+    DONE -.->|발행 기준 충족 시 수동 1회, 자동 아님| BUMP[harness-version-bump<br/>버전 범프 + 태그]
 
     BLOCK_CTX --> IMPL
     BLOCK_AC --> IMPL
@@ -197,7 +197,7 @@ git commit 시도
 
   전부 통과하면 커밋 성공
 
-  → [머지 후 수동 1회] bash scripts/harness-version-bump.sh
+  → [발행 기준 충족 시 수동 1회 — docs/decisions/003] bash scripts/harness-version-bump.sh
     → 마지막 harness/* 태그 이후 하네스 변경이 있으면 버전 범프 + 태그 (멱등; 자동 아님)
 ```
 

@@ -46,8 +46,15 @@ test('fromBreadcrumb: repeated same-type FAILs share a title (so planIssues dedu
   assert.equal(f[0].title, f[1].title);
 });
 
-test('fromBreadcrumb: commit FAIL -> finding; PASS/edit/scope -> nothing', () => {
+test('fromBreadcrumb: commit FAIL/BLOCKED -> finding; PASS/edit/scope/UNVERIFIED/PENDING -> nothing', () => {
   assert.equal(fromBreadcrumb([{ kind: 'commit', result: 'FAIL', cmd: 'git commit -m x' }]).length, 1);
+  // #48-6: a gate-blocked commit (target repo recorded no commit) is a failed commit too.
+  assert.equal(fromBreadcrumb([{ kind: 'commit', result: 'BLOCKED', cmd: 'git commit -m x' }]).length, 1);
+  assert.equal(fromBreadcrumb([
+    { kind: 'commit', result: 'UNVERIFIED', cmd: 'cd x && git commit' },
+    { kind: 'commit', result: 'PENDING', cmd: 'git commit -m z' },
+    { kind: 'test', type: 'test', result: 'BLOCKED' },
+  ]).length, 0);
   assert.equal(fromBreadcrumb([
     { kind: 'test', type: 'node-test', result: 'PASS' },
     { kind: 'edit', file: 'a.ts' },

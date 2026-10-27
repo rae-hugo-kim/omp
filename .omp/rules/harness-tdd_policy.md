@@ -1,11 +1,11 @@
 ---
-description: "RED -> GREEN -> TIDY cycle for all implementation work"
+description: "RED -> GREEN -> TIDY: MUST for code-logic changes where test infrastructure exists; skipping needs approval, other paths need a deterministic alternative artifact"
 ---
 # TDD Policy
 
-## MUST: Test-Driven Development for implementation
+## MUST: test-first for code-logic changes where test infrastructure exists
 
-All implementation work follows the RED → GREEN → TIDY cycle.
+Code-logic changes in a repo with test infrastructure MUST follow the RED → GREEN → TIDY cycle. Skipping test-first in that case needs the user's explicit approval (Exception Protocol below). Three paths need **no approval** — provide a deterministic alternative verification artifact instead (manual reproduction procedure, smoke test, or eval case; `rule://harness-verification_tests_and_evals`): no test infrastructure in the repo, docs/policy-only changes, and changes the existing infrastructure cannot exercise at all (automation is not feasible — e.g. a non-code surface such as a rendered layout or a manual operator procedure). **Precedence**: when test infrastructure exists and the change is code logic, the approval path wins — "automation is not feasible" is then the reason you state in Exception Protocol step 1, never a bypass. `rule://harness-change_control`, `checklists/bugfix.md` and `rule://harness-verification_tests_and_evals` state the same grade and the same exception list.
 
 ## Cycle
 
@@ -39,7 +39,7 @@ Repeat until the user story is complete.
 
 For each epic/feature, produce a human-testable checklist:
 
-**Location**: `checklists/e2e_<feature>.md`
+**Location**: `docs/checklists/e2e_<feature>.md` — consumer space. Never `checklists/`: that directory is harness-owned and replaced wholesale (`rm -rf` + copy) on every `harness-check` sync, so a checklist placed there is deleted by the next sync.
 
 **Format**:
 ```markdown
@@ -71,7 +71,9 @@ For each epic/feature, produce a human-testable checklist:
 
 ## Exception Protocol
 
-If TDD is not feasible:
-1. State why (no test infra, legacy constraint, etc.)
-2. Propose alternative verification (manual steps, smoke test)
-3. Get explicit approval before proceeding without TDD
+Approval is required only when test infrastructure exists and the change is code logic, and you want to skip test-first:
+1. State why (legacy constraint, untestable seam, etc.)
+2. Propose alternative verification (manual steps, smoke test, eval case)
+3. Get the user's explicit approval before proceeding without TDD
+
+No approval is needed when test infrastructure does not exist, the change is docs/policy-only, or the existing infrastructure cannot exercise the change at all: state the alternative deterministic artifact and proceed. If infrastructure exists and the change is code logic, an infeasibility judgement is step 1 above, not this path.

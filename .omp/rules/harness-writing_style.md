@@ -7,7 +7,7 @@ description: "Human-facing output style: Korean polite register, conclusion firs
 세션 요약 — 의 **문체** 표준. 구조·형식은 `templates/pr_body.md`와
 [`harness-doc_standards.md`](harness-doc_standards.md)가, 언어 선택(한/영 분리)은
 [`harness-documentation_policy.md`](harness-documentation_policy.md)가 담당하고, 본 문서는
-"문장을 어떻게 쓸지"만 다룬다. 어조의 바탕은 글로벌 규칙의 경어체(해요체/합니다체)
+"문장을 어떻게 쓸지"만 다룬다. 어조의 바탕은 `rule://harness-core`의 경어체(해요체/합니다체)
 일관 원칙이며, 본 문서는 그 위에 가독성 기준을 얹는다.
 
 집행 주체: `owner: local-policy` — 자동 게이트 없음. 리뷰(self-check 포함)에서 적용한다.
@@ -77,6 +77,12 @@ description: "Human-facing output style: Korean polite register, conclusion firs
 문맥 또는 첫 등장의 병기·설명으로 의미를 이해할 수 있는가. 통째 음차·억지
 번역은 둘 다 끊는다. 용어를 넘어 개념 설명 자체도 영어로 쓰는 편이 훨씬
 이해하기 쉬우면 문장·구 단위로 영어를 그대로 써도 무방하다.
+
+### R8. 사용자가 붙여 넣을 명령
+
+- 한 줄에 명령 하나를 쓴다. 줄 끝을 `&&`·`|`·`>>` 같은 연산자나 리다이렉트로 끝내지 않는다.
+- 한 줄이 90자를 넘는 리터럴(키, URL, 긴 옵션)은 변수 조각으로 나눈 뒤 조합한다.
+- 근거: 채팅 화면에서 접힌 줄이 그대로 복사되면 zsh가 `parse error near \n`으로 첫 줄 전체를 실행하지 않는다(2026-09-27, Mac `authorized_keys` 등록).
 
 ## Self-check
 

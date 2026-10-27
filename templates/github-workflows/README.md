@@ -1,5 +1,7 @@
 # gh-loop autonomous runtime (option A) — setup & instantiate-once
 
+> This folder holds two templates: `harness-ci.yml` (checks on GitHub-hosted runners — see [harness-ci](#harness-ci--server-side-checks-instantiate-once) at the end) and `gh-loop.yml` (everything else in this file).
+
 `gh-loop.yml` here is a **template**, not a live workflow. The harness ships it via `templates/` sync;
 your project instantiates it once and then owns it. The reusable, **tested** decision logic lives in
 `.omp/extensions/harness/gh-loop-runner.mjs` (synced wholesale); the workflow is thin glue.
@@ -59,3 +61,47 @@ resources). It reads `issue://<n>`, runs the chosen stage, and **never auto-merg
 `gh-loop-runner.mjs` is unit-tested (`.omp/extensions/harness/tests/gh-loop-runner.test.mjs`). The **workflow itself runs only
 on your runner** — the harness cannot live-verify it. Do a dry exercise on a throwaway private repo
 (label a test issue, comment as a non-bot write+ user) before trusting it on a real repo.
+
+---
+
+# harness-ci — server-side checks (instantiate-once)
+
+`harness-ci.yml` is the **server-side backstop** for the local gates: a client-side hook can be skipped with
+`--no-verify`, disabled later, or inactive in a clone (local git config does not travel with a clone, and #26
+measured 9 of 10 consumers with hooks off before sync started activating them), but a workflow on the remote
+still runs on every push to `main` and every pull request. It is byte-identical to the live
+`.github/workflows/harness-ci.yml` of the omp source repo. Three jobs, all on GitHub-hosted runners with
+read-only permissions and no secrets:
+
+| Job | Runs | Fails when |
+|---|---|---|
+| `archive-leak` | `bash .githooks/pre-push` (the local push gate itself — no second copy of the path list) | `docs/sum`, `docs/reviews` or `docs/brainstorming` is tracked in the checked-out committed tree |
+| `harness-suite` | `node --test .omp/extensions/harness/tests/*.test.mjs` | any harness gate test fails |
+| `docs-drift` | `node scripts/docs-drift` | FAIL-severity docs drift (a no-op notice in repos without `scripts/docs-drift`) |
+
+## Instantiate-once
+
+Copy it ONCE (the harness sync never touches `.github/`, so your copy is yours afterwards and is not updated
+by later syncs — re-copy by hand if you want a newer template):
+
+```bash
+mkdir -p .github/workflows
+cp templates/github-workflows/harness-ci.yml .github/workflows/harness-ci.yml
+```
+
+## Adjust points
+
+- **Test path**: the `harness-suite` job runs the synced harness tests at `.omp/extensions/harness/tests/*.test.mjs`.
+  If your repo keeps them elsewhere (or you add your own suite), edit the `run:` line of that job.
+- **Branch name**: `on.push.branches: [main]` — change it if your default branch is `master`.
+- **Node version**: `node-version: 22` in the two Node jobs.
+- **`docs-drift` job**: `scripts/docs-drift` is source-repo only (not on the sync whitelist), so in a consumer repo
+  the job passes with a "skipped" notice. Delete the job if you do not want an always-green check.
+- **`archive-leak` and history**: the job checks out full history because `.githooks/pre-push` also runs
+  `scripts/docs-drift` when that script exists. It requires `.githooks/pre-push` (shipped by the harness sync).
+
+## What it does not do
+
+It reports; it does not block merges. Making `archive-leak`/`harness-suite`/`docs-drift` required checks is a
+branch-protection setting you decide per repo. It also does not replace the local gates — they still give the
+fast feedback at commit time; CI only catches what reached the remote.

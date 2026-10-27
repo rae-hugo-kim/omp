@@ -27,8 +27,24 @@ OMP(Oh My Pi) 코딩 에이전트가 일관되고 안전하게 동작하도록 �
 ## 필요한 것
 
 - [OMP (Oh My Pi)](https://github.com/oh-my-pi) — 코딩 에이전트 하네스
-- Node.js — 게이트 스크립트 실행용 (`node`가 PATH에 있어야 함)
+- Node.js ≥ 20 — 게이트 스크립트 실행용 (`node`가 PATH에 있어야 함, CI는 22에서만 실행합니다). 하네스 테스트 스위트의 wiring 테스트는 내장 TypeScript 변환을 쓰므로 22.18 이상이 필요합니다
 - (선택) oh-my-claudecode — `~/.claude`에 설치돼 있으면 OMP가 OMC 에이전트/스킬을 자동 발견
+
+## 지원 플랫폼
+
+| 플랫폼 | 지위 |
+|---|---|
+| Linux · WSL · macOS | **공식 지원** — 전체 하네스 테스트 통과가 기준선입니다 |
+| Windows 네이티브 | **동작을 목표로 하며 일부 테스트는 skip** — OS 기능(심볼릭 링크·FIFO)이 없는 환경의 테스트만 사유를 출력하고 건너뜁니다. [#93](https://github.com/rae-hugo-kim/omp/issues/93)의 런타임 수정(review-gate의 `shasum` 의존 제거, cross-repo·`git -C` 절대 경로 판정)과 [#99](https://github.com/rae-hugo-kim/omp/issues/99)의 `repo-root.mjs` 수정(`C:\…`·`C:/…`·UNC 경로를 자기 루트에서 걸어 리포에 귀속 — 그 전에는 모든 Windows 경로가 어느 리포에도 속하지 않아 cross-repo 가드가 조용히 꺼졌습니다)은 들어 있지만, 둘 다 주입한 `path.win32` 단위 테스트 근거이고 실제 Windows 호스트에서 전체 suite를 실행해 확인하지는 않았습니다. Git Bash의 MSYS 표기(`/c/Users/…`)는 변환하지 않아 edit/write·mutator 피연산자·`git -C /c/… commit`은 귀속 null → 허용이고(`cd /c/… && git commit`만 cwd 불명으로 fail-closed), 실기 확인이 필요합니다 |
+
+Windows 네이티브 전제:
+
+- **bash** — Git for Windows가 설치한 bash가 `.githooks/*`와 `scripts/*.sh`를 실행합니다.
+- **`node`가 그 bash의 PATH에 있어야 합니다.** 없으면 pre-commit 훅이 fail-closed로 막고, nvm 같은 환경은 `OMP_NODE_BIN`으로 경로를 지정합니다.
+- **심볼릭 링크 테스트** — Windows 개발자 모드(또는 관리자 셸)가 있어야 실행됩니다. 없으면 `host cannot create symlinks …` 사유와 함께 skip되고, 능력이 있는 호스트에서는 skip되지 않습니다. `mkfifo`가 필요한 FIFO 테스트도 같은 방식으로 skip됩니다.
+- **줄 끝(CRLF)** — 저장소의 `.gitattributes`가 `*.sh`와 `.githooks/*`를 LF로 고정합니다(`core.autocrlf=true` 체크아웃에서도 bash가 스크립트를 읽습니다). `.gitattributes`는 `/skill:harness-check` 동기화 대상이 아니므로 기존 소비 리포는 `*.sh text eol=lf`와 `.githooks/* text eol=lf` 두 줄을 직접 추가해야 합니다. 이미 CRLF로 체크아웃된 스크립트는 작업 트리를 다시 써야 LF가 됩니다 — 미커밋 변경이 없을 때 `git rm --cached -r -q . && git reset --hard`를 실행하거나 새로 clone하세요(`git add --renormalize .`는 인덱스만 바꾸고 작업 트리의 CRLF는 그대로 둡니다).
+- **2026.86 이하에서 올릴 때(Windows 재정규화)** — 2026.87의 `.gitattributes`는 **이미 CRLF로 체크아웃된 파일을 되돌리지 않습니다.** 2026.86 이하 체크아웃의 `scripts/harness-sync.sh`가 CRLF이면 `bash scripts/harness-sync.sh`가 `$'\r': command not found`, `set: pipefail: invalid option name`으로 즉시 멈춥니다. 이때는 CR을 벗긴 사본을 임시 파일로 만들어 한 번 실행합니다: `lf=$(mktemp) && tr -d '\r' < scripts/harness-sync.sh > "$lf" && bash "$lf"; rc=$?; rm -f "$lf"; [ "$rc" -eq 0 ]`(`bash <(…)` 프로세스 치환은 스크립트가 `$0`를 다시 복사할 때 파이프가 이미 일부 소비돼 앞부분이 빠지므로 쓰지 않습니다. WSL의 bash도 같은 CRLF 파일에서는 똑같이 실패하므로 WSL에서도 이 임시 사본 방식을 씁니다). 동기화가 끝나면 위 `.gitattributes` 두 줄이 있는지 확인하고 `git add --renormalize .omp scripts .githooks '*.sh' && git status`로 LF를 재정규화합니다(변경이 나열되면 커밋하세요). `--renormalize`는 인덱스만 바꾸므로 작업 트리의 CRLF는 미커밋 변경이 없을 때 `git ls-files -z -- '*.sh' '.githooks/*' | xargs -0 sh -c 'rm -f -- "$@" && git checkout -- "$@"' _`로 다시 씁니다(이 파일들의 미커밋 변경은 사라집니다). `git ls-files --eol -- '*.sh' '.githooks/*'`가 모두 `w/lf`이면 끝입니다.
+- **권장 검증 경로** — Windows에서는 WSL에서 같은 체크아웃을 열어 `node --test .omp/extensions/harness/tests/*.test.mjs`를 실행합니다. Windows 네이티브 동작은 단위 테스트(주입한 `path.win32`, `repo-root`는 인메모리 fs까지)와 코드 읽기 근거뿐이라, 실제 Windows 호스트의 실행 결과를 보고해 주시면 이 절을 갱신합니다.
 
 ## 시작하기
 
@@ -67,7 +83,9 @@ MCP 서버(OMP 설정에 등록)를 설치합니다. docs는 빌드 도구 없�
 ├── AGENTS.md              에이전트 정책 진입점 (OMP가 자동 로드)
 ├── .omp/rules/harness-*.md  행동 규칙(omp 규칙집 — 매 프롬프트에 이름+설명, 본문은 rule://harness-<name>; harness-core는 상시)
 ├── checklists/            작업별 체크리스트
-├── templates/             재사용 템플릿
+├── templates/             재사용 템플릿 (github-workflows/: harness-ci·gh-loop 워크플로 템플릿 — 소비 리포가 1회 복사)
+├── .github/workflows/     harness-ci.yml — 서버측 백스톱 3종 (아카이브 유출·suite·docs drift; 이 저장소에만)
+├── .gitattributes         audit.jsonl merge=union, *.sh·.githooks/* eol=lf
 ├── .omp/
 │   ├── skills/            스킬 정의 (OMP 네이티브 발견, 15개)
 │   ├── agents/            reviewer / verifier 에이전트 (task 도구로 위임)
@@ -78,8 +96,10 @@ MCP 서버(OMP 설정에 등록)를 설치합니다. docs는 빌드 도구 없�
 │       └── tests/         게이트 단위 테스트 (node --test) — 게이트와 같은 태그로 소비 리포에 동기화
 ├── docs/
 │   ├── README.md          docs 색인 노트 (Obsidian vault 진입점)
+│   ├── decisions/         ADR (001 consumer-safe sync · 002 정책 층 재계층화 · 003 발행 주기)
 │   ├── brainstorming/     발산 캡처 (gitignored)
-│   └── harness/           하네스 런타임 파일 (seed.yaml 등)
+│   ├── sum/               세션 요약 (gitignored — sum-vault로 백업)
+│   └── harness/           하네스 런타임 파일 (seed.yaml, audit.jsonl, 감사 문서)
 ├── scripts/               드리프트 감사/버전 관리
 └── claudedocs/            참조 문서 (Claude Code 시절 이력 포함)
 ```
@@ -99,12 +119,12 @@ OMP에서 스킬은 `/skill:<이름>`으로 호출하거나, 설명에 매칭되
 | `/skill:compr` | 브랜치 → 커밋 → 푸시 → PR |
 | `/skill:compush` | 커밋 → 푸시 (PR 없이) |
 | `/skill:receiving-code-review` | 받은 리뷰 의견 검증·반영 |
-| `/skill:harness-check` | 하네스 버전 드리프트 체크 + 원격 sync (`--audit`로 품질 점수) |
+| `/skill:harness-check` | 하네스 버전 드리프트 체크 + 원격 sync (`--audit`로 품질 점수 — [#87](https://github.com/rae-hugo-kim/omp/issues/87)에서 폐지가 결정돼 실행 사이클 전까지만 남아 있습니다) |
 | `/skill:migrate` | 기존 Claude Code 프로젝트(.claude/CLAUDE.md)를 OMP로 컷오버 (보험 태그 + 하네스 이식) |
 | `/skill:design-mockup` | 슬라이더/노브로 파라미터 튜닝 가능한 단일 HTML mockup 생성 |
 | `/skill:grepai-search` | 의미 기반 코드 검색 (콜드스타트 탐색) |
-| `/skill:gh-loop` | finding → 이슈 → 수정 → PR → 교차검증 → HITL 루프 (머지 자동 안 함) |
-| `/skill:gh-fanout` | 멀티세션 — gh-loop을 여러 이슈에 worktree 격리 병렬 실행 (관측=GitHub) |
+| `/skill:gh-loop` | finding → 이슈 → 수정 → PR → 교차검증 → HITL 루프 (머지 자동 안 함). **dispatch 모드**: 메인 세션은 코디네이터로 이슈 정리·결정 전달·머지만 하고, 작업은 Orca 워크트리의 워커 세션이 합니다. 워커 모델은 매번 사용자가 고르고(규모 기반 추천 한 줄 표시, 자동 선택 없음 — `gh-loop-record.mjs`), 상태는 라벨 3종(`needs-decision` / `needs-review` / `agent-working`)으로 봅니다. 머지는 `--match-head-commit`로 승인된 head만 |
+| `/skill:gh-fanout` | 멀티세션 — gh-loop을 여러 이슈에 worktree 격리 병렬 실행 (관측 = Orca 카드 + GitHub). 병렬 PR이 `docs/harness/audit.jsonl` 꼬리에서 충돌하므로 **PR은 순차 머지**하고 뒤 PR은 소유 워커가 최신 main 위로 rebase합니다(`.gitattributes`의 `merge=union`은 로컬 rebase만 자동 해결, GitHub은 따르지 않음 — #71) |
 
 ## 기존 Claude Code 프로젝트 이주
 
@@ -119,13 +139,15 @@ cd <기존-프로젝트>
 
 ## 하네스
 
-kickoff → startdev 흐름에서 자동으로 작동하는 장치들. 집행 지점은 두 곳입니다 — **커밋 게이트는 git 훅(`.githooks/pre-commit`)** 에서, 나머지는 OMP 확장 `index.ts`가 이벤트에 배선합니다. 게이트 CLI는 `.omp/extensions/harness/gates/` (22)에 있는 stdin-JSON 프로그램입니다:
+kickoff → startdev 흐름에서 자동으로 작동하는 장치들. 집행 지점은 두 곳입니다 — **커밋 게이트는 git 훅(`.githooks/pre-commit`)** 에서, 나머지는 OMP 확장 `index.ts`가 이벤트에 배선합니다. 게이트 CLI는 `.omp/extensions/harness/gates/` (24)에 있는 stdin-JSON 프로그램입니다:
 
 | OMP 이벤트 | 게이트 | 역할 |
 |-----------|--------|------|
+| `tool_call` (edit/write/ast_edit) | cross-repo guard (`index.ts` + `cross-repo.mjs`) | 세션 리포 밖 리포의 파일 수정을 그 리포의 규율 파일(AGENTS.md > CLAUDE.md > .cursorrules) read 증명 전까지 차단 (#15 ①) — 같은 리포의 링크드 워크트리는 외부가 아님(`repo-root.mjs`) |
 | `tool_call` (edit/write/ast_edit) | context-gate | 읽지 않은 파일 수정 차단 |
 | `tool_call` (bash) | destructive-guard | 위험 명령(rm -rf, 강제 푸시 등) 경고 |
 | `tool_call` (bash) | commit-tripwire (`index.ts`) | 커밋 게이트 **우회 선언** 차단 — `--no-verify`/`-n`, `core.hooksPath` 재지정, `--git-dir`/`--work-tree`, 리타게팅 `GIT_*` |
+| `tool_call` (bash) | cross-repo guard (`index.ts` + `cross-repo.mjs`) | 규율·하네스를 가진 외부 리포 대상 `git commit`/`git push` 차단(`git -C X`, `cd X &&`, bash -c; 해석 불가는 fail-closed) + 리터럴 경로 mutation(rm/mv/cp/tee/sed -i/리다이렉션)의 ① 판정 (#15 ②) — 규율·하네스 없는 리포(sum-vault)는 관할 밖 통과 |
 | `tool_call` (mcp__*) | mcp-gate | 파괴적 MCP 호출 경고 |
 | `tool_result` (read) | read-tracker | 읽은 파일 기록 |
 | `tool_result` (grep/ast_grep) | read-tracker | 검색이 `[path#TAG]` 앵커를 발급한 파일 기록 (배치 1회 스폰) |
@@ -140,17 +162,19 @@ kickoff → startdev 흐름에서 자동으로 작동하는 장치들. 집행 �
 
 | git 훅 | 게이트 | 역할 |
 |--------|--------|------|
-| `pre-commit` (차단) | commit-gates → acceptance/backpressure/review/archive | 스테이징된 인덱스 기준 판정. 실패 시 커밋 객체 미생성. node 부재 시 fail-closed(`OMP_NODE_BIN` 탈출구) |
+| `pre-commit` (차단) | commit-gates → acceptance/backpressure/review/archive | 스테이징된 인덱스 기준 판정. 실패 시 커밋 객체 미생성. node 부재 시 fail-closed(`OMP_NODE_BIN` 탈출구). override 플래그 `docs/harness/acceptance-done`은 24시간 뒤 stale로 무시되고(#15 ③), `docs/harness/review-skip`은 diff-hash 바인딩 + 1회 소비 |
 | `post-commit` (비차단) | 백스톱 + 유예 소비 | 게이트 미경유 커밋(`--no-verify`·cherry-pick·revert·rebase) advisory + one-shot 플래그 소비 |
-| `pre-commit` (관측) | review-gate → estimate-vs-actual | 인테이크가 남긴 `.omp/harness-state/cycle-estimate`(예상 위험·파일 수·깊이·모델)를 `risk-assess` 실측과 붙여 `audit.jsonl`에 `estimate_vs_actual` 기록·소비. 판정 불관여. 표는 `node .omp/extensions/harness/estimate-report.mjs` |
+| `pre-commit` (관측) | review-gate → estimate-vs-actual | 인테이크가 남긴 `.omp/harness-state/cycle-estimate`(예상 위험·파일 수·깊이·모델)를 `risk-assess` 실측과 붙여 `audit.jsonl`에 `estimate_vs_actual` 기록·소비. 판정 불관여. 표는 `node .omp/extensions/harness/estimate-report.mjs`(gh-loop 워커의 `gh_loop_dispatched`·`gh_loop_closed`도 §3 모델×규모 셀로 모음 — `gh-loop-record.mjs`) |
 | `post-merge` (비차단) | 백스톱 | merge 자동커밋 관측 — git이 pre-commit/post-commit을 발화하지 않는 유일 경로 |
-| `pre-push` (차단) | 아카이브 유출·docs drift | `docs/sum`·`docs/reviews` 추적 상태 및 FAIL 드리프트 차단 |
+| `pre-push` (차단) | 아카이브 유출·docs drift | `docs/sum`·`docs/reviews`·`docs/brainstorming` 추적 상태 및 FAIL 드리프트 차단 |
 
 통합 경로(merge 자동커밋·cherry-pick·revert·rebase)는 **의도적으로 차단하지 않습니다** — 원 커밋 시점에 이미 게이트를 통과한 콘텐츠의 이동이고, 백스톱이 관측합니다. 잔여면(sparse-checkout·stash·`--no-verify`·관할 밖 레포)은 [`.omp/rules/harness-harness_integration_contract.md`](.omp/rules/harness-harness_integration_contract.md)에 열거돼 있습니다.
 
+**서버측 백스톱 (CI)**: 위 집행 지점은 모두 클라이언트측이라 `--no-verify`나 훅 비활성 리포의 push는 원격에서 걸러지지 않았습니다. 이 저장소는 `.github/workflows/harness-ci.yml`(GitHub-hosted 러너, `main` push + `pull_request`)로 검사 3종을 돌립니다 — 아카이브 유출(로컬 `.githooks/pre-push`를 커밋된 트리에 그대로 실행), 하네스 suite(`node --test .omp/extensions/harness/tests/*.test.mjs`), docs drift(`node scripts/docs-drift`). 소비 리포는 `templates/github-workflows/harness-ci.yml`을 1회 복사해 쓰며(sync는 `.github/`를 건드리지 않습니다) 안내와 조정 지점은 [`templates/github-workflows/README.md`](templates/github-workflows/README.md)에 있습니다. 이 워크플로는 보고만 하고 머지를 막지는 않습니다(필수 체크 지정은 브랜치 보호의 별도 결정).
+
 - **seed.yaml** — 킥오프 결과를 구조화 (목표, 제약, 수락 기준, 리스크)
 - **rubric** — 4차원 명확도 게이트 (HIGH/MED/LOW)
-- **audit log** — 이벤트 추적 (append-only JSONL)
+- **audit log** — 이벤트 추적 (append-only JSONL, `docs/harness/audit.jsonl`). `.gitattributes`가 `merge=union`으로 지정해 병렬 브랜치의 꼬리 append가 로컬 rebase에서 자동 병합됩니다(JSON 유효성·append-only는 보증하지 않으므로 rebase 뒤 전 행 파싱을 검증합니다)
 - **glossary** — 프로젝트 용어 정의 (`docs/glossary.yaml`)
 - 런타임 상태는 `.omp/harness-state/`(gitignored), 게이트 단독 실행·테스트는 `node --test .omp/extensions/harness/tests/*.test.mjs`
 
@@ -164,11 +188,11 @@ Claude Code 원본과 달리, 실패한 bash 검증도 기록됩니다 — 어�
 
 ### 이 저장소 (source) — 버전 bump (의도적 1회)
 
-`.omp/rules/harness-*.md`, `checklists/`, `.omp/`, `AGENTS.md`, `scripts/harness-*.sh`, `templates/` 등 하네스 자산 변경이 main에 머지되면, **머지 후 한 번** 버전을 올립니다:
+`.omp/rules/harness-*.md`, `checklists/`, `.omp/`, `AGENTS.md`, `scripts/harness-*.sh`, `templates/` 등 하네스 자산 변경은 main에 머지돼도 바로 범프하지 않고, 소비 리포가 받아야 할 이유가 생겼을 때 한 번 올립니다. 동작 변경(게이트·sync·훅·스킬)과 안전 수정은 바로, 구조 변경은 단독 버전으로 올립니다. 문서만 바뀐 변경은 다음 범프에 함께 싣되 7일을 넘기지 않고, 범프는 하루 한 번을 넘기지 않습니다(근거와 기각한 대안: [`docs/decisions/003-harness-release-cadence.md`](docs/decisions/003-harness-release-cadence.md)).
 
 ```bash
-bash scripts/harness-version-bump.sh --dry-run   # 무엇이 .N+1로 올라갈지 미리 보기
-bash scripts/harness-version-bump.sh             # 마지막 harness/* 태그 이후 변경분에 대해 1회 bump + 태그
+bash scripts/harness-version-bump.sh --dry-run   # 무엇이 .N+1로 올라갈지, CHANGELOG [Unreleased]가 승격될지 미리 보기 (트리 불변)
+bash scripts/harness-version-bump.sh             # 마지막 harness/* 태그 이후 변경분에 대해 1회 bump + 태그 + CHANGELOG [Unreleased] → ## [<버전>] 승격
 git push --follow-tags
 ```
 
@@ -182,7 +206,9 @@ git push --follow-tags
 /skill:harness-check --audit      # sync 후 7-카테고리(0~70) 품질 점수 출력
 ```
 
-`--audit`은 `scripts/harness-audit.sh`(rubric v3)를 호출하며, 버전 bump 시 결과가 `.omp/state/harness-scores.jsonl`에 누적됩니다.
+`--audit`은 `scripts/harness-audit.sh`(rubric v3)를 호출하며, 버전 bump 시 결과가 `.omp/state/harness-scores.jsonl`에 누적됩니다. 이 점수는 4개월간 값이 변한 적이 없고 결정에 쓰인 사례가 없어 **폐지가 결정됐습니다**([#87](https://github.com/rae-hugo-kim/omp/issues/87), 검토 문서 [`docs/harness/audit-score-review-2026-10-06.md`](docs/harness/audit-score-review-2026-10-06.md)) — 실행 사이클이 끝나면 이 절과 `--audit`이 사라집니다.
+
+링크드 워크트리(`git worktree add`, Orca 워크트리 포함)에서는 게이트가 `/skill:harness-check` 대신 `HARNESS BEHIND MAIN`(메인이 이미 최신 — 워크트리에서 `git merge <메인 브랜치>`) 또는 `HARNESS STALE (linked worktree)`(메인 체크아웃에서 sync·커밋 후 merge)를 안내하고, `/skill:harness-check`도 워크트리에서는 중단합니다(`--force-worktree`만 진행). 워크트리별 sync는 하네스 파일을 main과 갈라 머지 충돌을 만들기 때문입니다.
 
 ## Docs 뷰어 (Obsidian)
 

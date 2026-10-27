@@ -65,13 +65,19 @@ test('nextScale: steady (no backlog, no idle) and empty state -> hold', () => {
   assert.deepEqual(nextScale({}, { cap: 3 }), { action: 'hold' });
 });
 
-test('assign: unclaimed -> assignable; claimed (number or {number}) or in-progress label -> skip', () => {
+test('assign: only a label-less issue is backlog — claimed/agent-working -> already claimed; needs-decision/needs-review -> awaiting human', () => {
   const r = assign(
-    [{ number: 1 }, { number: 2 }, { number: 3, labels: [{ name: 'gh-loop:in-progress' }] }, { number: 4, labels: [{ name: 'gh-loop' }] }],
+    [{ number: 1 }, { number: 2 }, { number: 3, labels: [{ name: 'agent-working' }] }, { number: 4, labels: [{ name: 'gh-loop' }] },
+      { number: 5, labels: [{ name: 'gh-loop' }, { name: 'needs-decision' }] }, { number: 6, labels: ['gh-loop', 'needs-review'] }],
     { claimed: [2] },
   );
-  assert.deepEqual(r.assignable.map((a) => a.issue), [1, 4]); // 2 claimed, 3 in-progress
-  assert.deepEqual(r.skipped.map((s) => s.issue), [2, 3]);
+  assert.deepEqual(r.assignable.map((a) => a.issue), [1, 4]); // 2 claimed, 3 worked on, 5/6 wait for a human
+  assert.deepEqual(r.skipped, [
+    { issue: 2, reason: 'already claimed' },
+    { issue: 3, reason: 'already claimed' },
+    { issue: 5, reason: 'awaiting human (needs-decision)' },
+    { issue: 6, reason: 'awaiting human (needs-review)' },
+  ]);
   // {number} form in claimed also works
   assert.equal(assign([{ number: 7 }], { claimed: [{ number: 7 }] }).skipped.length, 1);
 });

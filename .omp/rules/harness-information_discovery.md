@@ -27,7 +27,7 @@ When the target is a class or the path is uncertain:
 
 ## Delegate when the sweep is broad
 
-For a sweep spanning many locations or naming conventions, delegate to the `Explore` agent (read-only, breadth-tuned) rather than burning main-context on serial greps.
+For a sweep spanning many locations or naming conventions, delegate to the `scout` agent (OMP bundled — `omp://task-agent-discovery.md:129-136`; the task tool prompt tags it read-only, `:291`) rather than burning main-context on serial greps.
 
 ## Self-Check
 

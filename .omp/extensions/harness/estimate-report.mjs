@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 // estimate-report.mjs — read `estimate_vs_actual` events out of docs/harness/audit.jsonl and print
-// the two tables a human reads before touching .omp/rules/harness-agent_routing.md (seed 20260918-023000-e5a1,
+// the tables a human reads before touching .omp/rules/harness-agent_routing.md (seed 20260918-023000-e5a1,
 // AC6; .omp/rules/harness-cycle_definition.md "예상 레코드"):
 //
 //   1. Bias table   — predicted risk × measured risk cross-tab, plus the median of
 //                     predicted_files / actual_files (how far off the file-count guesses run).
 //   2. Cell table   — (predicted risk, depth, model) groups: commit count and summed
 //                     fails_since_estimate.
+//   3. Dispatch     — gh-loop `gh_loop_dispatched` ⋈ `gh_loop_closed` on (issue, dispatched_at) (#79):
+//                     per (model:effort, risk/depth/size) cell the dispatch and closeout counts, median
+//                     review rounds, verifier FAIL count (any verdict not starting with PASS — so
+//                     PASS WITH NOTES is a pass), median decision round-trips and median
+//                     dispatch→closeout minutes. The data for retuning gh-loop-record's rule table.
 //
 // No thresholds, no recommendations: the tables are raw material. Reading + rendering are pure
 // (readEvents / renderReport) so a fixture pins the output byte-for-byte.
@@ -17,6 +22,7 @@
 import { readFileSync, realpathSync } from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
+import { readLoopEvents, byDispatch, sizeBucket } from './gh-loop-record.mjs';
 
 export const LEVELS = ['low', 'medium', 'high', 'critical'];
 
@@ -57,8 +63,8 @@ function table(header, rows) {
   return [fmt(header), '|' + widths.map((w) => '-'.repeat(w + 2)).join('|') + '|', ...rows.map(fmt)].join('\n');
 }
 
-/** Render both tables from events. Deterministic for a given event list. */
-export function renderReport(events) {
+/** Render the tables from events (+ the gh-loop dispatch/closeout rows). Deterministic for a given input. */
+export function renderReport(events, loop = { dispatched: [], closed: [] }) {
   const lines = [`# estimate-vs-actual — ${events.length} commit(s)`, ''];
 
   // 1. bias: predicted × actual
@@ -106,6 +112,35 @@ export function renderReport(events) {
     [...cells.values()].sort((a, b) => (order(a) < order(b) ? -1 : order(a) > order(b) ? 1 : 0))
       .map((c) => [c.risk, c.depth, c.model, c.n, c.fails])));
   lines.push('');
+
+  // 3. dispatch: (model:effort, risk/depth/size) ← one row per (issue, dispatched_at) on both sides —
+  // the key the CLI's idempotency uses, so a re-dispatch counts as a second dispatch and a retro
+  // closeout for an older dispatch never hides the newer dispatch's closeout.
+  const dispatched = byDispatch(loop.dispatched);
+  const closed = byDispatch(loop.closed);
+  const modelKey = (m) => (m.effort ? `${m.model}:${m.effort}` : String(m.model));
+  const sizeKey = (m) => (m.risk && m.depth && Number.isInteger(m.files_predicted ?? m.files) ? `${m.risk}/${m.depth}/${sizeBucket(m.files_predicted ?? m.files)}` : 'unknown');
+  const dcells = new Map();
+  const cell = (m) => {
+    const key = `${modelKey(m)}\u0000${sizeKey(m)}`;
+    if (!dcells.has(key)) dcells.set(key, { model: modelKey(m), size: sizeKey(m), dispatched: 0, closed: 0, rounds: [], fails: 0, decisions: [], minutes: [] });
+    return dcells.get(key);
+  };
+  for (const m of dispatched) cell(m).dispatched += 1;
+  for (const m of closed) {
+    const c = cell(m);
+    c.closed += 1;
+    c.rounds.push(m.review_rounds);
+    if (!/^PASS\b/.test(m.verifier)) c.fails += 1;   // PASS / PASS WITH NOTES pass; everything else is a FAIL
+    c.decisions.push(m.decisions);
+    if (m.duration_min !== null) c.minutes.push(m.duration_min);
+  }
+  const med = (xs) => { const v = median(xs); return v === null ? 'n/a' : Number.isInteger(v) ? String(v) : v.toFixed(1); };
+  lines.push(`## 3. Dispatch — (model, risk/depth/size) — ${dispatched.length} dispatch(es), ${closed.length} closeout(s)`, '');
+  lines.push(table(['model', 'size', 'dispatched', 'closed', 'review rounds (median)', 'verifier FAIL', 'decisions (median)', 'minutes (median)'],
+    [...dcells.values()].sort((a, b) => (a.model < b.model ? -1 : a.model > b.model ? 1 : a.size < b.size ? -1 : a.size > b.size ? 1 : 0))
+      .map((c) => [c.model, c.size, c.dispatched, c.closed, med(c.rounds), c.fails, med(c.decisions), med(c.minutes)])));
+  lines.push('');
   return lines.join('\n');
 }
 
@@ -119,5 +154,5 @@ if (isMain) {
   let text;
   try { text = readFileSync(path, 'utf-8'); }
   catch (e) { console.error(`estimate-report: cannot read ${path} (${e.message})`); process.exit(1); }
-  process.stdout.write(renderReport(readEvents(text)));
+  process.stdout.write(renderReport(readEvents(text), readLoopEvents(text)));
 }

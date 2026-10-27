@@ -17,7 +17,7 @@ kickoff 재실행 없이도 seed를 진화시킬 수 있되, 무분별한 변경
 ## 수정 절차 (MUST)
 
 1. **seed.yaml 편집** — 해당 필드만 수정
-2. **version +1** — 수정할 때마다 반드시 증가
+2. **version +1** — 내용 수정마다 반드시 증가합니다. `status`(와 `completed`)만 바꾸는 생애주기 전이는 면제이며, 규칙 전체는 `seed_contract.md` §생애주기 "version 규칙" 한 곳에 있습니다.
 3. **audit.jsonl에 기록** — 아래 형식으로 append:
    ```json
    {"ts":"<ISO>","event":"seed_revised","actor":"assistant","meta":{"from_version":1,"to_version":2,"changed_fields":["acceptance_criteria"],"reason":"AC #3이 테스트 불가능하여 구체화"}}
@@ -42,7 +42,7 @@ kickoff 재실행 없이도 seed를 진화시킬 수 있되, 무분별한 변경
 | status를 approved에서 draft로 되돌리기 | 승인 철회는 kickoff 재실행으로 |
 | status를 **손으로** 종료상태에서 되돌리기 | 같은-기능 재개는 `thread-scope open`이 수행(done→approved, version+1, audit `seed_reopened`) — 손편집 말 것 |
 
-**종료 전이**: `approved → done`은 작업 완료 시 **closeout 절차**(`closeout_contract.md`)가 마킹한다(`completed: <date>` 동반). 이 종료 전이는 위 "version 안 올리는 수정 금지" 규칙에서 **면제**된다 — 내용 revision이 아니라 생명주기 종료이며 `audit.jsonl`의 `task_closed`가 기록을 남긴다. `done`/`superseded`는 **쉼 상태**다 — 같은 기능의 반복은 `thread-scope open`이 제자리 reopen(done→approved, version+1, `seed_reopened` 기록 + git이 종료 이력 보존); 진짜 새 기능만 새 kickoff(새 task_id).
+**생애주기 전이**: 상태 전이와 그 주체는 `seed_contract.md` §생애주기가 정의합니다. `draft → approved`는 사용자 승인을 받은 에이전트가(startdev preflight, `status` 한 줄을 WIP 레인 단독 커밋), `approved → done`은 작업 완료 시 **closeout 절차**(`closeout_contract.md`)가 마킹하고(`completed: <date>` 동반), `→ superseded`는 다른 seed로 대체할 때 에이전트가 마킹한다. 이 전이들은 위 "version 안 올리는 수정 금지" 규칙에서 **면제**된다 — 내용 revision이 아니라 생명주기 전이이며 git 커밋과 `audit.jsonl`의 `task_closed`(done)·`seed_superseded`(superseded, 관행)가 기록을 남긴다. `done`/`superseded`는 **쉼 상태**다 — 같은 기능의 반복은 `thread-scope open`이 제자리 reopen(done→approved, version+1, `seed_reopened` 기록 + git이 종료 이력 보존); 진짜 새 기능만 새 kickoff(새 task_id).
 
 ## 예외: out_of_scope 축소가 필요한 경우
 

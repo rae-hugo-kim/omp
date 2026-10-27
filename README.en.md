@@ -27,8 +27,24 @@ One improvement over the original: failed bash verifications are recorded as FAI
 ## Requirements
 
 - [OMP (Oh My Pi)](https://github.com/oh-my-pi) — the coding agent harness
-- Node.js — gates are spawned with `node` (must be on PATH)
+- Node.js ≥ 20 — gates are spawned with `node` (must be on PATH; CI runs on 22 only). The harness test suite's wiring tests use built-in TypeScript stripping, so running the suite needs 22.18+
 - (Optional) oh-my-claudecode — if installed under `~/.claude`, OMP auto-discovers OMC agents/skills
+
+## Supported platforms
+
+| Platform | Status |
+|---|---|
+| Linux · WSL · macOS | **Officially supported** — a fully green harness test run is the baseline |
+| Windows native | **Targeted, with some tests skipped** — only tests that need an OS feature (symlinks, FIFOs) the host lacks are skipped, with the reason printed. The runtime fixes from [#93](https://github.com/rae-hugo-kim/omp/issues/93) (no `shasum` dependency in review-gate, platform-aware absolute-path detection in cross-repo and `git -C`) and [#99](https://github.com/rae-hugo-kim/omp/issues/99) (`repo-root.mjs` walks `C:\…`, `C:/…` and UNC paths from their own root and attributes them to a repo — before that no Windows path belonged to any repo and the cross-repo guard was silently off) are in, but both rest on unit tests with an injected `path.win32`; the full suite has not been run on a real Windows host. Git Bash's MSYS spelling (`/c/Users/…`) is not translated: an edit/write target, a mutator operand or `git -C /c/… commit` attributes to no repo → allowed (only `cd /c/… && git commit` stays fail-closed as an unknown cwd); needs a real-host check |
+
+Windows-native prerequisites:
+
+- **bash** — the bash that Git for Windows installs runs `.githooks/*` and `scripts/*.sh`.
+- **`node` must be on that bash's PATH.** Otherwise the pre-commit hook fails closed; for nvm-style setups point `OMP_NODE_BIN` at the binary.
+- **Symlink tests** — they run only with Windows Developer Mode (or an elevated shell). Without it they are skipped with a `host cannot create symlinks …` reason; a host that can create symlinks skips nothing. FIFO tests (which need `mkfifo`) are skipped the same way.
+- **Line endings (CRLF)** — the repo's `.gitattributes` pins `*.sh` and `.githooks/*` to LF, so a `core.autocrlf=true` checkout still gives bash readable scripts. `.gitattributes` is not part of the `/skill:harness-check` sync, so existing consumer repos must add the two lines `*.sh text eol=lf` and `.githooks/* text eol=lf` themselves. Scripts that are already checked out with CRLF only become LF when the working tree is rewritten — run `git rm --cached -r -q . && git reset --hard` with no uncommitted changes, or clone afresh (`git add --renormalize .` only rewrites the index and leaves the CRLF working-tree files as they are).
+- **Upgrading from 2026.86 or earlier (Windows re-normalization)** — the 2026.87 `.gitattributes` **does not convert files that are already checked out with CRLF.** If `scripts/harness-sync.sh` in a 2026.86-or-earlier checkout is CRLF, `bash scripts/harness-sync.sh` stops at once with `$'\r': command not found` and `set: pipefail: invalid option name`. Run a CR-stripped copy from a temp file once: `lf=$(mktemp) && tr -d '\r' < scripts/harness-sync.sh > "$lf" && bash "$lf"; rc=$?; rm -f "$lf"; [ "$rc" -eq 0 ]` (do not use `bash <(…)`: the script re-copies `$0` and the pipe has already been partly consumed by then, so the copy loses its first lines; a bash in WSL fails on the same CRLF file too, so use the temp-copy there as well). After the sync, make sure the two `.gitattributes` lines above exist and re-normalize with `git add --renormalize .omp scripts .githooks '*.sh' && git status` (commit what it lists). `--renormalize` only rewrites the index, so rewrite the CRLF working-tree files — with no uncommitted changes — using `git ls-files -z -- '*.sh' '.githooks/*' | xargs -0 sh -c 'rm -f -- "$@" && git checkout -- "$@"' _` (uncommitted edits to those files are lost). You are done when `git ls-files --eol -- '*.sh' '.githooks/*'` shows `w/lf` everywhere.
+- **Recommended verification path** — on Windows, open the same checkout in WSL and run `node --test .omp/extensions/harness/tests/*.test.mjs`. Windows-native behaviour rests on unit tests (with an injected `path.win32`, plus an in-memory fs for `repo-root`) and code reading only; a result from a real Windows host would let this section be updated.
 
 ## Getting Started
 
@@ -67,7 +83,9 @@ Skills also trigger from natural language ("let's kick off", "brainstorm this", 
 ├── AGENTS.md              agent policy entry point (auto-loaded by OMP)
 ├── .omp/rules/harness-*.md  behavior rules (omp rulebook, rule://harness-<name>)
 ├── checklists/            task checklists
-├── templates/             reusable templates
+├── templates/             reusable templates (github-workflows/: harness-ci and gh-loop workflow templates — consumers copy once)
+├── .github/workflows/     harness-ci.yml — three server-side backstop checks (archive leak, suite, docs drift; this repo only)
+├── .gitattributes         audit.jsonl merge=union, *.sh and .githooks/* eol=lf
 ├── .omp/
 │   ├── skills/            skill definitions (OMP-native discovery, 15 skills)
 │   ├── agents/            reviewer / verifier agents (delegated via the task tool)
@@ -76,7 +94,12 @@ Skills also trigger from natural language ("let's kick off", "brainstorm this", 
 │       ├── gates/         gate scripts — stdin JSON CLIs, covered by tests/
 │       ├── harness-meta.json  harness version metadata
 │       └── tests/         gate unit tests (node --test) — synced to consumers with the gates, same tag
-├── docs/                  markdown SST + harness runtime files (seed.yaml, ...)
+├── docs/
+│   ├── README.md          docs index note (Obsidian vault entry point)
+│   ├── decisions/         ADRs (001 consumer-safe sync · 002 policy-layer retiering · 003 release cadence)
+│   ├── brainstorming/     divergent captures (gitignored)
+│   ├── sum/               session summaries (gitignored — backed up to sum-vault)
+│   └── harness/           harness runtime files (seed.yaml, audit.jsonl, audit documents)
 ├── scripts/               drift audit / version management
 └── claudedocs/            reference docs (incl. Claude Code era history)
 ```
@@ -96,12 +119,12 @@ In OMP, invoke skills as `/skill:<name>` or trigger them with natural language m
 | `/skill:compr` | Branch → commit → push → PR |
 | `/skill:compush` | Commit → push (no PR) |
 | `/skill:receiving-code-review` | Verify and apply received review feedback |
-| `/skill:harness-check` | Harness version drift check + remote sync (`--audit` for quality score) |
+| `/skill:harness-check` | Harness version drift check + remote sync (`--audit` for the quality score — retirement decided in [#87](https://github.com/rae-hugo-kim/omp/issues/87); it stays only until the removal cycle lands) |
 | `/skill:migrate` | Cut over an existing Claude Code project (.claude/CLAUDE.md) to OMP (insurance tag + harness port) |
 | `/skill:design-mockup` | Generate a single-file HTML mockup with tunable sliders/knobs |
 | `/skill:grepai-search` | Semantic code search (cold-start exploration) |
-| `/skill:gh-loop` | finding → issue → fix → PR → cross-verify → HITL loop (never auto-merges) |
-| `/skill:gh-fanout` | multisession — runs gh-loop across many issues as worktree-isolated parallel workers (observed via GitHub) |
+| `/skill:gh-loop` | finding → issue → fix → PR → cross-verify → HITL loop (never auto-merges). **Dispatch mode**: the main session is a coordinator that only triages issues, relays decisions and merges; the work runs in worker sessions on Orca worktrees. The user picks the worker model every time (a size-based recommendation line is shown, never auto-selected — `gh-loop-record.mjs`), and state is read from three labels (`needs-decision` / `needs-review` / `agent-working`). Merges go through `--match-head-commit` on the approved head only |
+| `/skill:gh-fanout` | multisession — runs gh-loop across many issues as worktree-isolated parallel workers (observed via Orca cards + GitHub). Parallel PRs collide on the tail of `docs/harness/audit.jsonl`, so **PRs merge sequentially** and each later PR is rebased onto the latest main by its owning worker (`merge=union` in `.gitattributes` resolves this only in a local rebase; GitHub ignores it — #71) |
 
 ## Migrating an existing Claude Code project
 
@@ -116,13 +139,15 @@ cd <existing-project>
 
 ## Harness
 
-Mechanisms that operate automatically in the kickoff → startdev flow. There are two enforcement points: **the commit gates run from a git hook (`.githooks/pre-commit`)**, everything else is wired to OMP events by the extension `index.ts`. The gate CLIs are stdin-JSON programs in `.omp/extensions/harness/gates/` (22):
+Mechanisms that operate automatically in the kickoff → startdev flow. There are two enforcement points: **the commit gates run from a git hook (`.githooks/pre-commit`)**, everything else is wired to OMP events by the extension `index.ts`. The gate CLIs are stdin-JSON programs in `.omp/extensions/harness/gates/` (24):
 
 | OMP event | Gate | Role |
 |-----------|------|------|
+| `tool_call` (edit/write/ast_edit) | cross-repo guard (`index.ts` + `cross-repo.mjs`) | Block mutations into another repo until that repo's discipline file (AGENTS.md > CLAUDE.md > .cursorrules) has been read (#15 ①) — a linked worktree of the session repo is not another repo (`repo-root.mjs`) |
 | `tool_call` (edit/write/ast_edit) | context-gate | Block edits to unread files |
 | `tool_call` (bash) | destructive-guard | Warn on dangerous commands (rm -rf, force push, ...) |
 | `tool_call` (bash) | commit-tripwire (`index.ts`) | Block a **declared bypass** of the commit gates — `--no-verify`/`-n`, `core.hooksPath` retargeting, `--git-dir`/`--work-tree`, retargeting `GIT_*` |
+| `tool_call` (bash) | cross-repo guard (`index.ts` + `cross-repo.mjs`) | Block `git commit`/`git push` into another discipline- or harness-bearing repo (`git -C X`, `cd X &&`, bash -c; unresolvable targets fail closed) and apply ① to literal-path mutations (rm/mv/cp/tee/sed -i/redirections) (#15 ②) — a repo with neither (sum-vault) stays out of jurisdiction |
 | `tool_call` (mcp__*) | mcp-gate | Warn on destructive MCP calls |
 | `tool_result` (read) | read-tracker | Record files read |
 | `tool_result` (grep/ast_grep) | read-tracker | Record files the search minted `[path#TAG]` anchors for (one batched spawn) |
@@ -137,17 +162,19 @@ Commit enforcement happens at git's own boundary, so it holds for every spelling
 
 | git hook | Gate | Role |
 |----------|------|------|
-| `pre-commit` (blocking) | commit-gates → acceptance/backpressure/review/archive | Judge the staged index; on failure no commit object is created. Fails closed without node (`OMP_NODE_BIN` is the escape hatch) |
+| `pre-commit` (blocking) | commit-gates → acceptance/backpressure/review/archive | Judge the staged index; on failure no commit object is created. Fails closed without node (`OMP_NODE_BIN` is the escape hatch). The override flag `docs/harness/acceptance-done` goes stale after 24 hours and is ignored (#15 ③); `docs/harness/review-skip` is diff-hash-bound and consumed once |
 | `post-commit` (non-blocking) | backstop + deferred consumption | Advisory for ungated commits (`--no-verify`, cherry-pick, revert, rebase) and one-shot flag consumption |
-| `pre-commit` (observing) | review-gate → estimate-vs-actual | Pairs the intake's `.omp/harness-state/cycle-estimate` (predicted risk, file count, depth, model) with the measured `risk-assess` result, records `estimate_vs_actual` in `audit.jsonl` and consumes the record. Never enters a verdict. Read with `node .omp/extensions/harness/estimate-report.mjs` |
+| `pre-commit` (observing) | review-gate → estimate-vs-actual | Pairs the intake's `.omp/harness-state/cycle-estimate` (predicted risk, file count, depth, model) with the measured `risk-assess` result, records `estimate_vs_actual` in `audit.jsonl` and consumes the record. Never enters a verdict. Read with `node .omp/extensions/harness/estimate-report.mjs` (gh-loop workers' `gh_loop_dispatched`·`gh_loop_closed` rows are grouped there too, §3 model × size cells — `gh-loop-record.mjs`) |
 | `post-merge` (non-blocking) | backstop | Observes merge auto-commits — the one path where git fires neither pre-commit nor post-commit |
-| `pre-push` (blocking) | archive leak + docs drift | Block tracked `docs/sum`·`docs/reviews` and FAIL-severity drift |
+| `pre-push` (blocking) | archive leak + docs drift | Block tracked `docs/sum`·`docs/reviews`·`docs/brainstorming` and FAIL-severity drift |
 
 Integration paths (merge auto-commits, cherry-pick, revert, rebase) are **deliberately not blocked**: they move content that was already gated at its origin commit, and the backstop observes them. Residual surfaces (sparse-checkout, `stash`, `--no-verify`, out-of-jurisdiction repos) are enumerated in [`.omp/rules/harness-harness_integration_contract.md`](.omp/rules/harness-harness_integration_contract.md).
 
+**Server-side backstop (CI)**: every enforcement point above is client-side, so a push with `--no-verify` or from a repo with hooks disabled was never filtered remotely. This repository runs three checks in `.github/workflows/harness-ci.yml` (GitHub-hosted runners, on `main` push + `pull_request`): archive leak (the local `.githooks/pre-push` executed as-is against the committed tree), the harness suite (`node --test .omp/extensions/harness/tests/*.test.mjs`), and docs drift (`node scripts/docs-drift`). Consumer repos copy `templates/github-workflows/harness-ci.yml` once (the sync never touches `.github/`); setup notes and the adjustment points are in [`templates/github-workflows/README.md`](templates/github-workflows/README.md). The workflow only reports — it does not block merges (making the checks required is a separate branch-protection decision). On public repos the minutes are free; on private repos a run bills about 3 minutes.
+
 - **seed.yaml** — structured kickoff output (goals, constraints, AC, risks)
 - **rubric** — 4-dimension clarity gate (HIGH/MED/LOW)
-- **audit log** — event tracking (append-only JSONL)
+- **audit log** — event tracking (append-only JSONL, `docs/harness/audit.jsonl`). `.gitattributes` marks it `merge=union`, so tail appends from parallel branches merge automatically in a local rebase (union guarantees neither JSON validity nor append-only, so every line is re-parsed after a rebase)
 - **glossary** — project terms (`docs/glossary.yaml`)
 - Runtime state lives in `.omp/harness-state/` (gitignored); gates run standalone via `node --test .omp/extensions/harness/tests/*.test.mjs`
 
@@ -161,9 +188,11 @@ This repository is the **harness source** other OMP projects sync from.
 
 ### This repo (source) — version bump (deliberate, once)
 
+Harness asset changes merged to main are not bumped right away; bump once when consumers have a reason to receive them. Behavior changes (gates, sync, hooks, skills) and safety fixes go out immediately, structural changes as their own version. Documentation-only changes ride along with the next bump, but wait no longer than 7 days, and there is at most one bump per day (rationale and rejected alternatives: [`docs/decisions/003-harness-release-cadence.md`](docs/decisions/003-harness-release-cadence.md)).
+
 ```bash
-bash scripts/harness-version-bump.sh --dry-run   # preview what bumps to .N+1
-bash scripts/harness-version-bump.sh             # one bump + tag for changes since the last harness/* tag
+bash scripts/harness-version-bump.sh --dry-run   # preview what bumps to .N+1 and whether CHANGELOG [Unreleased] gets promoted (tree untouched)
+bash scripts/harness-version-bump.sh             # one bump + tag for changes since the last harness/* tag, promoting CHANGELOG [Unreleased] to ## [<version>]
 git push --follow-tags
 ```
 
@@ -177,7 +206,9 @@ Projects created via `/skill:init` get a `session_start` gate that checks remote
 /skill:harness-check --audit      # 7-category (0-70) quality score after sync
 ```
 
-`--audit` runs `scripts/harness-audit.sh` (rubric v3); on version bumps results accumulate in `.omp/state/harness-scores.jsonl`.
+`--audit` runs `scripts/harness-audit.sh` (rubric v3); on version bumps results accumulate in `.omp/state/harness-scores.jsonl`. The score has not changed in four months and has never driven a decision, so its **retirement is decided** ([#87](https://github.com/rae-hugo-kim/omp/issues/87), review in [`docs/harness/audit-score-review-2026-10-06.md`](docs/harness/audit-score-review-2026-10-06.md)) — this section and `--audit` disappear once the removal cycle lands.
+
+In a linked worktree (`git worktree add`, Orca worktrees included) the gate reports `HARNESS BEHIND MAIN` (main is already current — `git merge <main branch>` in the worktree) or `HARNESS STALE (linked worktree)` (sync and commit in the main checkout, then merge) instead of pointing at `/skill:harness-check`, and `/skill:harness-check` itself stops in a worktree (only `--force-worktree` proceeds) — a per-worktree sync forks the harness files from main and the later merge conflicts.
 
 ## Docs Viewer (Obsidian)
 
