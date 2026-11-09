@@ -9,6 +9,7 @@ description: "Minimal scoped diffs, no drive-by refactors, how to report unrelat
 
 - Prefer the smallest change that meets the stated goal.
 - Avoid adding new abstractions unless needed for the change at hand.
+- Scripted edits to repo files are byte-level (`read_bytes`/`write_bytes`, or the `edit` tool). Python `Path.read_text`/`write_text` normalizes CRLF to LF, which turned a 2-line edit of a CRLF rule file into a 364-line diff that `risk-assess` scored high (2026-10-21, #112 ② r2; `docs/sum/session_2026-10-16_adversary-panel-docs-audit-consumer-sync.md` Fix 2). When `git diff --stat` after a scripted edit is larger than expected, suspect line endings first.
 
 ## MUST: prevent scope creep
 

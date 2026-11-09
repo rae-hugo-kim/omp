@@ -93,6 +93,7 @@ OMP에서 이 단계들을 다시 살리려면 kickoff·startdev 스킬의 호�
 1. **정상 해제**: CRITICAL 항목 수정 후 해당 게이트 재실행.
 2. **사용자 명시적 override**: attack 단계(plan/test/completion)는 `docs/harness/audit.jsonl`에 `adversarial_override` 이벤트 기록 후 진행. 3-pass 리뷰(`review-gate`)는 이 행을 읽지 않는다 — 그 계층의 override는 `docs/harness/review-skip` tuple이며 게이트가 `review_override`로 기록·소비한다("원칙" 첫 항목, `review-gate.mjs`).
 3. **PASS 이후의 low 항목**: 사이드카는 diff 해시에 바인딩되므로 PASS(WITH NOTES)를 받은 diff는 동결하고, 남은 low·문서 정밀도 항목은 커밋 뒤 **별도 docs 커밋**에서 고친다 — 같은 diff를 손대면 해시가 바뀌어 재리뷰 라운드가 필요하다(2026-09-29 #56 r10, `docs/sum/session_2026-09-29_issue56-closeout-ac-record-pr59.md` D4).
+4. **같은 절에서 3라운드 넘게 FAIL이면 규칙이 과설계**: 코드가 정하지 않은 설계를 문서가 먼저 정하면 매 라운드 새 경계가 나온다(#112 ① 5라운드, #114 r1~r3 FAIL — 모두 새로 만든 규칙의 경계). 라운드를 더 돌리지 말고 게이트가 이미 집행하는 판정 하나로 규칙을 줄인다 — #114는 사용자 결정 A(은퇴 scope 하나로 closeout 판정)로 줄인 뒤 r4 PASS(2026-10-21, `docs/sum/session_2026-10-16_adversary-panel-docs-audit-consumer-sync.md` Fix 7).
 
 ---
 
