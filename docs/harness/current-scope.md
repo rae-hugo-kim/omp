@@ -1,7 +1,7 @@
 # Current Scope: omp-update-detection-31 (P2 thread)
 
 **Created**: 2026-11-12
-**Seed**: docs/harness/seed.yaml (task_id 20261113-020816-3d97, v1)
+**Seed**: docs/harness/seed.yaml (task_id 20261113-020816-3d97, v2)
 **Thread-ID**: T-20261112170840-9547
 **Thread**: gh-loop #31 worker: omp update detection
 

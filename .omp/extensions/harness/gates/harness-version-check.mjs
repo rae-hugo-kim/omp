@@ -37,10 +37,16 @@ const SAFE_REF = /^[A-Za-z0-9][A-Za-z0-9._\/-]*$/;
 // Ambient repo-location variables (a hook or wrapper may export them) would redirect the linked-worktree
 // git calls away from the session cwd and silently reinstate the pre-#68 directive.
 const REPO_ENV_VARS = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE', 'GIT_PREFIX', 'GIT_NAMESPACE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES'];
-// First line of `omp --version` (`omp/18.18.6`). The `omp/` prefix and a leading `v` are optional so a
-// cosmetic format change does not silently switch the probe off; the same shape vets the RECORDED
-// value before it is echoed in a notice.
-const OMP_VERSION_RE = /^(?:omp[\/ ])?v?(\d+\.\d+\.\d+(?:[-+.][0-9A-Za-z.+-]*)?)$/;
+// A line of `omp --version` output that carries the version (`omp/18.18.6` today): an optional
+// `omp/` or `omp ` prefix, an optional `v`, a dotted numeric version with an optional
+// prerelease/build suffix, then whitespace or end of line. Text after the version
+// (`omp/18.19.0 (canary)`) and other lines (a banner) are ignored, so a cosmetic format change does
+// not silently switch the probe off. The same shape vets the RECORDED value before a notice echoes it.
+const OMP_VERSION_LINE_RE = /^(?:omp[\/ ])?v?(\d+(?:\.\d+){2,}(?:[-+][0-9A-Za-z.+-]*[0-9A-Za-z])?)(?:\s|$)/;
+const OMP_VERSION_MAX_LENGTH = 64;   // longer than any real version; bounds what a notice can echo
+// `omp --version` answers in ~15 ms. The bound keeps a hung omp from eating the caller's 15s gate
+// budget, which the ls-remote probe (10s) further down also draws on.
+const OMP_VERSION_TIMEOUT_MS = 2000;
 let linkedMemo;   // detectLinkedWorktree(cwd) result, computed at most once and only when something needs it
 function getLinked() {
   if (linkedMemo === undefined) linkedMemo = detectLinkedWorktree(cwd);
@@ -406,6 +412,12 @@ function emitIfPolicyShadowed(root) {
 // in every long-lived worktree (often long after the audit) while a fresh one starts silent anyway;
 // a record shared across worktrees would let an unattended worker session spend the one-shot. Known
 // limit: a repo whose main is bare, or whose main checkout never hosts a session, is not notified.
+// When git cannot say whether this is a linked worktree, the checkout counts as a main one (the
+// notifying side).
+//
+// Two more limits, both accepted: the read-compare-write is not serialized, so two session starts in
+// the same instant can both emit the note; and the version is that of the `omp` on PATH, which after
+// an in-place update is not the binary a still-running session was started from.
 function emitIfOmpChanged(root, isConsumer) {
   if (getLinked()) return;
   const current = readOmpVersion();
@@ -423,24 +435,29 @@ function emitIfOmpChanged(root, isConsumer) {
   if (!recorded) return;
 
   const next = isConsumer
-    ? 'Run /skill:harness-check so this repo picks up the harness changes made for the new release.'
+    ? 'Run /skill:harness-check to pick up any harness changes the source repo has shipped for it.'
     : 'Run /skill:harness-friction to audit the new release against the harness (gates, rules, agents).';
   console.log(`HARNESS NOTE: omp changed ${recorded} -> ${current} since the last session in this checkout. ${next}`);
 }
 
 // Version reported by the `omp` on PATH; null when it cannot be run (absent, non-zero exit, timeout)
-// or prints something that is not a version.
+// or prints no version line.
 function readOmpVersion() {
   try {
     return parseOmpVersion(execFileSync('omp', ['--version'],
-      { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }));
+      { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: OMP_VERSION_TIMEOUT_MS }));
   } catch { return null; }
 }
 
+// The version on the first line of `text` shaped like a version line; null when there is none or
+// the value is implausibly long.
 function parseOmpVersion(text) {
   if (typeof text !== 'string') return null;
-  const match = OMP_VERSION_RE.exec(text.trim().split(/\r?\n/, 1)[0].trim());
-  return match ? match[1] : null;
+  for (const line of text.split(/\r?\n/)) {
+    const match = OMP_VERSION_LINE_RE.exec(line.trim());
+    if (match) return match[1].length <= OMP_VERSION_MAX_LENGTH ? match[1] : null;
+  }
+  return null;
 }
 
 // Notice window shared by the health probes: true when a marker inside NOTICE_TTL_MS exists and

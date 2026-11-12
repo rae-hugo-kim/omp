@@ -17,9 +17,8 @@
 //   - linked worktree (#68; fixture = isolated temp repo + `git worktree add`): BEHIND MAIN when main's
 //     COMMITTED meta is current, STALE (linked worktree) otherwise, never /skill:harness-check; main and
 //     single checkouts keep the original STALE; the worktree uses its own cache file
-//   - omp update probe (#31): at session start a changed `omp --version` (vs .omp/state/omp-version.json)
-//     emits ONE HARNESS NOTE and moves the record; first run records silently; an unrunnable omp does
-//     nothing; mid-session rechecks and linked worktrees neither note nor record
+//   - the omp update probe (#31) has its own file, omp-version-probe.test.mjs. The cases here never
+//     stub `omp`, so on a host that has one the gate also runs it (first run: record only, silent)
 //
 // Fixture tags are ANNOTATED (`git tag -a`) on purpose: only annotated tags make
 // the tag-object sha differ from the commit sha, which is what the peeled-sha
@@ -30,7 +29,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, existsSync, symlinkSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname, delimiter } from 'node:path';
+import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { skipUnless } from './helpers/capabilities.mjs';
 
@@ -661,173 +660,5 @@ test('linked worktree: HOOKS INACTIVE no longer suggests harness-check (core.hoo
     assert.ok(out.startsWith('HARNESS HOOKS INACTIVE'), `got: ${JSON.stringify(out)}`);
     assert.ok(out.includes('git config core.hooksPath .githooks'));
     assert.ok(!out.includes('harness-check'), `linked worktree must not be routed to harness-check: ${JSON.stringify(out)}`);
-  });
-});
-
-// ── omp update probe (#31) ────────────────────────────────────────────────────────────────────
-// Session start compares `omp --version` with the version recorded in .omp/state/omp-version.json.
-// Contract: a changed version => ONE `HARNESS NOTE` naming old -> new (routed to harness-friction in
-// the source repo, harness-check in a consumer) and the record moves to the new version; no usable
-// record => record only; unchanged => silent; omp unrunnable or unreadable => nothing at all.
-//
-// `omp` is a stub placed FIRST on PATH, so no test reads the host's real omp (CI has none). The stub
-// is a #!/bin/sh script, which CreateProcess cannot run: these tests are POSIX-only.
-const OMP_STUB_SKIP = process.platform === 'win32' ? 'the omp stub is a #!/bin/sh script (not runnable through CreateProcess)' : false;
-
-function ompStubEnv(fx, body) {
-  const bin = join(fx.root, 'stub-bin');
-  mkdirSync(bin, { recursive: true });
-  writeFileSync(join(bin, 'omp'), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
-  return { PATH: `${bin}${delimiter}${process.env.PATH}` };
-}
-const ompAt = (fx, version) => ompStubEnv(fx, `echo "omp/${version}"`);
-const ompRecordPath = (dir) => join(dir, '.omp', 'state', 'omp-version.json');
-function writeOmpRecord(dir, content) {
-  mkdirSync(dirname(ompRecordPath(dir)), { recursive: true });
-  writeFileSync(ompRecordPath(dir), typeof content === 'string' ? content : JSON.stringify(content));
-}
-const recordedOmp = (dir) => JSON.parse(readFileSync(ompRecordPath(dir), 'utf-8')).version;
-
-test('omp update: a recorded version that differs from `omp --version` emits ONE HARNESS NOTE, moves the record, then stays silent', { skip: OMP_STUB_SKIP }, () => {
-  withFixture({ localVersion: '2026.61' }, (fx) => {
-    writeOmpRecord(fx.consumer, { version: '18.18.4' });
-    const env = ompAt(fx, '18.18.6');
-
-    const first = runGate(fx.consumer, {}, env);
-    assert.equal(first.status, 0, 'advisory — exit stays 0');
-    const lines = first.stdout.trim().split('\n');
-    assert.equal(lines.length, 1, `exactly one notice line, got: ${JSON.stringify(first.stdout)}`);
-    assert.ok(lines[0].startsWith('HARNESS NOTE: omp '), `must lead with HARNESS NOTE, got: ${JSON.stringify(lines[0])}`);
-    const from = lines[0].indexOf('18.18.4');
-    assert.ok(from !== -1 && lines[0].indexOf('18.18.6') > from, `notice must name old -> new, got: ${JSON.stringify(lines[0])}`);
-    assert.equal(recordedOmp(fx.consumer), '18.18.6', 'the record must move to the current version');
-
-    const second = runGate(fx.consumer, {}, env);
-    assert.equal(second.stdout.trim(), '', 'restarting on the same version must be silent');
-    assert.equal(recordedOmp(fx.consumer), '18.18.6');
-  });
-});
-
-test('omp update: the notice routes a consumer repo to harness-check and the source repo to harness-friction', { skip: OMP_STUB_SKIP }, () => {
-  withFixture({ localVersion: '2026.61' }, (fx) => {
-    writeOmpRecord(fx.consumer, { version: '18.18.4' });
-    const out = runGate(fx.consumer, {}, ompAt(fx, '18.18.6')).stdout;
-    assert.ok(out.includes('/skill:harness-check'), `consumer notice must route to harness-check, got: ${JSON.stringify(out)}`);
-    assert.ok(!out.includes('harness-friction'), 'the friction audit is a source-repo skill — a consumer does not carry it');
-  });
-  withFixture({ localVersion: '2026.61', sourceRemote: null }, (fx) => {
-    writeOmpRecord(fx.consumer, { version: '18.18.4' });
-    const out = runGate(fx.consumer, {}, ompAt(fx, '18.18.6')).stdout;
-    assert.ok(out.startsWith('HARNESS NOTE: omp '), `the probe must run before the source-repo skip, got: ${JSON.stringify(out)}`);
-    assert.ok(out.includes('/skill:harness-friction'), `source notice must route to harness-friction, got: ${JSON.stringify(out)}`);
-    assert.ok(!out.includes('harness-check'), 'the source repo has nothing to sync from');
-  });
-});
-
-test('omp update: a first run (no record) records the current version without a notice', { skip: OMP_STUB_SKIP }, () => {
-  withFixture({ localVersion: '2026.61' }, (fx) => {
-    const r = runGate(fx.consumer, {}, ompAt(fx, '18.18.6'));
-    assert.equal(r.stdout.trim(), '', 'nothing to compare against — no notice');
-    assert.equal(recordedOmp(fx.consumer), '18.18.6', 'the baseline must be recorded for the next start');
-  });
-});
-
-// A record the probe cannot trust (corrupt JSON, wrong type, a value that is not a version) is the
-// first-run case: nothing reliable to name as the "old" version, so it is replaced silently.
-test('omp update: an unreadable record is treated as a first run — replaced, never echoed', { skip: OMP_STUB_SKIP }, () => {
-  for (const bad of ['{not json', 'null', '{}', { version: 18 }, { version: 'latest; rm -rf ~' }]) {
-    withFixture({ localVersion: '2026.61' }, (fx) => {
-      writeOmpRecord(fx.consumer, bad);
-      const r = runGate(fx.consumer, {}, ompAt(fx, '18.18.6'));
-      assert.equal(r.stdout.trim(), '', `record ${JSON.stringify(bad)} must not produce a notice`);
-      assert.equal(recordedOmp(fx.consumer), '18.18.6', `record ${JSON.stringify(bad)} must be replaced`);
-    });
-  }
-});
-
-test('omp update: an omp that fails or prints no version changes nothing — no notice, no record write, exit 0', { skip: OMP_STUB_SKIP }, () => {
-  const stubs = {
-    'exits non-zero': 'exit 3',
-    'prints a version but fails': 'echo "omp/18.18.6"; exit 1',
-    'fails loudly on stderr': 'echo "omp: fatal" >&2; exit 1',
-    'prints no version': 'echo "omp: unknown option --version"',
-    'prints nothing': ':',
-  };
-  for (const [name, body] of Object.entries(stubs)) {
-    withFixture({ localVersion: '2026.61' }, (fx) => {
-      const env = ompStubEnv(fx, body);
-      const fresh = runGate(fx.consumer, {}, env);
-      assert.equal(fresh.status, 0, `${name}: exit must stay 0`);
-      assert.equal(fresh.stdout, '', `${name}: no notice`);
-      assert.equal(fresh.stderr, '', `${name}: nothing on stderr either (session start surfaces both streams)`);
-      assert.ok(!existsSync(ompRecordPath(fx.consumer)), `${name}: no record may be created from an unread version`);
-
-      const stale = JSON.stringify({ version: '18.18.4' });
-      writeOmpRecord(fx.consumer, stale);
-      const again = runGate(fx.consumer, {}, env);
-      assert.equal(again.status, 0);
-      assert.equal(again.stdout + again.stderr, '', `${name}: no notice with a stale record either`);
-      assert.equal(readFileSync(ompRecordPath(fx.consumer), 'utf-8'), stale, `${name}: the record must stay byte-identical`);
-    });
-  }
-});
-
-// PATH holds ONLY a node symlink: `omp` is absent no matter where the host installed it (it may sit
-// beside node or git), which is the CI case.
-test('omp update: omp missing from PATH changes nothing — no notice, no record, exit 0', { skip: OMP_STUB_SKIP || skipUnless('symlink') }, () => {
-  withFixture({ localVersion: '2026.61', sourceRemote: null }, (fx) => {
-    const bin = join(fx.root, 'node-only-bin');
-    mkdirSync(bin);
-    symlinkSync(process.execPath, join(bin, 'node'));
-    const stale = JSON.stringify({ version: '18.18.4' });
-    writeOmpRecord(fx.consumer, stale);
-    const r = runGate(fx.consumer, {}, { PATH: bin });
-    assert.equal(r.status, 0, `exit must stay 0: ${r.stderr}`);
-    assert.equal(r.stdout + r.stderr, '', 'no notice and no error output');
-    assert.equal(readFileSync(ompRecordPath(fx.consumer), 'utf-8'), stale, 'the record must stay byte-identical');
-  });
-});
-
-// Only the session-start call probes. The turn-start and post-commit rechecks pass `max_age_ms`
-// (drift-recheck-wiring.test.mjs) and hand gate stdout to the AGENT: a notice there would spend the
-// one-shot on an agent mid-task, and a silent record write would swallow it altogether.
-test('omp update: a mid-session recheck (max_age_ms) neither notes nor records, leaving the notice for the next session start', { skip: OMP_STUB_SKIP }, () => {
-  withFixture({ localVersion: '2026.61' }, (fx) => {
-    const env = ompAt(fx, '18.18.6');
-    const noRecord = runGate(fx.consumer, { max_age_ms: 60 * 60 * 1000 }, env);
-    assert.equal(noRecord.stdout.trim(), '');
-    assert.ok(!existsSync(ompRecordPath(fx.consumer)), 'a recheck must not create the baseline');
-
-    const stale = JSON.stringify({ version: '18.18.4' });
-    writeOmpRecord(fx.consumer, stale);
-    const recheck = runGate(fx.consumer, { max_age_ms: 60 * 60 * 1000 }, env);
-    assert.equal(recheck.stdout.trim(), '', 'a recheck must not emit the notice to the agent');
-    assert.equal(readFileSync(ompRecordPath(fx.consumer), 'utf-8'), stale, 'a recheck must not move the record');
-
-    const start = runGate(fx.consumer, {}, env);
-    assert.ok(start.stdout.trim().startsWith('HARNESS NOTE: omp '), `the next session start still owes the notice, got: ${JSON.stringify(start.stdout)}`);
-  });
-});
-
-// Linked worktrees neither note nor record: the note belongs to the main checkout, which emits it
-// once per repo (rationale in the gate, at emitIfOmpChanged).
-test('omp update: a linked worktree neither notes nor records; the main checkout emits the notice once', { skip: OMP_STUB_SKIP }, () => {
-  withLinkedFixture({ wtVersion: '2026.61' }, (fx) => {
-    const env = ompAt(fx, '18.18.6');
-    const noRecord = runGate(fx.wt, {}, env);
-    assert.equal(noRecord.stdout.trim(), '', `got: ${JSON.stringify(noRecord.stdout)}`);
-    assert.ok(!existsSync(ompRecordPath(fx.wt)), 'a linked worktree keeps no record of its own');
-
-    const stale = JSON.stringify({ version: '18.18.4' });
-    writeOmpRecord(fx.wt, stale);
-    writeOmpRecord(fx.consumer, stale);
-    const wt = runGate(fx.wt, {}, env);
-    assert.equal(wt.stdout.trim(), '', `a stale record inside the worktree must not trigger a notice: ${JSON.stringify(wt.stdout)}`);
-    assert.equal(readFileSync(ompRecordPath(fx.wt), 'utf-8'), stale, 'the worktree must not touch a record it finds');
-    assert.equal(readFileSync(ompRecordPath(fx.consumer), 'utf-8'), stale, 'a worktree session must not spend the main checkout\'s notice');
-
-    const main = runGate(fx.consumer, {}, env);
-    assert.ok(main.stdout.trim().startsWith('HARNESS NOTE: omp '), `the main checkout owes the notice, got: ${JSON.stringify(main.stdout)}`);
-    assert.equal(runGate(fx.consumer, {}, env).stdout.trim(), '', 'and emits it once');
   });
 });
