@@ -19,6 +19,9 @@
 // merge main's branch here) or STALE (linked worktree) (main is behind too → sync in the main checkout,
 // commit, then merge). Cache file: harness-version-check.linked.json (main/single checkouts keep
 // harness-version-check.json).
+//
+// omp update probe (#31): at session start only, `omp --version` is compared with the version recorded
+// in .omp/state/omp-version.json; a change emits one HARNESS NOTE (emitIfOmpChanged).
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, renameSync, realpathSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
@@ -34,6 +37,10 @@ const SAFE_REF = /^[A-Za-z0-9][A-Za-z0-9._\/-]*$/;
 // Ambient repo-location variables (a hook or wrapper may export them) would redirect the linked-worktree
 // git calls away from the session cwd and silently reinstate the pre-#68 directive.
 const REPO_ENV_VARS = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE', 'GIT_PREFIX', 'GIT_NAMESPACE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES'];
+// First line of `omp --version` (`omp/18.18.6`). The `omp/` prefix and a leading `v` are optional so a
+// cosmetic format change does not silently switch the probe off; the same shape vets the RECORDED
+// value before it is echoed in a notice.
+const OMP_VERSION_RE = /^(?:omp[\/ ])?v?(\d+\.\d+\.\d+(?:[-+.][0-9A-Za-z.+-]*)?)$/;
 let linkedMemo;   // detectLinkedWorktree(cwd) result, computed at most once and only when something needs it
 function getLinked() {
   if (linkedMemo === undefined) linkedMemo = detectLinkedWorktree(cwd);
@@ -75,6 +82,11 @@ emitIfHooksInactive(cwd);
 // AGENTS.md at the same depth when a non-empty `.omp/AGENTS.md` exists, so the harness
 // policy is silently absent from the session. Runs before the source-repo skip.
 emitIfPolicyShadowed(cwd);
+// omp update probe (#31): session start only. The turn-start and post-commit rechecks identify
+// themselves by passing `max_age_ms` (pinned by tests/drift-recheck-wiring.test.mjs) and hand gate
+// stdout to the AGENT — a notice there would spend the one-shot on an agent mid-task instead of the
+// user-facing session-start notice. Runs before the source-repo skip: both repo kinds get it.
+if (rawMaxAge === undefined) emitIfOmpChanged(cwd, Boolean(meta?.source_remote));
 
 const sourceRemote = meta.source_remote;
 if (!sourceRemote) process.exit(0);
@@ -376,6 +388,59 @@ function emitIfPolicyShadowed(root) {
   writeNoticeMarker(markerPath, { file: '.omp/AGENTS.md' });
 
   console.log('HARNESS POLICY SHADOWED: `.omp/AGENTS.md` exists, so OMP\'s native provider (priority 100) replaces `AGENTS.md` at the same depth — the harness policy is NOT in this session\'s context. Move its content to `.omp/rules/<project>-context.md` (frontmatter `alwaysApply: true`), delete `.omp/AGENTS.md`, then restart the session (/new) so the policy loads (AGENTS.md "Consumer extension points").');
+}
+
+// omp update probe (#31). A harness defect that only a NEW omp exposes cannot be caught by reading
+// release notes in advance (18.1.13 turned an unhandled gate-stdin EPIPE into a session-start crash;
+// 18.18.4 retired a provider the adversary panel spawns), so the post-update audit needs a mechanical
+// trigger. Compares `omp --version` with the version recorded in .omp/state/omp-version.json:
+//   - changed => one HARNESS NOTE (old -> new) and the record moves, so a change is announced once;
+//   - no usable record (first run, corrupt file, a value that is not a version) => record only;
+//   - omp not runnable, or no version in its output => nothing: no note, no record write.
+// The note is still emitted when the record cannot be written (it then repeats at every session
+// start — the at-least-once side, like the notice markers below). Never throws, never exits.
+//
+// Linked worktrees neither note nor record. What the note asks for is per REPO and belongs to the
+// main checkout: a consumer's harness-check refuses to sync in a linked worktree (#68), and the
+// source repo's friction audit is one per release. A per-worktree record would repeat the same note
+// in every long-lived worktree (often long after the audit) while a fresh one starts silent anyway;
+// a record shared across worktrees would let an unattended worker session spend the one-shot. Known
+// limit: a repo whose main is bare, or whose main checkout never hosts a session, is not notified.
+function emitIfOmpChanged(root, isConsumer) {
+  if (getLinked()) return;
+  const current = readOmpVersion();
+  if (!current) return;
+
+  const recordPath = join(root, '.omp/state/omp-version.json');
+  let recorded = null;
+  try { recorded = parseOmpVersion(JSON.parse(readFileSync(recordPath, 'utf-8')).version); } catch { /* no record yet, or an unreadable one: first run */ }
+  if (recorded === current) return;
+
+  try {
+    mkdirSync(dirname(recordPath), { recursive: true });
+    writeFileSync(recordPath, JSON.stringify({ version: current, recordedAt: Date.now() }, null, 2));
+  } catch { /* ignore record write failure */ }
+  if (!recorded) return;
+
+  const next = isConsumer
+    ? 'Run /skill:harness-check so this repo picks up the harness changes made for the new release.'
+    : 'Run /skill:harness-friction to audit the new release against the harness (gates, rules, agents).';
+  console.log(`HARNESS NOTE: omp changed ${recorded} -> ${current} since the last session in this checkout. ${next}`);
+}
+
+// Version reported by the `omp` on PATH; null when it cannot be run (absent, non-zero exit, timeout)
+// or prints something that is not a version.
+function readOmpVersion() {
+  try {
+    return parseOmpVersion(execFileSync('omp', ['--version'],
+      { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }));
+  } catch { return null; }
+}
+
+function parseOmpVersion(text) {
+  if (typeof text !== 'string') return null;
+  const match = OMP_VERSION_RE.exec(text.trim().split(/\r?\n/, 1)[0].trim());
+  return match ? match[1] : null;
 }
 
 // Notice window shared by the health probes: true when a marker inside NOTICE_TTL_MS exists and
