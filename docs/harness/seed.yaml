@@ -1,5 +1,6 @@
 name: harness-skill-tune-inspect-127
-status: approved
+status: done
+completed: 2026-11-13
 version: 1
 task_id: "20261112-171825-60f2"
 # gh-loop worker Stage 2에 따라 이슈 #127 본문("만들 것" 1~4, "정해 둔 것", AC 7개, "범위 밖")을 명세로 삼습니다.
