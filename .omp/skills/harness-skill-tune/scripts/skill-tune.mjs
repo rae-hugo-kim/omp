@@ -326,7 +326,8 @@ const CODE_SPAN = /`([^`\n]+)`/g;
 const PATH_TOKEN = /(?<![\w./~-])((?:\.[A-Za-z][\w-]*|[A-Za-z][\w-]*)(?:\/[\w.@-]+)+)/g;
 const PLACEHOLDER_AFTER = /^[./]*[<*{$[]/; // the token runs into a template placeholder: `review-<ts>.json`, `dir/<id>.json`, `name.<ext>`
 const FILE_EXT = /\.(?:md|mjs|js|ts|sh|json|jsonl|ya?ml|html|txt)$/;
-const SKILL_REF = /\/skill:([a-z0-9][a-z0-9-]*(?:\/[a-z0-9][a-z0-9-]*)*)/g;
+// omp's `/skill:` token is `<name>` or `<namespace>/<name>` — exactly one `/`; deeper text is prose.
+const SKILL_REF = /\/skill:([a-z0-9][a-z0-9-]*(?:\/[a-z0-9][a-z0-9-]*)?)/g;
 const AGENT_REFS = [
   /`([a-z][a-z0-9-]*)`\s*(?:에이전트|agents?\b)/gi,
   /(?<![\w`/-])([a-z][a-z0-9-]*[a-z0-9])\s+에이전트/g,
@@ -393,8 +394,8 @@ function pathFindings(repoRoot, skill, doc, expectedAbsent) {
 
 function skillRefFindings(skill, doc, repoSkills) {
   const refs = collectRefs(doc.lines, doc.frontmatter.end + 1, (line) => [...line.matchAll(SKILL_REF)].map((m) => m[1]));
-  // `/skill:<name>/<file>` points into an existing skill; only the first segment has to be one.
-  return [...refs].filter(([name]) => !repoSkills.has(name.split('/')[0])).map(([name, lines]) => makeFinding({
+  // Repo skills carry no namespace, so a `<namespace>/<name>` reference never names one of them.
+  return [...refs].filter(([name]) => !repoSkills.has(name)).map(([name, lines]) => makeFinding({
     code: 'REF-SKILL', severity: 'medium', skill, line: lines[0], key: name,
     message: `본문이 참조하는 \`/skill:${name}\`이 ${SKILLS_REL}/에 없습니다 (${lineList(lines)}).`,
   }));
@@ -726,13 +727,22 @@ function skillRootsFor(values, repoRoot, agentDir, skillList) {
   return { skillRoots: existing.filter(listable), unreadableSkillRoots: existing.filter((dir) => !listable(dir)) };
 }
 
+// The OS realpath: unlike the JS one it walks `link/..` through the link, and both sides of a
+// comparison built from it agree on spelling (case, 8.3 names).
+function nativeRealOrResolved(target) {
+  try {
+    return fs.realpathSync.native(target);
+  } catch {
+    return path.resolve(target);
+  }
+}
+
 // The inspection never changes a skill, so its report cannot be aimed at one either. The target is
 // judged by where the write really lands: the directory is resolved physically (`link/..`), and a
 // symlink as the final component is refused. Returns the path to write.
 function reportTarget(repoRoot, target) {
-  const skillsDir = realOrResolved(path.join(repoRoot, SKILLS_REL)) + path.sep;
+  const skillsDir = nativeRealOrResolved(path.join(repoRoot, SKILLS_REL)) + path.sep;
   let dir;
-  // .native asks the OS, which walks `link/..` through the link; the JS realpath collapses `..` first.
   try { dir = fs.realpathSync.native(path.dirname(target)); } catch { throw new Error(`--out의 디렉터리가 없습니다: ${target}`); }
   const file = path.join(dir, path.basename(target));
   if (fs.lstatSync(file, { throwIfNoEntry: false })?.isSymbolicLink()) throw new Error(`--out은 심볼릭 링크에 쓸 수 없습니다: ${target}`);

@@ -223,7 +223,7 @@ test('bodies: a missing path, a missing /skill: target and a name/dir mismatch a
   const body = [
     'See `docs/missing.md` (again: `docs/missing.md`) and `docs/exists.md`, then run `/skill:nope` or `/skill:other`.',
     'Template placeholders such as `docs/reviews/review-<ts>.json`, `docs/absent/<id>.json`, `docs/absent.<ext>` and `/skill:<name>` are not references.',
-    'A file next to this skill: `references/notes.md`. Not a path: `owner/repo`. Another source: `/skill:agents/kickoff`. A file of an existing skill: `/skill:other/references/x`.',
+    'A file next to this skill: `references/notes.md`. Not a path: `owner/repo`. Another source: `/skill:agents/kickoff/extra`.',
   ].join('\n');
   const root = repoFixture(
     t,
@@ -242,7 +242,8 @@ test('bodies: a missing path, a missing /skill: target and a name/dir mismatch a
   ]);
   const message = (code, line) => findings.find((f) => f.code === code && f.evidence.endsWith(`:${line}`)).message;
   assert.match(message('REF-PATH', 8), /docs\/missing\.md.*\(줄 8\)/);
-  assert.match(message('REF-SKILL', 10), /\/skill:agents\/kickoff/);
+  // omp reads `/skill:<namespace>/<name>` with exactly one `/`; anything deeper is prose.
+  assert.match(message('REF-SKILL', 10), /`\/skill:agents\/kickoff`/);
   assert.match(message('REF-SKILL', 8), /\/skill:nope/);
 });
 
@@ -250,8 +251,8 @@ test('bodies: missing frontmatter, missing description and an unknown agent are 
   const root = repoFixture(t, {
     nofm: '# No frontmatter here\n',
     nodesc: skillMd('nodesc', 'Body.\n', null),
-    // A YAML comment is not part of the name, and `null` is not a description.
-    commented: '---\nname: commented # same as the directory\ndescription: null\n---\n',
+    // A YAML comment is not part of the name, and a null (any case) is not a description.
+    commented: '---\nname: commented # same as the directory\ndescription: NULL\n---\n',
     hashonly: '---\nname: hashonly\ndescription: # to be written\n---\n',
     // "omp 에이전트 디렉터리" names omp itself (its agent directory), not a task agent.
     agents: skillMd('agents', 'Spawn the `reviewer` 에이전트, then the `scout` agent.\n1. critic 에이전트 (opus) 호출\nomp 에이전트 디렉터리를 읽습니다.\n'),
