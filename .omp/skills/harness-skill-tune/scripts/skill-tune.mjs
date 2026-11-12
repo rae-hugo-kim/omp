@@ -26,11 +26,12 @@ const UPSTREAM_REPO = 'can1357/oh-my-pi';
 const UPSTREAM_SLASH_DIR = 'packages/coding-agent/src/slash-commands';
 const UPSTREAM_BUNDLED_COMMANDS = 'packages/coding-agent/src/task/commands.ts';
 // Fewer names than this in a freshly built snapshot means a source format drifted (see assertPlausibleSnapshot).
-const SNAPSHOT_MINIMUMS = { builtin_commands: 20, bundled_commands: 1, cli_subcommands: 10, bundled_agents: 1 };
+const SNAPSHOT_MINIMUMS = { builtin_commands: 20, builtin_aliases: 1, bundled_commands: 1, cli_subcommands: 10, bundled_agents: 1 };
 const SUBPROCESS_TIMEOUT_MS = 120_000;
 const SEVERITIES = ['high', 'medium', 'low'];
 const UNMEASURED = '측정 불가';
 const SKILL_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const RESERVED_PATH = path.join(SKILL_DIR, 'reserved-names.json');
 const require = createRequire(import.meta.url);
 
 // ---------- shared helpers ------------------------------------------------------------------
@@ -53,11 +54,11 @@ export function listRepoSkills(repoRoot) {
 // empty; quotes are removed; a trailing ` # comment` is not part of the value.
 function scalarValue(raw) {
   const inline = raw.trim();
-  if (/^[>|][+-]?$/.test(inline)) return '';
+  if (/^[>|][+-]?(?:\s+#.*)?$/.test(inline)) return '';
   const quoted = /^(["'])(.*)\1(?:\s+#.*)?$/.exec(inline);
   if (quoted) return quoted[2];
-  const bare = inline.replace(/\s+#.*$/, '');
-  return bare === 'null' || bare === '~' ? '' : bare;
+  const bare = inline.replace(/(?:^|\s+)#.*$/, '');
+  return /^(?:null|~)$/i.test(bare) ? '' : bare;
 }
 
 // Symlink-free form of a path when it exists (so two spellings of one directory compare equal).
@@ -365,7 +366,7 @@ function pathCandidates(line, roots) {
 function gitIgnored(repoRoot, paths) {
   if (paths.length === 0) return new Set();
   const input = paths.flatMap((p) => [p, `${p}/`]).join('\n');
-  const run = spawnSync('git', ['check-ignore', '--no-index', '--stdin'], { cwd: repoRoot, input, encoding: 'utf8' });
+  const run = spawnSync('git', ['check-ignore', '--no-index', '--stdin'], { cwd: repoRoot, input, encoding: 'utf8', timeout: SUBPROCESS_TIMEOUT_MS });
   if (run.status !== 0) return new Set(); // 1 = nothing ignored, 128 = not a git repo
   return new Set(run.stdout.split('\n').filter(Boolean).map((p) => p.replace(/\/$/, '')));
 }
@@ -392,7 +393,8 @@ function pathFindings(repoRoot, skill, doc, expectedAbsent) {
 
 function skillRefFindings(skill, doc, repoSkills) {
   const refs = collectRefs(doc.lines, doc.frontmatter.end + 1, (line) => [...line.matchAll(SKILL_REF)].map((m) => m[1]));
-  return [...refs].filter(([name]) => !repoSkills.has(name)).map(([name, lines]) => makeFinding({
+  // `/skill:<name>/<file>` points into an existing skill; only the first segment has to be one.
+  return [...refs].filter(([name]) => !repoSkills.has(name.split('/')[0])).map(([name, lines]) => makeFinding({
     code: 'REF-SKILL', severity: 'medium', skill, line: lines[0], key: name,
     message: `본문이 참조하는 \`/skill:${name}\`이 ${SKILLS_REL}/에 없습니다 (${lineList(lines)}).`,
   }));
@@ -485,7 +487,7 @@ function sortFindings(findings) {
 }
 
 // skillList / ompVersion are resolved by the caller (the CLI asks the installed omp); null = unmeasured.
-export function runCheck({ repoRoot, sessionsDir, dbPath, repoPrefixes, reservedPath, expectedAbsentPath, skillList, skillListReason, skillRoots = [], ompVersion, now }) {
+export function runCheck({ repoRoot, sessionsDir, dbPath, repoPrefixes, reservedPath, expectedAbsentPath, skillList, skillListReason, skillRoots = [], unreadableSkillRoots = [], ompVersion, now }) {
   const skills = listRepoSkills(repoRoot);
   const reserved = readJsonIfPresent(reservedPath);
   const expectedAbsent = readJsonIfPresent(expectedAbsentPath) ?? {};
@@ -499,7 +501,10 @@ export function runCheck({ repoRoot, sessionsDir, dbPath, repoPrefixes, reserved
     ompVersion: ompVersion ?? null,
     sessions: collectSessionUsage({ sessionsDir, repoPrefixes, skills }),
     commands: collectCommandUsage({ dbPath, skills }),
-    crossSource: { loaded: skillList ? skillList.length : null, reason: skillListReason ?? 'omp skill list 결과 없음', roots: skillRoots },
+    crossSource: {
+      loaded: skillList ? skillList.length : null, reason: skillList ? null : skillListReason ?? 'omp skill list 결과 없음',
+      roots: skillRoots, unreadableRoots: unreadableSkillRoots,
+    },
     lines: bodies.lines,
     suppressed: bodies.suppressed,
     findings: sortFindings([...collisions, ...bodies.findings]),
@@ -509,6 +514,7 @@ export function runCheck({ repoRoot, sessionsDir, dbPath, repoPrefixes, reserved
 const day = (iso) => (iso ? iso.slice(0, 10) : '-');
 const cell = (text) => String(text).replace(/\|/g, '\\|');
 const row = (cells) => `| ${cells.map(cell).join(' | ')} |`;
+const pathList = (paths) => paths.map((p) => `\`${p}\``).join(', ') || '없음';
 
 function reportHeader(result) {
   const { reserved, ompVersion, sessions, commands, crossSource, suppressed } = result;
@@ -526,7 +532,7 @@ function reportHeader(result) {
       : `- 세션 원천: ${UNMEASURED} — ${sessions.reason}`,
     `- 리포 범위(세션 cwd 접두): ${result.repoPrefixes.map((p) => `\`${p}\``).join(', ') || '없음'}`,
     commands.measured ? `- \`/skill:\` 호출 원천: \`${commands.db}\`의 \`command_usage\`` : `- \`/skill:\` 호출 원천: ${UNMEASURED} — ${commands.reason}`,
-    `- 출처 간 사본 원천: \`omp skill list --json\` ${crossSource.loaded === null ? `${UNMEASURED} — ${crossSource.reason}` : `(로드된 스킬 ${crossSource.loaded}개)`}, 스킬 디렉터리 ${crossSource.roots.map((p) => `\`${p}\``).join(', ') || '없음'}`,
+    `- 출처 간 사본 원천: \`omp skill list --json\` ${crossSource.loaded === null ? `${UNMEASURED} — ${crossSource.reason}` : `(로드된 스킬 ${crossSource.loaded}개)`}, 스킬 디렉터리 ${pathList(crossSource.roots)}${crossSource.unreadableRoots.length ? `, 읽지 못한 스킬 디렉터리 ${pathList(crossSource.unreadableRoots)}` : ''}`,
     `- 억제한 경로 참조: gitignore 대상 ${suppressed.gitignored}건, 예상된 부재(\`expected-absent-paths.json\`) ${suppressed.expected}건`,
   ];
 }
@@ -679,18 +685,18 @@ export function assertPlausibleSnapshot(snapshot) {
 const USAGE = `usage:
   skill-tune.mjs check [--repo <dir>] [--agent-dir <dir>] [--sessions-dir <dir>] [--db <file>]
                        [--repo-prefix <dir>]... [--skill-root <dir>]... [--skill-list-json <file>]
-                       [--omp-bin <bin>] [--reserved <file>] [--format md|json] [--out <file>]
-  skill-tune.mjs refresh-reserved [--omp-bin <bin>] [--reserved <file>]`;
+                       [--omp-bin <bin>] [--format md|json] [--out <file>]
+  skill-tune.mjs refresh-reserved [--omp-bin <bin>]`;
 
 const OPTIONS = {
   repo: { type: 'string' }, 'agent-dir': { type: 'string' }, 'sessions-dir': { type: 'string' }, db: { type: 'string' },
   'repo-prefix': { type: 'string', multiple: true }, 'skill-root': { type: 'string', multiple: true },
   'skill-list-json': { type: 'string' }, 'omp-bin': { type: 'string' },
-  reserved: { type: 'string' }, format: { type: 'string' }, out: { type: 'string' },
+  format: { type: 'string' }, out: { type: 'string' },
 };
 
 function gitLines(cwd, args) {
-  const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8', timeout: SUBPROCESS_TIMEOUT_MS });
   return result.status === 0 ? result.stdout.split('\n').filter(Boolean) : [];
 }
 
@@ -713,19 +719,30 @@ function skillRootsFor(values, repoRoot, agentDir, skillList) {
   const home = os.homedir();
   const listed = (skillList ?? []).filter((entry) => typeof entry?.filePath === 'string').map((entry) => path.dirname(path.dirname(entry.filePath)));
   const candidates = [path.join(agentDir, 'skills'), path.join(home, '.claude', 'skills'), path.join(home, '.agents', 'skills'), ...listed, ...(values['skill-root'] ?? [])];
-  return [...new Set(candidates.map((dir) => realOrResolved(dir)))].filter((dir) => dir !== ownDir && fs.existsSync(dir));
+  const existing = [...new Set(candidates.map((dir) => realOrResolved(dir)))].filter((dir) => dir !== ownDir && fs.existsSync(dir));
+  const listable = (dir) => {
+    try { fs.readdirSync(dir); return true; } catch { return false; }
+  };
+  return { skillRoots: existing.filter(listable), unreadableSkillRoots: existing.filter((dir) => !listable(dir)) };
 }
 
-// The inspection never changes a skill, so its report cannot be aimed at one either.
-function assertReportTarget(repoRoot, target) {
+// The inspection never changes a skill, so its report cannot be aimed at one either. The target is
+// judged by where the write really lands: the directory is resolved physically (`link/..`), and a
+// symlink as the final component is refused. Returns the path to write.
+function reportTarget(repoRoot, target) {
   const skillsDir = realOrResolved(path.join(repoRoot, SKILLS_REL)) + path.sep;
-  const resolved = path.join(realOrResolved(path.dirname(path.resolve(target))), path.basename(target));
-  if (`${resolved}${path.sep}`.startsWith(skillsDir)) throw new Error(`--out은 ${SKILLS_REL}/ 아래에 쓸 수 없습니다: ${target}`);
+  let dir;
+  // .native asks the OS, which walks `link/..` through the link; the JS realpath collapses `..` first.
+  try { dir = fs.realpathSync.native(path.dirname(target)); } catch { throw new Error(`--out의 디렉터리가 없습니다: ${target}`); }
+  const file = path.join(dir, path.basename(target));
+  if (fs.lstatSync(file, { throwIfNoEntry: false })?.isSymbolicLink()) throw new Error(`--out은 심볼릭 링크에 쓸 수 없습니다: ${target}`);
+  if (`${file}${path.sep}`.startsWith(skillsDir)) throw new Error(`--out은 ${SKILLS_REL}/ 아래에 쓸 수 없습니다: ${target}`);
+  return file;
 }
 
 function checkCommand(values) {
   const repoRoot = path.resolve(values.repo ?? gitLines(process.cwd(), ['rev-parse', '--show-toplevel'])[0] ?? process.cwd());
-  if (values.out) assertReportTarget(repoRoot, values.out);
+  const outPath = values.out ? reportTarget(repoRoot, values.out) : null;
   const agentDir = path.resolve(values['agent-dir'] || process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.omp', 'agent'));
   const ompBin = values['omp-bin'] ?? 'omp';
   const worktrees = gitLines(repoRoot, ['worktree', 'list', '--porcelain']).filter((line) => line.startsWith('worktree ')).map((line) => line.slice('worktree '.length));
@@ -733,15 +750,15 @@ function checkCommand(values) {
   const loaded = loadSkillList(values, repoRoot, ompBin);
   const result = runCheck({
     repoRoot, repoPrefixes, ...loaded,
-    skillRoots: skillRootsFor(values, repoRoot, agentDir, loaded.skillList),
+    ...skillRootsFor(values, repoRoot, agentDir, loaded.skillList),
     sessionsDir: path.resolve(values['sessions-dir'] ?? path.join(agentDir, 'sessions')),
     dbPath: path.resolve(values.db ?? path.join(agentDir, 'agent.db')),
-    reservedPath: path.resolve(values.reserved ?? path.join(SKILL_DIR, 'reserved-names.json')),
+    reservedPath: RESERVED_PATH,
     expectedAbsentPath: path.join(SKILL_DIR, 'expected-absent-paths.json'),
     ompVersion: installedOmpVersion(ompBin),
   });
   const output = values.format === 'json' ? `${JSON.stringify(result, null, 2)}\n` : renderReport(result);
-  if (values.out) fs.writeFileSync(values.out, output);
+  if (outPath) fs.writeFileSync(outPath, output);
   else process.stdout.write(output);
 }
 
@@ -751,10 +768,9 @@ function main(argv) {
   if (values.format && !['md', 'json'].includes(values.format)) throw new Error(`--format은 md 또는 json입니다: ${values.format}`);
   if (command === 'check') return checkCommand(values);
   if (command === 'refresh-reserved') {
-    const reservedPath = path.resolve(values.reserved ?? path.join(SKILL_DIR, 'reserved-names.json'));
-    const snapshot = refreshReserved({ ompBin: values['omp-bin'] ?? 'omp', reservedPath });
+    const snapshot = refreshReserved({ ompBin: values['omp-bin'] ?? 'omp', reservedPath: RESERVED_PATH });
     const total = snapshot.builtin_commands.length + snapshot.builtin_aliases.length + snapshot.bundled_commands.length + snapshot.cli_subcommands.length;
-    process.stdout.write(`reserved-names.json: omp ${snapshot.omp_version}, 예약 이름 ${total}개, 번들 에이전트 ${snapshot.bundled_agents.length}개 -> ${reservedPath}\n`);
+    process.stdout.write(`reserved-names.json: omp ${snapshot.omp_version}, 예약 이름 ${total}개, 번들 에이전트 ${snapshot.bundled_agents.length}개 -> ${RESERVED_PATH}\n`);
     return undefined;
   }
   throw new Error(USAGE);

@@ -8,11 +8,12 @@
 import { test as nodeTest } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { skipUnless } from './helpers/capabilities.mjs';
+import { mkdtempReal } from './helpers/real-tmpdir.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..', '..', '..');
@@ -26,8 +27,9 @@ const require = createRequire(import.meta.url);
 let sqlite = null;
 try { sqlite = require('node:sqlite'); } catch { /* older Node: the command_usage test skips */ }
 
+// Physical path: the script reports real paths, and macOS aliases its tmpdir (/var -> /private/var).
 function tmp(t, prefix) {
-  const dir = mkdtempSync(join(tmpdir(), prefix));
+  const dir = mkdtempReal(prefix);
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
@@ -190,14 +192,14 @@ test('collisions: a same-named skill from another source is flagged; an identica
   const root = repoFixture(t, { alpha: skillMd('alpha'), beta: skillMd('beta'), gamma: skillMd('gamma'), delta: skillMd('delta') });
   const outside = tmp(t, 'skill-tune-user-');
   const diverged = put(outside, 'skills/alpha/SKILL.md', skillMd('alpha', 'Older body.\n'));
-  const identical = put(outside, 'agents/beta/SKILL.md', skillMd('beta'));
+  // This copy's directory was renamed, so only its loaded name (minus the loader's `~N` suffix) names the skill.
+  const identical = put(outside, 'agents/beta-renamed/SKILL.md', skillMd('beta'));
   // A copy the loader does not list (dropped as identical, or its provider is off) is still on disk.
   const unlisted = put(outside, 'claude/gamma/SKILL.md', skillMd('gamma'));
   put(outside, 'claude/not-a-repo-skill/SKILL.md', skillMd('not-a-repo-skill'));
   const skillList = [
     { name: 'alpha', filePath: join(root, '.omp/skills/alpha/SKILL.md'), source: 'native:project' },
     { name: 'agent/alpha', filePath: diverged, source: 'native:user' },
-    // The loader suffixes a name it had to disambiguate; the directory still names the skill.
     { name: 'agents/beta~2', filePath: identical, source: 'agents:user' },
     { name: 'unrelated', filePath: join(outside, 'skills/unrelated/SKILL.md'), source: 'native:user' },
   ];
@@ -221,7 +223,7 @@ test('bodies: a missing path, a missing /skill: target and a name/dir mismatch a
   const body = [
     'See `docs/missing.md` (again: `docs/missing.md`) and `docs/exists.md`, then run `/skill:nope` or `/skill:other`.',
     'Template placeholders such as `docs/reviews/review-<ts>.json`, `docs/absent/<id>.json`, `docs/absent.<ext>` and `/skill:<name>` are not references.',
-    'A file next to this skill: `references/notes.md`. Not a path: `owner/repo`. Another source: `/skill:agents/kickoff`.',
+    'A file next to this skill: `references/notes.md`. Not a path: `owner/repo`. Another source: `/skill:agents/kickoff`. A file of an existing skill: `/skill:other/references/x`.',
   ].join('\n');
   const root = repoFixture(
     t,
@@ -250,13 +252,14 @@ test('bodies: missing frontmatter, missing description and an unknown agent are 
     nodesc: skillMd('nodesc', 'Body.\n', null),
     // A YAML comment is not part of the name, and `null` is not a description.
     commented: '---\nname: commented # same as the directory\ndescription: null\n---\n',
+    hashonly: '---\nname: hashonly\ndescription: # to be written\n---\n',
     // "omp 에이전트 디렉터리" names omp itself (its agent directory), not a task agent.
     agents: skillMd('agents', 'Spawn the `reviewer` 에이전트, then the `scout` agent.\n1. critic 에이전트 (opus) 호출\nomp 에이전트 디렉터리를 읽습니다.\n'),
   });
 
-  const { findings, lines } = tune.checkBodies({ repoRoot: root, skills: ['agents', 'commented', 'nodesc', 'nofm'], knownAgents: ['reviewer', 'scout'], expectedAbsent: {} });
+  const { findings, lines } = tune.checkBodies({ repoRoot: root, skills: ['agents', 'commented', 'hashonly', 'nodesc', 'nofm'], knownAgents: ['reviewer', 'scout'], expectedAbsent: {} });
 
-  assert.deepEqual(findings.map((f) => [f.code, f.skill]).sort(), [['FM-DESC', 'commented'], ['FM-DESC', 'nodesc'], ['FM-MISSING', 'nofm'], ['REF-AGENT', 'agents']]);
+  assert.deepEqual(findings.map((f) => [f.code, f.skill]).sort(), [['FM-DESC', 'commented'], ['FM-DESC', 'hashonly'], ['FM-DESC', 'nodesc'], ['FM-MISSING', 'nofm'], ['REF-AGENT', 'agents']]);
   assert.match(findings.find((f) => f.code === 'REF-AGENT').message, /critic/);
   assert.equal(lines.nofm, 1);
 });
@@ -341,13 +344,16 @@ test('cli: check exits 0 with every usage source missing, and still finds a copy
   const copy = put(home, '.claude/skills/alpha/SKILL.md', skillMd('alpha'));
 
   // No omp binary: the loader's list is unavailable, the on-disk scan is not.
-  const run = spawnSync(process.execPath, [scriptPath, 'check', '--repo', root, '--omp-bin', join(root, 'no-omp')], { encoding: 'utf8', env: cliEnv(home) });
+  const notADir = put(root, 'not-a-directory', 'x');
+  const run = spawnSync(process.execPath, [scriptPath, 'check', '--repo', root, '--omp-bin', join(root, 'no-omp'), '--skill-root', notADir], { encoding: 'utf8', env: cliEnv(home) });
 
   assert.equal(run.status, 0, run.stderr);
   assert.match(run.stdout, /\| `alpha` \|/);
   assert.match(run.stdout, /측정 불가/);
   const dup = run.stdout.split('\n').find((line) => line.includes('NAME-DUP-alpha-'));
   assert.ok(dup?.includes(copy), run.stdout);
+  // A root that cannot be scanned is named as such, not passed off as scanned.
+  assert.match(run.stdout, /읽지 못한 스킬 디렉터리[^\n]*not-a-directory/);
 });
 
 test('cli: check refuses to write its report over anything under .omp/skills', (t) => {
@@ -361,6 +367,24 @@ test('cli: check refuses to write its report over anything under .omp/skills', (
 
   assert.equal(run.status, 1);
   assert.equal(readFileSync(target, 'utf8'), skillMd('alpha'));
+});
+
+test('cli: the report target is judged by where it really lands (symlink, link/..)', { skip: skipUnless('symlink') }, (t) => {
+  const root = repoFixture(t, { alpha: skillMd('alpha') });
+  const listPath = put(root, 'list.json', JSON.stringify({ skills: [] }));
+  const skillFile = join(root, '.omp/skills/alpha/SKILL.md');
+  const elsewhere = tmp(t, 'skill-tune-out-');
+  symlinkSync(skillFile, join(elsewhere, 'report.md'));
+  symlinkSync(join(root, '.omp/skills/alpha'), join(elsewhere, 'dir-link'));
+
+  for (const target of [join(elsewhere, 'report.md'), `${join(elsewhere, 'dir-link')}/../planted.md`]) {
+    const run = spawnSync(process.execPath, [
+      scriptPath, 'check', '--repo', root, '--skill-list-json', listPath, '--omp-bin', join(root, 'no-omp'), '--out', target,
+    ], { encoding: 'utf8', env: cliEnv(tmp(t, 'skill-tune-home-')) });
+    assert.equal(run.status, 1, target);
+  }
+  assert.equal(readFileSync(skillFile, 'utf8'), skillMd('alpha'));
+  assert.equal(existsSync(join(root, '.omp/skills/planted.md')), false);
 });
 
 // --- 5. Reserved-name parsers (refresh-reserved) --------------------------------------------
@@ -401,12 +425,12 @@ test('reserved: bundled commands and CLI subcommands are parsed from their sourc
 
 test('reserved: a snapshot with an empty list is rejected before it can replace the baseline', () => {
   const snapshot = {
-    builtin_commands: Array.from({ length: 30 }, (_, i) => `cmd${i}`), builtin_aliases: [],
+    builtin_commands: Array.from({ length: 30 }, (_, i) => `cmd${i}`), builtin_aliases: ['q'],
     bundled_commands: ['init'], cli_subcommands: Array.from({ length: 12 }, (_, i) => `sub${i}`), bundled_agents: ['scout'],
   };
   assert.doesNotThrow(() => tune.assertPlausibleSnapshot(snapshot));
   // An upstream format change makes a parser return nothing; the names it guarded would vanish silently.
-  for (const key of ['builtin_commands', 'bundled_commands', 'cli_subcommands', 'bundled_agents']) {
+  for (const key of ['builtin_commands', 'builtin_aliases', 'bundled_commands', 'cli_subcommands', 'bundled_agents']) {
     assert.throws(() => tune.assertPlausibleSnapshot({ ...snapshot, [key]: [] }), new RegExp(key), key);
   }
 });
