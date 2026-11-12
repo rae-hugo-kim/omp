@@ -1,0 +1,6 @@
+{
+  "docs/harness/current-scope.md": "스레드가 열려 있는 동안만 있고 closeout에서 삭제되는 런타임 산출물입니다 (docs/rules/closeout_contract.md 3b).",
+  "docs/PRD.md": "kickoff 스킬이 doc-ingest 입력의 예시로 드는 경로입니다.",
+  ".omp/RULES.md": "소비 리포가 직접 만드는 확장 지점입니다 (AGENTS.md Consumer extension points).",
+  ".omp/AGENTS.md": "만들면 안 되는 파일로 언급되는 경로입니다 (AGENTS.md Consumer extension points)."
+}

@@ -125,6 +125,7 @@ In OMP, invoke skills as `/skill:<name>` or trigger them with natural language m
 | `/skill:grepai-search` | Semantic code search (cold-start exploration) |
 | `/skill:gh-loop` | finding → issue → fix → PR → cross-verify → HITL loop (never auto-merges). **Dispatch mode**: the main session is a coordinator that only triages issues, relays decisions and merges; the work runs in worker sessions on Orca worktrees. The user picks the worker model every time (a size-based recommendation line is shown, never auto-selected — `gh-loop-record.mjs`), and state is read from three labels (`needs-decision` / `needs-review` / `agent-working`). Merges go through `--match-head-commit` on the approved head only |
 | `/skill:gh-fanout` | multisession — runs gh-loop across many issues as worktree-isolated parallel workers (observed via Orca cards + GitHub). Parallel PRs collide on the tail of `docs/harness/audit.jsonl`, so **PRs merge sequentially** and each later PR is rebased onto the latest main by its owning worker (`merge=union` in `.gitattributes` resolves this only in a local rebase; GitHub ignores it — #71) |
+| `/skill:harness-skill-tune` | Inspect the harness skills (read-only, source repo only) — per-skill usage counts, name collisions with omp reserved names and same-named skills from other sources, and `SKILL.md` consistency, in one report |
 
 ## Migrating an existing Claude Code project
 
