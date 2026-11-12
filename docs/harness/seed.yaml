@@ -1,42 +1,64 @@
-name: adversary-panel-cycle2-112
-status: done
-completed: 2026-10-21
-version: 2
-task_id: "20261021-140000-112b"
-# 이슈 #112 사이클 ②(상시 멤버 확정). 사용자 결정 2026-10-21 코디네이터 세션: "sol 제외 → astra·opus·argon 3인".
-# 근거는 docs/reviews/panel-cycle2-2026-10-21.md(gitignored) — 리뷰 17회·멤버 실행 68회 집계. 직전 완료 seed(seed-lifecycle-contract-114)는 git 이력에 보존합니다.
+name: harness-skill-tune-inspect-127
+status: approved
+version: 1
+task_id: "20261112-171825-60f2"
+# gh-loop worker Stage 2에 따라 이슈 #127 본문("만들 것" 1~4, "정해 둔 것", AC 7개, "범위 밖")을 명세로 삼습니다.
+# 이슈 본문이 사용자 승인 명세이므로 처음부터 approved로 씁니다. 직전 완료 seed(adversary-panel-cycle2-112)는 git 이력에 보존합니다.
 goal: >
-  #112 사이클 ②: Pass 2 adversary 패널을 평가 기간 4인에서 상시 3인(adversary=@advisor · adversary-opus · adversary-argon)으로
-  확정하고 adversary-sol을 퇴역시킵니다. 근거 수치를 규칙에 남기고, 에이전트 정의·스폰 목록·동기화 목록·소유 에이전트 수 서술을 모두 맞춥니다.
+  #127: 하네스 스킬을 점검하는 스킬 harness-skill-tune의 점검 단계를 만듭니다 — 스킬별 호출 빈도 집계,
+  omp 예약 이름·다른 출처 스킬과의 이름 충돌, SKILL.md 본문 정합을 결정적으로 판정해 보고서 하나(스킬별 표 + 지적 목록)로 냅니다.
+  스킬 파일을 고치지 않는 읽기 전용 단계이며, 보고서는 다음 사이클(갱신)의 입력입니다.
 constraints:
-  - "docs/agent 정의만 바꿉니다 — 게이트·스크립트 로직은 harness-sync.sh 화이트리스트 한 줄 삭제 외에는 건드리지 않습니다. 예외(v2, 패널 r1 지적): 동기화되는 테스트 tests/harness-wiring.test.mjs W3의 에이전트 완전성 검사를 소스 리포로 한정하는 변경과 그 회귀 테스트 — 이것 없이는 퇴역한 sol 파일이 소비 리포 suite를 깨뜨립니다."
-  - "남는 미러 2개(adversary-opus·adversary-argon)의 본문은 adversary.md와 바이트 동일을 유지합니다."
-  - "AGENTS.md를 바꾸면 claudedocs/CLAUDEKR.md를 같은 변경에서 동기화하고, source_commit_hash 재스탬프는 AGENTS.md를 건드리지 않는 후속 커밋으로 합니다."
-  - "sync에는 파일 단위 퇴역 경로가 없으므로 소비 리포의 adversary-sol.md는 남습니다 — 스폰 목록에서 빠지고, 동기화된 W3 테스트가 그 파일로 깨지지 않도록 W3의 에이전트 완전성 검사를 소스 리포로 한정합니다(패널 r1 지적). CHANGELOG에 수동 삭제 안내를 남깁니다(퇴역 삭제 메커니즘은 범위 밖)."
+  - "스킬 이름은 harness-skill-tune입니다(omp 빌트인 명령·CLI 하위 명령·번들 에이전트·로드된 스킬과 겹치지 않음 — 이슈에서 확정)."
+  - "리포 밖 스킬(~/.agents/skills, ~/.claude/skills, ~/.omp/agent/skills 등)은 충돌 판정의 입력으로만 읽습니다. 지적 대상은 이 리포의 .omp/skills/입니다."
+  - "소스 리포 전용입니다 — scripts/harness-sync.sh 화이트리스트에 넣지 않습니다. 기존 테스트나 문서 검사가 전수 등재를 요구하면 고치지 않고 결정 요청으로 올립니다."
+  - "skill-creator(Claude Code 플러그인)는 작성 절차의 참고로만 쓰고 그 파일을 리포로 가져오지 않습니다."
+  - "결정적으로 판정되는 것만 스크립트로 하고, 설명문 품질처럼 판단이 필요한 항목은 스킬 본문의 절차로 둡니다."
+  - "세션 디렉터리는 PI_CODING_AGENT_DIR을 따릅니다."
 acceptance_criteria:
   - id: AC1
-    title: ".omp/agents/adversary-sol.md가 삭제되고, reviewer.md의 spawns·패널 표·스폰 템플릿·대기 문구·행 스키마 예시·Cross-Validation 소스·element 3 예시·보고 템플릿이 3인 패널을 서술합니다."
+    title: ".omp/skills/harness-skill-tune/SKILL.md가 있고, frontmatter name이 디렉터리명과 같으며 description이 있습니다."
   - id: AC2
-    title: "harness-agent_routing(:7 소유 에이전트 수, :26, :32, :34, :41, :42 패널 절)·harness-adversarial_review(:9)·harness-check SKILL(:77)·AGENTS.md(:27, :149)·CLAUDEKR.md가 6종 에이전트/3인 패널로 일치하고, routing 패널 절에 사이클 ② 결정과 근거 수치(재현율·단독 뒷받침·unique)가 한 문단으로 있습니다."
+    title: "빈도 집계를 픽스처 세션 디렉터리에 돌리면 스킬마다 세션 수·읽기 횟수·마지막 사용일·/skill: 호출 수가 나오고, 읽기 0회인 스킬이 0으로 표시되며, 하위 경로 읽기(skill://x/ref.md)가 x에 귀속됩니다."
   - id: AC3
-    title: "scripts/harness-sync.sh 화이트리스트에서 adversary-sol.md가 빠지고, CHANGELOG [Unreleased]에 퇴역 항목과 소비 리포 수동 삭제 안내가 있습니다."
+    title: "세션 디렉터리가 없거나 command_usage를 읽을 수 없으면 그 열을 측정 불가로 표시하고 실패 없이 끝납니다."
   - id: AC4
-    title: "남는 미러 2개의 본문이 adversary.md와 바이트 동일하고, grep으로 adversary-sol·AdvSol 참조가 정의·규칙·스킬·AGENTS.md·CLAUDEKR.md에 0건(CHANGELOG·이력 서술·퇴역 파일 수동 삭제 안내 제외 — routing:42 근거, harness-check SKILL:77 안내, adversarial_review:37의 2026-10-19 ProbeSol 실측 기록은 날짜가 박힌 이력이라 유지)이며, node scripts/docs-drift 0 errors·하네스 suite 전 항목 통과입니다."
+    title: "이름 충돌 검사가 픽스처에서 예약 이름과 같은 스킬, 출처 간 같은 이름 사본을 각각 지적으로 냅니다."
+  - id: AC5
+    title: "본문 정합 검사가 픽스처에서 없는 경로 참조, 없는 /skill: 참조, name과 디렉터리명 불일치를 각각 지적으로 냅니다."
+  - id: AC6
+    title: "보고서가 지적마다 ID·심각도·스킬·근거(파일:줄)·기계적 수정 가능 여부를 담습니다."
+  - id: AC7
+    title: "node --test .omp/extensions/harness/tests/*.test.mjs와 node scripts/docs-drift가 통과하고, CHANGELOG.md의 [Unreleased]에 항목이 있습니다."
 out_of_scope:
-  - "harness-sync.sh의 파일 단위 RETIRED 메커니즘 추가."
-  - "@advisor 롤·code-reviewer(Pass 3) 모델 변경."
-  - "review-gate 테스트의 gpt-5.6-sol 토큰(모델명 파싱 케이스라 패널 구성과 무관)."
+  - "스킬 수정·개명·삭제·숨김, 스킬 유무 비교 평가(다음 이슈인 갱신 단계)."
+  - "init 개명(소비 리포로 동기화되는 스킬이라 별도 결정)."
+  - "소비 리포 동기화(harness-sync.sh 화이트리스트)."
+  - "리포 밖 스킬 파일 수정 — closeout_contract §4의 전역 미러(~/.claude/skills) 복사도 하지 않습니다."
+  - "skill-creator 파일 반입."
 assumptions:
-  - "시작 HEAD는 main ea171a3(PR #118 머지 후)이고 작업트리는 깨끗했습니다."
-references:
-  - path: https://github.com/rae-hugo-kim/omp/issues/112
-    reason: 사이클 ② 명세("후속 (사이클 ②, 별도 seed)" 절)
-  - path: docs/reviews/panel-cycle2-2026-10-21.md
-    reason: 상시 멤버 결정의 집계 근거(gitignored)
-  - path: docs/reviews/review-2026-10-21-185655.md
-    reason: 상시 3인 패널 첫 리뷰(PASS WITH NOTES) — 후속 커밋 지적의 출처
-  - path: docs/reviews/review-2026-10-21-191235.md
-    reason: round 2(PASS WITH NOTES) — v2 개정(seed 개정 절차·CRLF·W3 회귀 픽스처)의 출처
+  - "시작 HEAD는 main 2f136f3이고 이슈의 실측은 omp 18.18.6 WSL 호스트 기준입니다."
+  - "omp 업스트림 저장소는 can1357/oh-my-pi이고 v18.18.6 태그에 packages/coding-agent/src/slash-commands/builtin-*.ts가 있습니다(gh api로 확인)."
+  - "CI(harness-ci)의 Node 22에서 node:sqlite가 플래그 없이 로드됩니다. 로드되지 않으면 command_usage 테스트는 skip하고 스크립트는 그 열을 측정 불가로 냅니다."
 risks:
-  - "표본: high 이상은 최종 목록 4건뿐이고 reviewer(self)가 Claude라 opus 재현율이 부풀었을 수 있습니다 — 근거 문단에 교란 요인으로 명시합니다."
-  - "codex 인증이 죽으면 GPT 계열은 @advisor 하나라, 그때 이종성은 argon(gemini) 하나에 의존합니다."
+  - "세션 기록 형식은 omp 내부 형식입니다 — read 호출이 assistant toolCall과 tool_execution_start 두 레코드로 남는 현재 형식과, toolCall만 있는 옛 형식 둘을 읽습니다. 형식이 바뀌면 읽기 수가 0으로 떨어질 수 있습니다."
+  - "예약 이름 스냅샷은 업스트림 소스의 들여쓰기에 기대어 최상위 명령과 하위 명령을 가릅니다. 형식이 바뀌면 refresh-reserved가 20개 미만에서 실패하도록 막았지만 부분 누락은 못 잡습니다."
+  - "경로·에이전트 참조 추출은 패턴 기반이라 재현율이 제한됩니다(코드 블록 안 경로, 백틱 없는 에이전트 이름 일부)."
+  - "테스트 파일은 .omp/extensions/harness/tests/에 있어 소비 리포로 동기화됩니다 — 스킬이 없으면 skip합니다(docs-drift.test.mjs와 같은 방식)."
+references:
+  - path: https://github.com/rae-hugo-kim/omp/issues/127
+    reason: 명세(만들 것·정해 둔 것·AC·범위 밖)
+  - path: .omp/skills/harness-skill-tune/SKILL.md
+    reason: 스킬 본문(절차와 판단 항목)
+  - path: .omp/skills/harness-skill-tune/scripts/skill-tune.mjs
+    reason: 점검 스크립트(check·refresh-reserved)
+  - path: .omp/extensions/harness/tests/harness-skill-tune.test.mjs
+    reason: 픽스처 테스트(AC1~AC6)
+  - path: .omp/extensions/harness/tests/docs-drift.test.mjs
+    reason: 소스 리포 전용 스크립트의 테스트가 소비 리포에서 skip하는 선례
+estimate:
+  risk: high
+  files: 6
+  depth: high
+  model: anthropic/claude-fable-5-2
+  effort: high
