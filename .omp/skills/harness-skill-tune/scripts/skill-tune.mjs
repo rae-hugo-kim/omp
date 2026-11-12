@@ -25,7 +25,9 @@ const AGENTS_REL = '.omp/agents';
 const UPSTREAM_REPO = 'can1357/oh-my-pi';
 const UPSTREAM_SLASH_DIR = 'packages/coding-agent/src/slash-commands';
 const UPSTREAM_BUNDLED_COMMANDS = 'packages/coding-agent/src/task/commands.ts';
-const MIN_BUILTIN_COMMANDS = 20; // fewer than this means the upstream source format drifted
+// Fewer names than this in a freshly built snapshot means a source format drifted (see assertPlausibleSnapshot).
+const SNAPSHOT_MINIMUMS = { builtin_commands: 20, bundled_commands: 1, cli_subcommands: 10, bundled_agents: 1 };
+const SUBPROCESS_TIMEOUT_MS = 120_000;
 const SEVERITIES = ['high', 'medium', 'low'];
 const UNMEASURED = '측정 불가';
 const SKILL_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -47,9 +49,15 @@ export function listRepoSkills(repoRoot) {
   return fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort();
 }
 
-function unquote(value) {
-  const quoted = /^(["'])(.*)\1$/.exec(value);
-  return quoted ? quoted[2] : value;
+// The inline value of a frontmatter `key: value` line. Block-scalar markers and YAML null are
+// empty; quotes are removed; a trailing ` # comment` is not part of the value.
+function scalarValue(raw) {
+  const inline = raw.trim();
+  if (/^[>|][+-]?$/.test(inline)) return '';
+  const quoted = /^(["'])(.*)\1(?:\s+#.*)?$/.exec(inline);
+  if (quoted) return quoted[2];
+  const bare = inline.replace(/\s+#.*$/, '');
+  return bare === 'null' || bare === '~' ? '' : bare;
 }
 
 // Symlink-free form of a path when it exists (so two spellings of one directory compare equal).
@@ -72,8 +80,7 @@ function parseFrontmatter(lines) {
   for (let i = 1; i < end; i++) {
     const top = /^([A-Za-z_][\w-]*):(.*)$/.exec(lines[i]);
     if (top) {
-      const inline = top[2].trim();
-      current = { value: /^[>|][+-]?$/.test(inline) ? '' : unquote(inline), line: i + 1 };
+      current = { value: scalarValue(top[2]), line: i + 1 };
       fields[top[1]] = current;
     } else if (current && /^\s+\S/.test(lines[i])) {
       current.value = `${current.value} ${lines[i].trim()}`.trim();
@@ -99,15 +106,16 @@ const SKILL_URL = /^skill:\/\/([A-Za-z0-9_.-]+)/;
 const HEADER_SCAN_LINES = 20;
 const NEWLINE = 10;
 
-function walkJsonl(dir, files = []) {
+// *.jsonl files under dir (recursive). A subdirectory that cannot be listed is counted, not hidden.
+function walkJsonl(dir, found = { files: [], unreadableDirs: 0 }) {
   let entries;
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return files; }
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { found.unreadableDirs++; return found; }
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) walkJsonl(full, files);
-    else if (entry.isFile() && entry.name.endsWith('.jsonl')) files.push(full);
+    if (entry.isDirectory()) walkJsonl(full, found);
+    else if (entry.isFile() && entry.name.endsWith('.jsonl')) found.files.push(full);
   }
-  return files;
+  return found;
 }
 
 // The `read` tool calls of one transcript record. A call is written twice by current omp (the
@@ -178,12 +186,16 @@ function isUnder(cwd, prefixes) {
 
 export function collectSessionUsage({ sessionsDir, repoPrefixes, skills }) {
   const perSkill = Object.fromEntries(skills.map((skill) => [skill, { repo: emptyCount(), all: emptyCount() }]));
-  if (!fs.existsSync(sessionsDir) || !fs.statSync(sessionsDir).isDirectory()) {
-    return { measured: false, reason: `세션 디렉터리 없음: ${sessionsDir}`, dir: sessionsDir, files: 0, unreadable: 0, perSkill };
+  const unmeasured = (reason) => ({ measured: false, reason, dir: sessionsDir, files: 0, unreadable: 0, perSkill });
+  try {
+    if (!fs.statSync(sessionsDir).isDirectory()) return unmeasured(`세션 디렉터리 없음: ${sessionsDir}`);
+    fs.readdirSync(sessionsDir);
+  } catch (error) {
+    return unmeasured(error.code === 'ENOENT' ? `세션 디렉터리 없음: ${sessionsDir}` : `세션 디렉터리를 읽을 수 없음: ${sessionsDir} (${error.code ?? error.message})`);
   }
   const prefixes = repoPrefixes.map((prefix) => path.resolve(prefix));
-  const files = walkJsonl(sessionsDir);
-  let unreadable = 0;
+  const { files, unreadableDirs } = walkJsonl(sessionsDir);
+  let unreadable = unreadableDirs; // directories that could not be listed + files that could not be read
   for (const file of files) {
     let buf;
     try { buf = fs.readFileSync(file); } catch { unreadable++; continue; }
@@ -262,36 +274,58 @@ const COPY_STATE = {
   unreadable: { severity: 'medium', text: '내용 비교 불가' },
 };
 
-function duplicateFindings(repoRoot, skills, skillList) {
+// Same-named copies outside the repo, keyed by real path so one copy is reported once: what the
+// loader lists (`omp skill list --json`) plus what sits on disk under the given skill roots. The
+// loader's list is post-collision — it can drop a copy or skip a disabled provider — so the
+// directory scan is the part that does not depend on loader behaviour.
+function externalCopies(repoRoot, skills, skillList, skillRoots) {
   const ownDir = realOrResolved(path.join(repoRoot, SKILLS_REL)) + path.sep;
-  return skillList
-    .filter((entry) => typeof entry?.filePath === 'string' && typeof entry.name === 'string')
-    .filter((entry) => !realOrResolved(entry.filePath).startsWith(ownDir))
-    .filter((entry) => skills.includes(entry.name.split('/').pop()))
-    .map((entry) => {
-      const skill = entry.name.split('/').pop();
-      const state = COPY_STATE[compareCopy(readSkill(repoRoot, skill).file, entry.filePath)];
-      return makeFinding({
-        code: 'NAME-DUP', severity: state.severity, skill, line: nameLineOf(repoRoot, skill), key: entry.filePath,
-        message: `같은 이름의 스킬이 다른 출처에 있습니다: ${entry.filePath} (출처 ${entry.source ?? '?'}, 로드 이름 \`${entry.name}\`, ${state.text}).`,
-      });
-    });
+  const copies = new Map();
+  const add = (skill, file, loaded) => {
+    const real = realOrResolved(file);
+    if (!skill || real.startsWith(ownDir) || copies.has(real)) return;
+    copies.set(real, { skill, file, loaded });
+  };
+  for (const entry of skillList ?? []) {
+    if (typeof entry?.filePath !== 'string' || typeof entry.name !== 'string') continue;
+    // The directory names the skill; the loaded name may carry a namespace or a `~N` suffix.
+    const names = [path.basename(path.dirname(entry.filePath)), entry.name.split('/').pop().replace(/~\d+$/, '')];
+    add(names.find((name) => skills.includes(name)), entry.filePath, { name: entry.name, source: entry.source ?? '?' });
+  }
+  for (const root of skillRoots ?? []) {
+    for (const skill of skills) {
+      const file = path.join(root, skill, 'SKILL.md');
+      if (fs.existsSync(file)) add(skill, file, null);
+    }
+  }
+  return [...copies.values()];
 }
 
-// reserved: the reserved-names.json object or null; skillList: `omp skill list --json` entries or null.
-export function checkNameCollisions({ repoRoot, skills, reserved, skillList }) {
+function duplicateFindings(repoRoot, skills, skillList, skillRoots) {
+  return externalCopies(repoRoot, skills, skillList, skillRoots).map(({ skill, file, loaded }) => {
+    const state = COPY_STATE[compareCopy(readSkill(repoRoot, skill).file, file)];
+    const how = loaded ? `출처 ${loaded.source}, 로드 이름 \`${loaded.name}\`` : '로드 목록에 없음';
+    return makeFinding({
+      code: 'NAME-DUP', severity: state.severity, skill, line: nameLineOf(repoRoot, skill), key: file,
+      message: `같은 이름의 스킬이 다른 출처에 있습니다: ${file} (${how}, ${state.text}).`,
+    });
+  });
+}
+
+// reserved: the reserved-names.json object or null. skillList: `omp skill list --json` entries or
+// null. skillRoots: directories whose `<name>/SKILL.md` children are compared by name.
+export function checkNameCollisions({ repoRoot, skills, reserved, skillList, skillRoots = [] }) {
   const fromReserved = reserved ? skills.flatMap((skill) => reservedFindings(repoRoot, skill, reserved)) : [];
-  const fromCopies = skillList ? duplicateFindings(repoRoot, skills, skillList) : [];
-  return [...fromReserved, ...fromCopies];
+  return [...fromReserved, ...duplicateFindings(repoRoot, skills, skillList, skillRoots)];
 }
 
 // ---------- 3. body consistency ----------------------------------------------------------------
 
 const CODE_SPAN = /`([^`\n]+)`/g;
 const PATH_TOKEN = /(?<![\w./~-])((?:\.[A-Za-z][\w-]*|[A-Za-z][\w-]*)(?:\/[\w.@-]+)+)/g;
-const PLACEHOLDER_NEXT = new Set(['<', '*', '{', '$', '[']);
+const PLACEHOLDER_AFTER = /^[./]*[<*{$[]/; // the token runs into a template placeholder: `review-<ts>.json`, `dir/<id>.json`, `name.<ext>`
 const FILE_EXT = /\.(?:md|mjs|js|ts|sh|json|jsonl|ya?ml|html|txt)$/;
-const SKILL_REF = /\/skill:([a-z0-9][a-z0-9-]*)/g;
+const SKILL_REF = /\/skill:([a-z0-9][a-z0-9-]*(?:\/[a-z0-9][a-z0-9-]*)*)/g;
 const AGENT_REFS = [
   /`([a-z][a-z0-9-]*)`\s*(?:에이전트|agents?\b)/gi,
   /(?<![\w`/-])([a-z][a-z0-9-]*[a-z0-9])\s+에이전트/g,
@@ -308,7 +342,7 @@ function collectRefs(lines, firstLine, collect) {
   const refs = new Map();
   lines.forEach((line, index) => {
     if (index + 1 < firstLine) return;
-    for (const value of collect(line)) refs.set(value, [...(refs.get(value) ?? []), index + 1]);
+    for (const value of new Set(collect(line))) refs.set(value, [...(refs.get(value) ?? []), index + 1]);
   });
   return refs;
 }
@@ -321,7 +355,7 @@ function pathCandidates(line, roots) {
   for (const span of line.matchAll(CODE_SPAN)) {
     for (const match of span[1].matchAll(PATH_TOKEN)) {
       const raw = match[1].replace(/\.+$/, '');
-      if (PLACEHOLDER_NEXT.has(span[1][match.index + raw.length])) continue;
+      if (PLACEHOLDER_AFTER.test(span[1].slice(match.index + raw.length))) continue;
       if (roots.has(raw.split('/')[0]) || FILE_EXT.test(raw)) found.push(raw);
     }
   }
@@ -432,7 +466,11 @@ export function checkBodies({ repoRoot, skills, knownAgents, expectedAbsent }) {
 
 function readJsonIfPresent(file) {
   if (!file || !fs.existsSync(file)) return null;
-  return JSON.parse(fs.readFileSync(file, 'utf8'));
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    throw new Error(`${file}: 읽을 수 없는 JSON입니다 (${error.message})`);
+  }
 }
 
 function repoAgentNames(repoRoot) {
@@ -447,13 +485,13 @@ function sortFindings(findings) {
 }
 
 // skillList / ompVersion are resolved by the caller (the CLI asks the installed omp); null = unmeasured.
-export function runCheck({ repoRoot, sessionsDir, dbPath, repoPrefixes, reservedPath, expectedAbsentPath, skillList, skillListReason, ompVersion, now }) {
+export function runCheck({ repoRoot, sessionsDir, dbPath, repoPrefixes, reservedPath, expectedAbsentPath, skillList, skillListReason, skillRoots = [], ompVersion, now }) {
   const skills = listRepoSkills(repoRoot);
   const reserved = readJsonIfPresent(reservedPath);
   const expectedAbsent = readJsonIfPresent(expectedAbsentPath) ?? {};
   const knownAgents = [...repoAgentNames(repoRoot), ...(reserved?.bundled_agents ?? [])];
   const bodies = checkBodies({ repoRoot, skills, knownAgents, expectedAbsent });
-  const collisions = checkNameCollisions({ repoRoot, skills, reserved, skillList });
+  const collisions = checkNameCollisions({ repoRoot, skills, reserved, skillList, skillRoots });
   return {
     generatedAt: now ?? new Date().toISOString(),
     repoRoot, skills, repoPrefixes,
@@ -461,7 +499,7 @@ export function runCheck({ repoRoot, sessionsDir, dbPath, repoPrefixes, reserved
     ompVersion: ompVersion ?? null,
     sessions: collectSessionUsage({ sessionsDir, repoPrefixes, skills }),
     commands: collectCommandUsage({ dbPath, skills }),
-    crossSource: skillList ? { measured: true, loaded: skillList.length } : { measured: false, reason: skillListReason ?? 'omp skill list 결과 없음' },
+    crossSource: { loaded: skillList ? skillList.length : null, reason: skillListReason ?? 'omp skill list 결과 없음', roots: skillRoots },
     lines: bodies.lines,
     suppressed: bodies.suppressed,
     findings: sortFindings([...collisions, ...bodies.findings]),
@@ -484,11 +522,11 @@ function reportHeader(result) {
       ? `- 예약 이름 기준: omp ${reserved.ompVersion} (\`reserved-names.json\`, ${reserved.generatedAt}), 설치된 omp: ${installed}${stale}`
       : `- 예약 이름 기준: ${UNMEASURED} — reserved-names.json 없음`,
     sessions.measured
-      ? `- 세션 원천: \`${sessions.dir}\` (세션 파일 ${sessions.files}개${sessions.unreadable ? `, 읽지 못한 파일 ${sessions.unreadable}개` : ''})`
+      ? `- 세션 원천: \`${sessions.dir}\` (세션 파일 ${sessions.files}개${sessions.unreadable ? `, 읽지 못한 파일·디렉터리 ${sessions.unreadable}개` : ''})`
       : `- 세션 원천: ${UNMEASURED} — ${sessions.reason}`,
     `- 리포 범위(세션 cwd 접두): ${result.repoPrefixes.map((p) => `\`${p}\``).join(', ') || '없음'}`,
     commands.measured ? `- \`/skill:\` 호출 원천: \`${commands.db}\`의 \`command_usage\`` : `- \`/skill:\` 호출 원천: ${UNMEASURED} — ${commands.reason}`,
-    crossSource.measured ? `- 출처 간 사본 원천: \`omp skill list --json\` (로드된 스킬 ${crossSource.loaded}개)` : `- 출처 간 사본: ${UNMEASURED} — ${crossSource.reason}`,
+    `- 출처 간 사본 원천: \`omp skill list --json\` ${crossSource.loaded === null ? `${UNMEASURED} — ${crossSource.reason}` : `(로드된 스킬 ${crossSource.loaded}개)`}, 스킬 디렉터리 ${crossSource.roots.map((p) => `\`${p}\``).join(', ') || '없음'}`,
     `- 억제한 경로 참조: gitignore 대상 ${suppressed.gitignored}건, 예상된 부재(\`expected-absent-paths.json\`) ${suppressed.expected}건`,
   ];
 }
@@ -569,7 +607,7 @@ export function parseCliCommands(helpText) {
 }
 
 function run(bin, args, options = {}) {
-  const result = spawnSync(bin, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, ...options });
+  const result = spawnSync(bin, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: SUBPROCESS_TIMEOUT_MS, ...options });
   if (result.error || result.status !== 0) {
     const detail = result.error?.message ?? ((result.stderr || '').trim() || `exit ${result.status}`);
     throw new Error(`${bin} ${args.join(' ')} 실패: ${detail}`);
@@ -606,9 +644,6 @@ function refreshReserved({ ompBin, reservedPath }) {
   const builtinFiles = listing.map((entry) => entry.name).filter((name) => /^builtin-.*\.ts$/.test(name));
   const parsed = builtinFiles.map((name) => parseBuiltinSlashCommands(upstreamRaw(`${UPSTREAM_SLASH_DIR}/${name}`, tag)));
   const builtinCommands = sortedUnique(parsed.flatMap((p) => p.names));
-  if (builtinCommands.length < MIN_BUILTIN_COMMANDS) {
-    throw new Error(`빌트인 명령을 ${builtinCommands.length}개만 읽었습니다 — 업스트림 소스 형식이 바뀌었을 수 있습니다. 기준 파일을 쓰지 않습니다.`);
-  }
   const snapshot = {
     schema: 'omp-reserved-names/v1',
     omp_version: version,
@@ -625,21 +660,32 @@ function refreshReserved({ ompBin, reservedPath }) {
     cli_subcommands: sortedUnique(parseCliCommands(run(ompBin, ['--help']))),
     bundled_agents: sortedUnique(bundledAgents(ompBin)),
   };
+  assertPlausibleSnapshot(snapshot);
   fs.writeFileSync(reservedPath, `${JSON.stringify(snapshot, null, 2)}\n`);
   return snapshot;
+}
+
+// A snapshot is only written when every list reached a plausible size: an upstream format change
+// makes a parser return nothing, and the names that list guarded would otherwise vanish silently.
+export function assertPlausibleSnapshot(snapshot) {
+  const short = Object.entries(SNAPSHOT_MINIMUMS).filter(([key, min]) => (snapshot[key]?.length ?? 0) < min);
+  if (short.length === 0) return;
+  const detail = short.map(([key, min]) => `${key} ${snapshot[key]?.length ?? 0}개(최소 ${min}개)`).join(', ');
+  throw new Error(`예약 이름을 충분히 읽지 못했습니다: ${detail}. 업스트림 소스나 omp 출력 형식이 바뀌었을 수 있습니다. 기준 파일을 쓰지 않습니다.`);
 }
 
 // ---------- CLI --------------------------------------------------------------------------------
 
 const USAGE = `usage:
   skill-tune.mjs check [--repo <dir>] [--agent-dir <dir>] [--sessions-dir <dir>] [--db <file>]
-                       [--repo-prefix <dir>]... [--skill-list-json <file>] [--omp-bin <bin>]
-                       [--reserved <file>] [--format md|json] [--out <file>]
+                       [--repo-prefix <dir>]... [--skill-root <dir>]... [--skill-list-json <file>]
+                       [--omp-bin <bin>] [--reserved <file>] [--format md|json] [--out <file>]
   skill-tune.mjs refresh-reserved [--omp-bin <bin>] [--reserved <file>]`;
 
 const OPTIONS = {
   repo: { type: 'string' }, 'agent-dir': { type: 'string' }, 'sessions-dir': { type: 'string' }, db: { type: 'string' },
-  'repo-prefix': { type: 'string', multiple: true }, 'skill-list-json': { type: 'string' }, 'omp-bin': { type: 'string' },
+  'repo-prefix': { type: 'string', multiple: true }, 'skill-root': { type: 'string', multiple: true },
+  'skill-list-json': { type: 'string' }, 'omp-bin': { type: 'string' },
   reserved: { type: 'string' }, format: { type: 'string' }, out: { type: 'string' },
 };
 
@@ -660,20 +706,39 @@ function loadSkillList(values, repoRoot, ompBin) {
   }
 }
 
+// Where same-named copies can live: the conventional user-level skill directories, every directory
+// the loader reported a skill from, and any --skill-root. Only existing directories are kept.
+function skillRootsFor(values, repoRoot, agentDir, skillList) {
+  const ownDir = realOrResolved(path.join(repoRoot, SKILLS_REL));
+  const home = os.homedir();
+  const listed = (skillList ?? []).filter((entry) => typeof entry?.filePath === 'string').map((entry) => path.dirname(path.dirname(entry.filePath)));
+  const candidates = [path.join(agentDir, 'skills'), path.join(home, '.claude', 'skills'), path.join(home, '.agents', 'skills'), ...listed, ...(values['skill-root'] ?? [])];
+  return [...new Set(candidates.map((dir) => realOrResolved(dir)))].filter((dir) => dir !== ownDir && fs.existsSync(dir));
+}
+
+// The inspection never changes a skill, so its report cannot be aimed at one either.
+function assertReportTarget(repoRoot, target) {
+  const skillsDir = realOrResolved(path.join(repoRoot, SKILLS_REL)) + path.sep;
+  const resolved = path.join(realOrResolved(path.dirname(path.resolve(target))), path.basename(target));
+  if (`${resolved}${path.sep}`.startsWith(skillsDir)) throw new Error(`--out은 ${SKILLS_REL}/ 아래에 쓸 수 없습니다: ${target}`);
+}
+
 function checkCommand(values) {
   const repoRoot = path.resolve(values.repo ?? gitLines(process.cwd(), ['rev-parse', '--show-toplevel'])[0] ?? process.cwd());
-  const agentDir = path.resolve(values['agent-dir'] ?? process.env.PI_CODING_AGENT_DIR ?? path.join(os.homedir(), '.omp', 'agent'));
+  if (values.out) assertReportTarget(repoRoot, values.out);
+  const agentDir = path.resolve(values['agent-dir'] || process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.omp', 'agent'));
   const ompBin = values['omp-bin'] ?? 'omp';
   const worktrees = gitLines(repoRoot, ['worktree', 'list', '--porcelain']).filter((line) => line.startsWith('worktree ')).map((line) => line.slice('worktree '.length));
   const repoPrefixes = [...new Set([repoRoot, ...worktrees, ...(values['repo-prefix'] ?? [])].map((p) => path.resolve(p)))];
+  const loaded = loadSkillList(values, repoRoot, ompBin);
   const result = runCheck({
-    repoRoot, repoPrefixes,
+    repoRoot, repoPrefixes, ...loaded,
+    skillRoots: skillRootsFor(values, repoRoot, agentDir, loaded.skillList),
     sessionsDir: path.resolve(values['sessions-dir'] ?? path.join(agentDir, 'sessions')),
     dbPath: path.resolve(values.db ?? path.join(agentDir, 'agent.db')),
     reservedPath: path.resolve(values.reserved ?? path.join(SKILL_DIR, 'reserved-names.json')),
     expectedAbsentPath: path.join(SKILL_DIR, 'expected-absent-paths.json'),
     ompVersion: installedOmpVersion(ompBin),
-    ...loadSkillList(values, repoRoot, ompBin),
   });
   const output = values.format === 'json' ? `${JSON.stringify(result, null, 2)}\n` : renderReport(result);
   if (values.out) fs.writeFileSync(values.out, output);
@@ -695,7 +760,7 @@ function main(argv) {
   throw new Error(USAGE);
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realOrResolved(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     main(process.argv.slice(2));
   } catch (error) {

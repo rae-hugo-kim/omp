@@ -87,7 +87,7 @@ MCP 서버(OMP 설정에 등록)를 설치합니다. docs는 빌드 도구 없�
 ├── .github/workflows/     harness-ci.yml — 서버측 백스톱 3종 (아카이브 유출·suite·docs drift; 이 저장소에만)
 ├── .gitattributes         audit.jsonl merge=union, *.sh·.githooks/* eol=lf
 ├── .omp/
-│   ├── skills/            스킬 정의 (OMP 네이티브 발견, 15개)
+│   ├── skills/            스킬 정의 (OMP 네이티브 발견, 16개)
 │   ├── agents/            reviewer / verifier 에이전트 (task 도구로 위임)
 │   └── extensions/harness/
 │       ├── index.ts       게이트 배선 확장 (tool_call/tool_result/before_agent_start/session_start)

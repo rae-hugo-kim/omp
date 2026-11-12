@@ -87,7 +87,7 @@ Skills also trigger from natural language ("let's kick off", "brainstorm this", 
 ├── .github/workflows/     harness-ci.yml — three server-side backstop checks (archive leak, suite, docs drift; this repo only)
 ├── .gitattributes         audit.jsonl merge=union, *.sh and .githooks/* eol=lf
 ├── .omp/
-│   ├── skills/            skill definitions (OMP-native discovery, 15 skills)
+│   ├── skills/            skill definitions (OMP-native discovery, 16 skills)
 │   ├── agents/            reviewer / verifier agents (delegated via the task tool)
 │   └── extensions/harness/
 │       ├── index.ts       gate-wiring extension (tool_call/tool_result/before_agent_start/session_start)
