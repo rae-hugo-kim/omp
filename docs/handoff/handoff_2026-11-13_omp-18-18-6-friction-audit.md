@@ -2,7 +2,7 @@
 
 - 발신: omp 리포 gh-loop 워커 세션 (#129, 2026-11-13, 호스트 설치 버전 `omp 18.18.6`, 대조 대상 `v18.11.2` ~ `v18.18.6`)
 - 수신: omp 리포(하네스 SoT) 후속 작업 세션 (사이클 ①~④ 분할 제안)
-- 상태: 분석 완료, 구현 미착수 (이슈 미발행 — 분할안은 §7, 생성은 사용자 승인 뒤 `gh-loop` Stage 1)
+- 상태: 분석 완료, 분할안 처리됨 — ① #109·③ #110에 댓글로 합침, ② #135(`needs-decision`), ④ 미생성 (2026-11-13 코디네이터 결정; 구현은 각 이슈에서)
 - 역할: `seed.yaml`의 전신(pre-seed 입력) — 이슈 발행 후 권위는 `docs/harness/seed.yaml`로 넘어갑니다 (`docs/rules/artifact_roles_contract.md` §Handoff).
 - 절차: `.omp/skills/harness-friction/SKILL.md` 1~7단계. 이 문서가 그 스킬의 첫 실행 산출물입니다.
 
@@ -132,7 +132,7 @@
 | **③ #110에 합침 — 서브에이전트 계약·문서 18.18.6 정합** | D1, D2, D3, D4, D6, D7, D8 + 기존 F5·F6·D1~D5(2026-10-16) | `.omp/agents/reviewer.md`, `.omp/rules/harness-agent_routing.md`, `.omp/rules/harness-harness_integration_contract.md`, `.omp/skills/{gh-loop,gh-fanout,bootstrap,kickoff,brainstorm,init,harness-skill-tune}/SKILL.md`, `.omp/extensions/harness/gh-loop-record.mjs`(주석), `.omp/extensions/harness/gates/review-gate.mjs`(주석), `claudedocs/CLAUDEKR.md` | `node scripts/docs-drift`가 0 error로 통과하고, 빈 프로필에서 `omp -p --model @slow`가 가리키는 프로바이더가 `harness-agent_routing.md:43`의 서술과 일치한다. |
 | **④ 선택 — 잔존면 기록·실측** | C4(세션 셸 환경 지속), U1(지연 로드 `session_start`), U2(`cd` 호이스팅 이벤트 형태), U3(`gc --strip`·압축) | `.omp/rules/harness-harness_integration_contract.md` Known residual surfaces, 필요 시 `gates/destructive-guard.mjs` advisory 패턴 | 소비 리포 1곳에서 `HARNESS_DEBUG=1`로 `cd <B>; git commit`과 `export GIT_DIR=…` 2-호출 시나리오를 실측한 결과가 계약 문서에 인용돼 있다. |
 
-이 감사 자체가 만든 후속 하나(omp 변경이 아니라 하네스 내부 정합): `.omp/skills/init/SKILL.md`의 소스 전용 자산 제거 목록에 `harness-friction`(이 PR)이 올랐고 `harness-skill-tune`도 #128이 올릴 예정이지만, `.omp/extensions/harness/gates/risk-assess.mjs:38,189-195`의 `BOOTSTRAP_CLEANUP_*`에는 `.omp/skills/` 아래 소스 전용 스킬이 없어 소비 리포의 첫 정리 커밋이 수백 줄 삭제로 `high`로 채점되고 review-gate에 막힙니다(리뷰 r1 지적). #128과 같은 사이클에서 `risk-assess.mjs`의 정리 집합에 두 디렉터리를 더하는 것을 권합니다.
+이 감사 자체가 만든 후속 하나(omp 변경이 아니라 하네스 내부 정합): `.omp/skills/init/SKILL.md`의 소스 전용 자산 제거 목록에 `harness-friction`(이 PR)과 `harness-skill-tune`(#128)이 올랐지만, `.omp/extensions/harness/gates/risk-assess.mjs:38,189-195`의 `BOOTSTRAP_CLEANUP_*`에는 `.omp/skills/` 아래 소스 전용 스킬이 없어 소비 리포의 첫 정리 커밋이 수백 줄 삭제로 `high`로 채점되고 review-gate에 막힙니다(리뷰 r1 지적). 그래서 두 항목 모두 "제거 대상이지만 이 커밋에서는 건너뛴다"로 적혀 있고, 창을 넓혀 삭제로 되돌리는 게이트 변경은 #134가 맡습니다. 보고서 §7 분할안의 처리 결과: ①은 #109, ③은 #110에 댓글로 합쳐졌고 ②는 #135(`needs-decision`)로 났으며 ④는 만들지 않았습니다(2026-11-13 코디네이터 결정).
 
 ---
 
