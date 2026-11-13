@@ -92,6 +92,8 @@ cd <project-name>
                                    평소대로 채점된다 — .mjs 796줄 삭제로 high가 되어 Phase 5의 첫 커밋을
                                    review-gate가 막는다. 창이 이 경로를 덮게 되면 그때 이 줄을 삭제로 바꾼다.
                                    남겨 둔 디렉터리를 지우려면 리뷰 증거가 있는 별도 커밋으로 한다.
+   - .omp/skills/harness-friction/ → 삭제 (omp 릴리스 대 하네스 마찰 감사 스킬 — 소스 리포 전용, harness-sync
+                                   화이트리스트 밖; 기준 버전 기록 baseline.json도 이 디렉터리 안에 있어 함께 지워진다)
    (artifacts/README.md는 소비자 자산 — 유지)
    판단 기준: `scripts/harness-sync.sh`의 PATHS 배열이 "소비 리포가 가져야 할 하네스 파일"의
    SoT다. 그 밖의 하네스성 파일이 템플릿에서 딸려왔다면 같은 이유로 제거 대상이다.
