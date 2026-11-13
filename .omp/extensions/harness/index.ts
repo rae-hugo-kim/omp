@@ -744,9 +744,9 @@ export default function harness(pi: HarnessExtensionApi): void {
 
 	pi.on("session_start", async (_event, ctx) => {
 		const session_state = { cwd: ctx.cwd };
-		// Whether the notes below reach a person. The version gate runs its one-shot omp update probe only
-		// then (#31): a headless (`omp -p`) or subagent session start has no UI and would spend the note
-		// into the logger.
+		// Whether this session has a UI context to notify. The version gate runs its one-shot omp update
+		// probe only then (#31): a headless (`omp -p`) or subagent session start has none and would spend
+		// the note into the logger.
 		const has_ui = Boolean(ctx.hasUI && ctx.ui?.notify);
 		try {
 			const run = await runGate("harness-version-check.mjs", { session_state, has_ui }, VERSION_CHECK_TIMEOUT_MS);

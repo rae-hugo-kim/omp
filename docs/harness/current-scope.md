@@ -1,7 +1,7 @@
 # Current Scope: omp-update-detection-31 (P2 thread)
 
 **Created**: 2026-11-13
-**Seed**: docs/harness/seed.yaml (task_id 20261113-020816-3d97, v4)
+**Seed**: docs/harness/seed.yaml (task_id 20261113-020816-3d97, v5)
 **Thread-ID**: T-20261113035727-f967
 **Thread**: gh-loop #31 worker: decision B — probe only on UI-facing session start
 

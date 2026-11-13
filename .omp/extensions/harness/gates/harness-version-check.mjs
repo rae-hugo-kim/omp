@@ -20,7 +20,7 @@
 // commit, then merge). Cache file: harness-version-check.linked.json (main/single checkouts keep
 // harness-version-check.json).
 //
-// omp update probe (#31): at a session start whose output reaches a UI (payload `has_ui: true`),
+// omp update probe (#31): at a session start that has a UI context (payload `has_ui: true`),
 // `omp --version` is compared with the version recorded in .omp/state/omp-version.json; a change
 // emits one HARNESS NOTE (emitIfOmpChanged).
 
@@ -93,12 +93,15 @@ emitIfHooksInactive(cwd);
 // AGENTS.md at the same depth when a non-empty `.omp/AGENTS.md` exists, so the harness
 // policy is silently absent from the session. Runs before the source-repo skip.
 emitIfPolicyShadowed(cwd);
-// omp update probe (#31): only for a session start whose output reaches a person. index.ts passes
-// `has_ui: true` from session_start when the session has a UI (pinned by
+// omp update probe (#31): only for a session start that has a UI context. index.ts passes
+// `has_ui: true` from session_start when the session has one (pinned by
 // tests/drift-recheck-wiring.test.mjs). Every other call leaves the one-shot note alone: the
 // turn-start and post-commit rechecks hand gate stdout to the AGENT, a headless `omp -p` or subagent
 // session start would only log it (measured 2026-11-13: ctx.hasUI is false there), and a manual run
-// carries no flag. Runs before the source-repo skip: both repo kinds get it.
+// carries no flag. Known limit: `has_ui` is omp's ctx.hasUI, not proof that a person sees the note —
+// an ACP session reports a UI whose `notify` only logs (omp extensions doc, "ACP mode") and shares
+// ctx.mode "rpc" with RPC clients, so it cannot be told apart here and can still spend the note
+// unseen. Runs before the source-repo skip: both repo kinds get it.
 if (data?.has_ui === true) emitIfOmpChanged(cwd, Boolean(meta?.source_remote));
 
 const sourceRemote = meta.source_remote;
