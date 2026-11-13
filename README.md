@@ -87,7 +87,7 @@ MCP 서버(OMP 설정에 등록)를 설치합니다. docs는 빌드 도구 없�
 ├── .github/workflows/     harness-ci.yml — 서버측 백스톱 3종 (아카이브 유출·suite·docs drift; 이 저장소에만)
 ├── .gitattributes         audit.jsonl merge=union, *.sh·.githooks/* eol=lf
 ├── .omp/
-│   ├── skills/            스킬 정의 (OMP 네이티브 발견, 15개)
+│   ├── skills/            스킬 정의 (OMP 네이티브 발견, 16개)
 │   ├── agents/            reviewer / verifier 에이전트 (task 도구로 위임)
 │   └── extensions/harness/
 │       ├── index.ts       게이트 배선 확장 (tool_call/tool_result/before_agent_start/session_start)
@@ -125,6 +125,7 @@ OMP에서 스킬은 `/skill:<이름>`으로 호출하거나, 설명에 매칭되
 | `/skill:grepai-search` | 의미 기반 코드 검색 (콜드스타트 탐색) |
 | `/skill:gh-loop` | finding → 이슈 → 수정 → PR → 교차검증 → HITL 루프 (머지 자동 안 함). **dispatch 모드**: 메인 세션은 코디네이터로 이슈 정리·결정 전달·머지만 하고, 작업은 Orca 워크트리의 워커 세션이 합니다. 워커 모델은 매번 사용자가 고르고(규모 기반 추천 한 줄 표시, 자동 선택 없음 — `gh-loop-record.mjs`), 상태는 라벨 3종(`needs-decision` / `needs-review` / `agent-working`)으로 봅니다. 머지는 `--match-head-commit`로 승인된 head만 |
 | `/skill:gh-fanout` | 멀티세션 — gh-loop을 여러 이슈에 worktree 격리 병렬 실행 (관측 = Orca 카드 + GitHub). 병렬 PR이 `docs/harness/audit.jsonl` 꼬리에서 충돌하므로 **PR은 순차 머지**하고 뒤 PR은 소유 워커가 최신 main 위로 rebase합니다(`.gitattributes`의 `merge=union`은 로컬 rebase만 자동 해결, GitHub은 따르지 않음 — #71) |
+| `/skill:harness-skill-tune` | 하네스 스킬 점검 (읽기 전용, 소스 리포 전용) — 스킬별 사용 빈도, omp 예약 이름·다른 출처 스킬과의 이름 충돌, `SKILL.md` 정합을 보고서 하나로 냅니다 |
 
 ## 기존 Claude Code 프로젝트 이주
 
