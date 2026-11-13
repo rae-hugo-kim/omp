@@ -80,3 +80,16 @@ test('session_start keeps the gate default window (no max_age_ms override)', () 
   assert.ok(!/max_age_ms/.test(block),
     'session start must rely on the gate default (24h) — the 1h recheck window is mid-session only');
 });
+
+// omp update probe (#31): the gate runs its one-shot probe only when told its output reaches a
+// person. session_start derives that from ctx.hasUI (false for `omp -p` and for subagent sessions —
+// measured 2026-11-13) and passes it as `has_ui`; the two agent-facing recheck paths never pass it.
+test('session_start passes has_ui (derived from ctx.hasUI) to the version gate; the recheck paths never do', () => {
+  const block = handlerBlock('session_start');
+  assert.match(block, /const\s+has_ui\s*=[^;]*ctx\.hasUI[^;]*;/,
+    'has_ui must be derived from the session UI context, not hard-coded');
+  assert.match(block, /runGate\(\s*"harness-version-check\.mjs"\s*,\s*\{\s*session_state\s*,\s*has_ui\s*\}/,
+    'session start must hand has_ui to harness-version-check.mjs — without it the omp update probe never runs');
+  assert.ok(!handlerBlock('before_agent_start').includes('has_ui'), 'turn-start recheck output goes to the agent — it must not claim a UI');
+  assert.ok(!bashBranch().includes('has_ui'), 'post-commit recheck output goes to the agent — it must not claim a UI');
+});

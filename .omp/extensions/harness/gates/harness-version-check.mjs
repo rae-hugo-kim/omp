@@ -19,6 +19,10 @@
 // merge main's branch here) or STALE (linked worktree) (main is behind too → sync in the main checkout,
 // commit, then merge). Cache file: harness-version-check.linked.json (main/single checkouts keep
 // harness-version-check.json).
+//
+// omp update probe (#31): at a session start that has a UI context (payload `has_ui: true`),
+// `omp --version` is compared with the version recorded in .omp/state/omp-version.json; a change
+// emits one HARNESS NOTE (emitIfOmpChanged).
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, renameSync, realpathSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
@@ -34,6 +38,20 @@ const SAFE_REF = /^[A-Za-z0-9][A-Za-z0-9._\/-]*$/;
 // Ambient repo-location variables (a hook or wrapper may export them) would redirect the linked-worktree
 // git calls away from the session cwd and silently reinstate the pre-#68 directive.
 const REPO_ENV_VARS = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE', 'GIT_PREFIX', 'GIT_NAMESPACE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES'];
+// A line of `omp --version` output that carries the version (`omp/18.18.6` today): an optional
+// `omp/` or `omp ` prefix, an optional `v`, a dotted numeric version with an optional
+// prerelease/build suffix, then whitespace or end of line. Group 1 is set for the `omp/` prefix —
+// such a line is authoritative; the looser shapes are used only when no line has it, so a banner that
+// names another version ("omp 18.20.0 is available") is not taken for the installed one. Text after
+// the version (`omp/18.19.0 (canary)`) and unrelated lines are ignored: the common cosmetic changes do
+// not silently switch the probe off (other shapes still read as "no version"). The same pattern vets
+// the RECORDED value before a notice echoes it.
+const OMP_VERSION_LINE_RE = /^(?:(omp\/)|omp )?v?(\d+(?:\.\d+){2,}(?:[-+][0-9A-Za-z.+-]*[0-9A-Za-z])?)(?:\s|$)/;
+const OMP_VERSION_MAX_LENGTH = 64;   // longer than any real version; bounds what a notice can echo
+// `omp --version` answers in ~15 ms. The bound (enforced with SIGKILL — a process that ignores
+// SIGTERM would otherwise hold the gate) keeps a hung omp from eating the caller's 15s gate budget,
+// which the ls-remote probe (10s) further down also draws on.
+const OMP_VERSION_TIMEOUT_MS = 2000;
 let linkedMemo;   // detectLinkedWorktree(cwd) result, computed at most once and only when something needs it
 function getLinked() {
   if (linkedMemo === undefined) linkedMemo = detectLinkedWorktree(cwd);
@@ -75,6 +93,16 @@ emitIfHooksInactive(cwd);
 // AGENTS.md at the same depth when a non-empty `.omp/AGENTS.md` exists, so the harness
 // policy is silently absent from the session. Runs before the source-repo skip.
 emitIfPolicyShadowed(cwd);
+// omp update probe (#31): only for a session start that has a UI context. index.ts passes
+// `has_ui: true` from session_start when the session has one (pinned by
+// tests/drift-recheck-wiring.test.mjs). Every other call leaves the one-shot note alone: the
+// turn-start and post-commit rechecks hand gate stdout to the AGENT, a headless `omp -p` or subagent
+// session start would only log it (measured 2026-11-13: ctx.hasUI is false there), and a manual run
+// carries no flag. Known limit: `has_ui` is omp's ctx.hasUI, not proof that a person sees the note —
+// an ACP session reports a UI whose `notify` only logs (omp extensions doc, "ACP mode") and shares
+// ctx.mode "rpc" with RPC clients, so it cannot be told apart here and can still spend the note
+// unseen. Runs before the source-repo skip: both repo kinds get it.
+if (data?.has_ui === true) emitIfOmpChanged(cwd, Boolean(meta?.source_remote));
 
 const sourceRemote = meta.source_remote;
 if (!sourceRemote) process.exit(0);
@@ -376,6 +404,74 @@ function emitIfPolicyShadowed(root) {
   writeNoticeMarker(markerPath, { file: '.omp/AGENTS.md' });
 
   console.log('HARNESS POLICY SHADOWED: `.omp/AGENTS.md` exists, so OMP\'s native provider (priority 100) replaces `AGENTS.md` at the same depth — the harness policy is NOT in this session\'s context. Move its content to `.omp/rules/<project>-context.md` (frontmatter `alwaysApply: true`), delete `.omp/AGENTS.md`, then restart the session (/new) so the policy loads (AGENTS.md "Consumer extension points").');
+}
+
+// omp update probe (#31). A harness defect that only a NEW omp exposes cannot be caught by reading
+// release notes in advance (18.1.13 turned an unhandled gate-stdin EPIPE into a session-start crash;
+// 18.18.4 retired a provider the adversary panel spawns), so the post-update audit needs a mechanical
+// trigger. Compares `omp --version` with the version recorded in .omp/state/omp-version.json:
+//   - changed => one HARNESS NOTE (old -> new) and the record moves, so a change is announced once;
+//   - no usable record (first run, corrupt file, a value that is not a version) => record only;
+//   - omp not runnable, or no version in its output => nothing: no note, no record write.
+// The note is still emitted when the record cannot be written (it then repeats at every session
+// start — the at-least-once side, like the notice markers below). Never throws, never exits.
+//
+// Linked worktrees neither note nor record. What the note asks for is per REPO and belongs to the
+// main checkout: a consumer's harness-check refuses to sync in a linked worktree (#68), and the
+// source repo's friction audit is one per release. A per-worktree record would repeat the same note
+// in every long-lived worktree (often long after the audit) while a fresh one starts silent anyway;
+// a record shared across worktrees would let an unattended worker session spend the one-shot. Known
+// limit: a repo whose main is bare, or whose main checkout never hosts a session, is not notified.
+// When git cannot say whether this is a linked worktree, the checkout counts as a main one (the
+// notifying side).
+//
+// Two more limits, both accepted: the read-compare-write is not serialized, so two session starts in
+// the same instant can both emit the note; and the version is that of the `omp` on PATH, which after
+// an in-place update is not the binary a still-running session was started from.
+function emitIfOmpChanged(root, isConsumer) {
+  if (getLinked()) return;
+  const current = readOmpVersion();
+  if (!current) return;
+
+  const recordPath = join(root, '.omp/state/omp-version.json');
+  let recorded = null;
+  try { recorded = parseOmpVersion(JSON.parse(readFileSync(recordPath, 'utf-8')).version); } catch { /* no record yet, or an unreadable one: first run */ }
+  if (recorded === current) return;
+
+  try {
+    mkdirSync(dirname(recordPath), { recursive: true });
+    writeFileSync(recordPath, JSON.stringify({ version: current, recordedAt: Date.now() }, null, 2));
+  } catch { /* ignore record write failure */ }
+  if (!recorded) return;
+
+  const next = isConsumer
+    ? 'Run /skill:harness-check to pick up any harness changes the source repo has shipped for it.'
+    : 'Run /skill:harness-friction to audit the new release against the harness (gates, rules, agents).';
+  console.log(`HARNESS NOTE: omp changed ${recorded} -> ${current} since the last session in this checkout. ${next}`);
+}
+
+// Version reported by the `omp` on PATH; null when it cannot be run (absent, non-zero exit, timeout)
+// or prints no version line.
+function readOmpVersion() {
+  try {
+    return parseOmpVersion(execFileSync('omp', ['--version'],
+      { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: OMP_VERSION_TIMEOUT_MS, killSignal: 'SIGKILL' }));
+  } catch { return null; }
+}
+
+// The version in `text`: that of the first `omp/`-prefixed version line, else of the first line
+// shaped like a version; null when there is none or the value is implausibly long.
+function parseOmpVersion(text) {
+  if (typeof text !== 'string') return null;
+  const bounded = (version) => (version && version.length <= OMP_VERSION_MAX_LENGTH ? version : null);
+  let loose = null;
+  for (const line of text.split(/\r?\n/)) {
+    const match = OMP_VERSION_LINE_RE.exec(line.trim());
+    if (!match) continue;
+    if (match[1]) return bounded(match[2]);
+    loose ??= match[2];
+  }
+  return bounded(loose);
 }
 
 // Notice window shared by the health probes: true when a marker inside NOTICE_TTL_MS exists and

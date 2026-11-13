@@ -415,6 +415,8 @@ interface GatePayload {
 	tool_input?: Record<string, unknown>;
 	prompt?: string;
 	max_age_ms?: number;
+	/** session_start only: the gate's output will be shown to a person (omp update probe, #31). */
+	has_ui?: boolean;
 	session_state: { cwd: string };
 }
 
@@ -742,8 +744,12 @@ export default function harness(pi: HarnessExtensionApi): void {
 
 	pi.on("session_start", async (_event, ctx) => {
 		const session_state = { cwd: ctx.cwd };
+		// Whether this session has a UI context to notify. The version gate runs its one-shot omp update
+		// probe only then (#31): a headless (`omp -p`) or subagent session start has none and would spend
+		// the note into the logger.
+		const has_ui = Boolean(ctx.hasUI && ctx.ui?.notify);
 		try {
-			const run = await runGate("harness-version-check.mjs", { session_state }, VERSION_CHECK_TIMEOUT_MS);
+			const run = await runGate("harness-version-check.mjs", { session_state, has_ui }, VERSION_CHECK_TIMEOUT_MS);
 			const note = `${run.stdout}\n${run.stderr}`.trim();
 			if (note) { if (ctx.hasUI && ctx.ui?.notify) ctx.ui.notify(note, "warning"); else pi.logger?.info?.(note); }
 		} catch {
