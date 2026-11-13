@@ -328,7 +328,7 @@ option-A에서 "권한자 댓글 = 트리거"의 안전 정책:
 
 | Stage | Asset | 위치 |
 |---|---|---|
-| 0 dispatch / 재개 / 정리 / 세션 직접 결정 (코디네이터) | `orca worktree create --issue N`(카드 링크) · `terminal create --command "command omp --extension <EXT> --model … --thinking …"`(R8) · `terminal send` · `issue:<N>` 셀렉터 · `worktree rm` · `세션에서 직접 결정함` 댓글(R7) · `gh-loop-record.mjs recommend`/`dispatch`(규모 기반 추천 한 줄 + dispatch 튜플, #79) · (보류) `orca orchestration run-create`/`worker-start` | **Orca CLI**: `.omp/skills/orca-cli/SKILL.md` · **harness**: `.omp/extensions/harness/gh-loop-record.mjs` · 본 스킬 Stage 0 |
+| 0 dispatch / 재개 / 정리 / 세션 직접 결정 (코디네이터) | `orca worktree create --issue N`(카드 링크) · `terminal create --command "command omp --extension <EXT> --model … --thinking …"`(R8) · `terminal send` · `issue:<N>` 셀렉터 · `worktree rm` · `세션에서 직접 결정함` 댓글(R7) · `gh-loop-record.mjs recommend`/`dispatch`(규모 기반 추천 한 줄 + dispatch 튜플, #79) · (보류) `orca orchestration run-create`/`worker-start` | **Orca CLI**: `skill://orca-cli`(설치형 — 이 템플릿의 동기화 자산이 아닙니다) · **harness**: `.omp/extensions/harness/gh-loop-record.mjs` · 본 스킬 Stage 0 |
 | 1 finding→issue (dedup/throttle/label) | `gh issue create` + 헬퍼 | **harness(신규)**: `.omp/extensions/harness/gh-loop-issue.mjs` |
 | 2 issue→fix | autopilot / ralph + 하네스 게이트 | **OMC**(전역 스킬) + `.omp/extensions/harness/gates/` |
 | 3 fix→PR | `gh pr create` + `needs-review` (compr 절차) | **harness**: `.omp/skills/compr/SKILL.md` |

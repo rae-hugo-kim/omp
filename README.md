@@ -125,7 +125,7 @@ OMP에서 스킬은 `/skill:<이름>`으로 호출하거나, 설명에 매칭되
 | `/skill:grepai-search` | 의미 기반 코드 검색 (콜드스타트 탐색) |
 | `/skill:gh-loop` | finding → 이슈 → 수정 → PR → 교차검증 → HITL 루프 (머지 자동 안 함). **dispatch 모드**: 메인 세션은 코디네이터로 이슈 정리·결정 전달·머지만 하고, 작업은 Orca 워크트리의 워커 세션이 합니다. 워커 모델은 매번 사용자가 고르고(규모 기반 추천 한 줄 표시, 자동 선택 없음 — `gh-loop-record.mjs`), 상태는 라벨 3종(`needs-decision` / `needs-review` / `agent-working`)으로 봅니다. 머지는 `--match-head-commit`로 승인된 head만 |
 | `/skill:gh-fanout` | 멀티세션 — gh-loop을 여러 이슈에 worktree 격리 병렬 실행 (관측 = Orca 카드 + GitHub). 병렬 PR이 `docs/harness/audit.jsonl` 꼬리에서 충돌하므로 **PR은 순차 머지**하고 뒤 PR은 소유 워커가 최신 main 위로 rebase합니다(`.gitattributes`의 `merge=union`은 로컬 rebase만 자동 해결, GitHub은 따르지 않음 — #71) |
-| `/skill:harness-skill-tune` | 하네스 스킬 점검 (읽기 전용, 소스 리포 전용) — 스킬별 사용 빈도, omp 예약 이름·다른 출처 스킬과의 이름 충돌, `SKILL.md` 정합을 보고서 하나로 냅니다 |
+| `/skill:harness-skill-tune` | 하네스 스킬 점검·갱신 (소스 리포 전용) — 점검은 스킬별 사용 빈도, omp 예약 이름·다른 출처 스킬과의 이름 충돌, `SKILL.md` 정합을 보고서 하나로 내고(읽기 전용), 갱신은 그 지적을 기계적(정답이 하나인 참조 정정)과 판단 필요(개명·삭제·숨김·설명문·구조·frontmatter `name` — 사용자가 고른 것만 적용)로 나눠 반영하고 재점검으로 닫습니다. 직접 커밋하지 않습니다 |
 
 ## 기존 Claude Code 프로젝트 이주
 
