@@ -21,4 +21,4 @@
 - [x] AC5 — 보고서 §7 사이클 분할안(번호·확인 문장)이 있고 이슈를 만들지 않음
 - [x] AC6 — `adversary-argon`·`reviewer.md`의 패널 구성과 규칙 본문이 이 PR에서 바뀌지 않음
 - [x] AC7 — `.omp/skills/init/SKILL.md`의 소스 리포 전용 자산 제거 목록에 `.omp/skills/harness-friction/`이 있음
-- [x] AC8 — `node --test .omp/extensions/harness/tests/*.test.mjs`(796 pass)와 `node scripts/docs-drift`(OK) 통과, `CHANGELOG.md` `[Unreleased]`에 항목
+- [x] AC8 — `node --test .omp/extensions/harness/tests/*.test.mjs`(800 pass)와 `node scripts/docs-drift`(OK) 통과, `CHANGELOG.md` `[Unreleased]`에 항목
