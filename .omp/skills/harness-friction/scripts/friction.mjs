@@ -49,15 +49,17 @@ export function compareVersions(a, b) {
   return 0;
 }
 
-const versionOf = (tag) => parseVersion(tag)?.join('.') ?? null;
+// A release tag is exactly `vX.Y.Z` (or `X.Y.Z`); anything else (`nightly`, `v1.2.3-rc.1`) is not one of ours.
+const tagVersion = (tag) => (/^v?\d+\.\d+\.\d+$/.test(String(tag ?? '')) ? parseVersion(tag).join('.') : null);
+const versionOf = (text) => parseVersion(text)?.join('.') ?? null;
 
 // Releases with baseline < version <= to, ascending. Drafts and prereleases are left out: the
-// harness runs released binaries only. A tag that is not x.y.z is not a release of ours.
+// harness runs released binaries only.
 export function releasesInRange(list, from, to) {
   return list
-    .filter((r) => !r.isDraft && !r.isPrerelease && versionOf(r.tagName))
-    .filter((r) => compareVersions(versionOf(r.tagName), from) > 0 && compareVersions(versionOf(r.tagName), to) <= 0)
-    .sort((a, b) => compareVersions(versionOf(a.tagName), versionOf(b.tagName)));
+    .filter((r) => !r.isDraft && !r.isPrerelease && tagVersion(r.tagName))
+    .filter((r) => compareVersions(tagVersion(r.tagName), from) > 0 && compareVersions(tagVersion(r.tagName), to) <= 0)
+    .sort((a, b) => compareVersions(tagVersion(a.tagName), tagVersion(b.tagName)));
 }
 
 // ---------- subprocess seams --------------------------------------------------------------------
@@ -101,9 +103,18 @@ function resolveRange(values, ompBin) {
 
 // ---------- releases ----------------------------------------------------------------------------
 
+const LIST_LIMIT = 500;
+
 function listReleases(values) {
   if (values['list-json']) return readJson(values['list-json'], '릴리스 목록');
-  return JSON.parse(run('gh', ['release', 'list', '-R', UPSTREAM_REPO, '--limit', '200', '--json', 'tagName,publishedAt,isDraft,isPrerelease']));
+  return JSON.parse(run('gh', ['release', 'list', '-R', UPSTREAM_REPO, '--limit', String(LIST_LIMIT), '--json', 'tagName,publishedAt,isDraft,isPrerelease']));
+}
+
+// A listing is complete for the window only if it reaches back past the baseline: a list cut at
+// --limit would otherwise drop the oldest in-range releases and still report "N / N read".
+export function assertListCoversBaseline(list, from) {
+  const reachesBaseline = list.some((r) => tagVersion(r.tagName) && compareVersions(tagVersion(r.tagName), from) <= 0);
+  if (!reachesBaseline) throw new Error(`릴리스 목록(${list.length}개)에 기준 ${from} 이하의 릴리스가 없습니다 — 목록이 잘렸거나 기준 버전이 잘못됐습니다.`);
 }
 
 function viewRelease(tag) {
@@ -113,7 +124,9 @@ function viewRelease(tag) {
 function releasesCommand(values, ompBin) {
   if (!values.out) throw new Error('releases에는 --out <file.json>이 필요합니다.');
   const { from, to } = resolveRange(values, ompBin);
-  const inRange = releasesInRange(listReleases(values), from, to);
+  const list = listReleases(values);
+  assertListCoversBaseline(list, from);
+  const inRange = releasesInRange(list, from, to);
   const read = [];
   const failed = [];
   for (const r of inRange) {
@@ -132,29 +145,53 @@ function releasesCommand(values, ompBin) {
 // ---------- model references --------------------------------------------------------------------
 
 // Frontmatter `model:` value of an agent file: the line number and the list of references it
-// names. A scalar is one reference; an inline list (`["@task", "@default"]`) is several.
+// names. A scalar is one reference; an inline list (`["@task", "@default"]`) or a YAML block list
+// (`model:` followed by `  - "@task"` lines) is several. A trailing ` # comment` is not a value.
 export function agentModelRefs(content) {
   const lines = content.split(/\r?\n/);
   if ((lines[0] ?? '').trim() !== '---') return null;
   const end = lines.findIndex((line, i) => i > 0 && line.trim() === '---');
   if (end === -1) return null;
   for (let i = 1; i < end; i++) {
-    const m = /^model:\s*(.*)$/.exec(lines[i]);
+    const m = /^model:(.*)$/.exec(lines[i]);
     if (!m) continue;
-    const raw = m[1].trim();
+    const raw = scalar(m[1]);
+    let items;
     const list = /^\[(.*)\]$/.exec(raw);
-    const items = list ? list[1].split(',') : [raw];
-    const refs = items.map((item) => item.trim().replace(/^(["'])(.*)\1$/, '$2')).filter(Boolean);
-    return { line: i + 1, refs };
+    if (list) items = list[1].split(',');
+    else if (raw === '') {
+      items = [];
+      for (let j = i + 1; j < end && /^\s+-\s/.test(lines[j]); j++) items.push(lines[j].replace(/^\s+-\s*/, ''));
+    } else items = [raw];
+    return { line: i + 1, refs: items.map(scalar).filter(Boolean) };
   }
   return null;
 }
 
-const isRoleRef = (ref) => ref.startsWith('@');
-const stripLevel = (ref) => ref.replace(/:[a-z]+$/, '');
+// One YAML scalar: quotes removed, a ` # comment` after the value dropped, block markers empty.
+function scalar(raw) {
+  const inline = raw.trim();
+  if (/^[>|][+-]?(?:\s+#.*)?$/.test(inline)) return '';
+  const quoted = /^(["'])(.*?)\1(?:\s+#.*)?$/.exec(inline);
+  if (quoted) return quoted[2];
+  return inline.replace(/(?:^|\s+)#.*$/, '').trim();
+}
 
-// Backticked `provider/model[:level]` tokens in prose. Only providers the catalog, the agents or
-// the role config know are considered, so repo paths (`docs/harness`) and version tags never match.
+const isRoleRef = (ref) => ref.startsWith('@');
+// Only a thinking level is a suffix; a catalog id that itself contains a colon (`local/llama3.2:3b`) is kept.
+const stripLevel = (ref) => ref.replace(/:(?:minimal|low|medium|high|xhigh|max|auto)$/, '');
+
+// Providers omp has shipped — the floor for prose checks, so a rule that still names a retired
+// provider is checked even when no agent or role names it any more. The catalog, the agents and
+// the role config extend this set at run time.
+export const KNOWN_PROVIDERS = [
+  'anthropic', 'openai', 'openai-codex', 'google', 'google-antigravity', 'google-gemini-cli', 'google-vertex',
+  'google-generative-ai', 'xai', 'xai-oauth', 'groq', 'openrouter', 'mistral', 'deepseek', 'minimax', 'zai',
+  'kimi', 'cerebras', 'github-copilot', 'cursor', 'bedrock', 'azure', 'ollama', 'local', 'web',
+];
+
+// Backticked `provider/model[:level]` tokens in prose. Only known providers are considered, so
+// repo paths (`docs/harness`) and version tags (`harness/2026.90`) never match.
 const CODE_TOKEN = /`([a-z][a-z0-9-]*)\/([a-z0-9][a-z0-9.-]*)(?::[a-z]+)?`/g;
 
 export function proseModelRefs(content, knownProviders) {
@@ -194,10 +231,10 @@ function resolveFixed(ref, catalog, { chatOnly = false } = {}) {
 // Release bullets that mention the provider of an unresolved reference together with a pause/
 // removal word — the lines the audit report cites as the upstream cause. Hyphens in the provider
 // name match a space too (`google-antigravity` ↔ "Google Antigravity").
-const REMOVAL_WORDS = /\b(paus\w*|disabl\w*|remov\w*|retir\w*|dropp?\w*|deprecat\w*|discontinu\w*)\b/i;
+const REMOVAL_WORDS = /\b(?:paus(?:e|ed|es|ing)|disabl(?:e|ed|es|ing)|remov(?:e|ed|es|ing|al)|retir(?:e|ed|es|ing|ement)|drop(?:ped|s|ping)?|deprecat(?:e|ed|es|ing|ion)|discontinu(?:e|ed|es|ing))\b/i;
 
 export function releaseMentions(releases, provider) {
-  const name = new RegExp(provider.split('-').map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[- ]'), 'i');
+  const name = new RegExp(`\\b${provider.split('-').map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[- ]')}\\b`, 'i');
   const hits = [];
   for (const r of releases) {
     for (const line of String(r.body ?? '').split(/\r?\n/)) {
@@ -214,13 +251,26 @@ function* agentFiles(repoRoot) {
   for (const name of fs.readdirSync(dir).filter((n) => n.endsWith('.md')).sort()) yield { rel: `${AGENTS_REL}/${name}`, file: path.join(dir, name) };
 }
 
+// Prose scanned for backticked model ids: every rule, AGENTS.md, and each agent body (the text
+// under the frontmatter — tables and spawn examples name models too).
 function* proseFiles(repoRoot) {
   const dir = path.join(repoRoot, RULES_REL);
-  if (fs.existsSync(dir)) for (const name of fs.readdirSync(dir).filter((n) => n.endsWith('.md')).sort()) yield { rel: `${RULES_REL}/${name}`, file: path.join(dir, name) };
+  if (fs.existsSync(dir)) for (const name of fs.readdirSync(dir).filter((n) => n.endsWith('.md')).sort()) yield { code: 'RULE-MODEL', rel: `${RULES_REL}/${name}`, file: path.join(dir, name) };
   for (const rel of RULE_DOCS) {
     const file = path.join(repoRoot, rel);
-    if (fs.existsSync(file)) yield { rel, file };
+    if (fs.existsSync(file)) yield { code: 'RULE-MODEL', rel, file };
   }
+  for (const { rel, file } of agentFiles(repoRoot)) yield { code: 'AGENT-PROSE', rel, file, bodyOnly: true };
+}
+
+// The body of a frontmatter file (lines after the closing `---`) with the frontmatter blanked, so
+// line numbers stay those of the original file.
+function bodyOf(content) {
+  const lines = content.split(/\r?\n/);
+  if ((lines[0] ?? '').trim() !== '---') return content;
+  const end = lines.findIndex((line, i) => i > 0 && line.trim() === '---');
+  if (end === -1) return content;
+  return lines.map((line, i) => (i <= end ? '' : line)).join('\n');
 }
 
 function finding(code, file, line, resolved, releases) {
@@ -239,7 +289,7 @@ export function checkModelRefs({ repoRoot, modelsJson, rolesJson = null, release
   const roles = rolesJson && typeof rolesJson === 'object' ? rolesJson : {};
   const agents = [];
   const findings = [];
-  const knownProviders = new Set(catalog.providers);
+  const knownProviders = new Set([...KNOWN_PROVIDERS, ...catalog.providers]);
   for (const target of Object.values(roles)) if (typeof target === 'string' && target.includes('/')) knownProviders.add(target.split('/')[0]);
 
   for (const { rel, file } of agentFiles(repoRoot)) {
@@ -261,10 +311,11 @@ export function checkModelRefs({ repoRoot, modelsJson, rolesJson = null, release
     }
   }
 
-  for (const { rel, file } of proseFiles(repoRoot)) {
-    for (const { line, ref } of proseModelRefs(fs.readFileSync(file, 'utf8'), knownProviders)) {
+  for (const { code, rel, file, bodyOnly } of proseFiles(repoRoot)) {
+    const content = fs.readFileSync(file, 'utf8');
+    for (const { line, ref } of proseModelRefs(bodyOnly ? bodyOf(content) : content, knownProviders)) {
       const resolved = resolveFixed(ref, catalog);
-      if (resolved.status !== 'resolved') findings.push(finding('RULE-MODEL', rel, line, resolved, releases));
+      if (resolved.status !== 'resolved') findings.push(finding(code, rel, line, resolved, releases));
     }
   }
 
@@ -277,10 +328,12 @@ export function checkModelRefs({ repoRoot, modelsJson, rolesJson = null, release
 
 const statusLabel = (status) => (status === 'resolved' ? '해석됨' : status === 'skipped' ? '검사 안 함' : `**해석 안 됨** (${status})`);
 
-export function renderModelReport(result, { from = null, to = null } = {}) {
+export function renderModelReport(result, { from = null, to = null, releasesSupplied = false } = {}) {
   const out = ['# 모델 참조 생존 검사', ''];
   if (from && to) out.push(`- 구간: ${from} → ${to}`);
-  out.push(`- 카탈로그: 모델 ${result.catalog.count}개, 프로바이더 ${result.catalog.providers.join(', ') || '(없음)'}`, '');
+  out.push(`- 카탈로그: 모델 ${result.catalog.count}개, 프로바이더 ${result.catalog.providers.join(', ') || '(없음)'}`);
+  if (!releasesSupplied) out.push('- 릴리스 기록 없음 — `--releases-json`을 주면 지적마다 원인 릴리스 불릿을 인용합니다.');
+  out.push('');
   out.push('## 에이전트 `model:`', '', '| 파일 | 참조 | 종류 | 상태 |', '|---|---|---|---|');
   for (const a of result.agents) {
     if (!a.refs.length) { out.push(`| \`${a.file}\` | — | — | ${a.note} |`); continue; }
@@ -299,7 +352,7 @@ export function renderModelReport(result, { from = null, to = null } = {}) {
   if (!result.findings.length) out.push('해석되지 않는 고정 모델 참조가 없습니다.');
   for (const f of result.findings) {
     out.push(`- **${f.code}** \`${f.evidence}\` — \`${f.ref}\`: ${f.message}.`);
-    if (f.status !== 'not-chat' && !f.releases.length) out.push('  - (구간 릴리스 노트에 이 프로바이더의 중지·제거 언급 없음)');
+    if (releasesSupplied && f.status !== 'not-chat' && !f.releases.length) out.push('  - (구간 릴리스 노트에 이 프로바이더의 중지·제거 언급 없음)');
     for (const r of f.releases) out.push(`  - ${r.tag}: ${r.bullet} (${r.url})`);
   }
   out.push('');
@@ -311,11 +364,13 @@ function gitToplevel() {
   return r.status === 0 ? r.stdout.trim() : null;
 }
 
-// `omp config get modelRoles` prints JSON; a host without the key is reported without role rows.
+// `omp config get modelRoles` prints JSON. A host where it fails is reported without role rows,
+// and the failure is said out loud so a broken omp is not mistaken for "no roles configured".
 function readRoles(ompBin) {
   try {
     return JSON.parse(run(ompBin, ['config', 'get', 'modelRoles']));
-  } catch {
+  } catch (error) {
+    process.stderr.write(`modelRoles를 읽지 못했습니다 — 롤 표를 생략합니다: ${error.message}\n`);
     return null;
   }
 }
@@ -328,24 +383,32 @@ function modelsCommand(values, ompBin) {
   const releases = Array.isArray(releasesFile) ? releasesFile : releasesFile?.releases ?? [];
   const result = checkModelRefs({ repoRoot, modelsJson, rolesJson, releases });
   const range = releasesFile && !Array.isArray(releasesFile) ? { from: releasesFile.from, to: releasesFile.to } : {};
-  const output = values.format === 'json' ? `${JSON.stringify(result, null, 2)}\n` : renderModelReport(result, range);
+  const output = values.format === 'json' ? `${JSON.stringify(result, null, 2)}\n` : renderModelReport(result, { ...range, releasesSupplied: releasesFile !== null });
   if (values.out) fs.writeFileSync(values.out, output);
   return values.out ? `지적 ${result.findings.length}건 -> ${values.out}\n` : output;
 }
 
 // ---------- baseline ----------------------------------------------------------------------------
 
-export function nextBaseline(current, { version, report, date }) {
+export function nextBaseline(current, { version, report, date, reportExists = () => true }) {
   if (!parseVersion(version)) throw new Error(`--set은 x.y.z 형식입니다: ${version}`);
   if (!report) throw new Error('--report <보고서 경로>가 필요합니다.');
-  if (compareVersions(version, current.omp_version) < 0) throw new Error(`새 기준(${version})이 현재 기준(${current.omp_version})보다 낮습니다.`);
+  if (!reportExists(report)) throw new Error(`--report 경로가 리포에 없습니다: ${report}`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`--date는 YYYY-MM-DD 형식입니다: ${date}`);
+  const order = compareVersions(version, current.omp_version);
+  if (order < 0) throw new Error(`새 기준(${version})이 현재 기준(${current.omp_version})보다 낮습니다.`);
+  if (order === 0) throw new Error(`${current.omp_version}은(는) 이미 기준 버전입니다 — 갱신할 것이 없습니다.`);
   const { history = [], ...previous } = current;
   return { omp_version: versionOf(version), audited_at: date, report, history: [...history, previous] };
 }
 
 function baselineCommand(values) {
   const current = readBaseline();
-  const next = nextBaseline(current, { version: values.set, report: values.report, date: values.date ?? new Date().toISOString().slice(0, 10) });
+  const repoRoot = path.resolve(values.repo ?? gitToplevel() ?? process.cwd());
+  const next = nextBaseline(current, {
+    version: values.set, report: values.report, date: values.date ?? new Date().toISOString().slice(0, 10),
+    reportExists: (rel) => fs.existsSync(path.resolve(repoRoot, rel)),
+  });
   fs.writeFileSync(BASELINE_PATH, `${JSON.stringify(next, null, 2)}\n`);
   return `기준 버전 ${current.omp_version} → ${next.omp_version} (${next.audited_at}, ${next.report}) -> ${BASELINE_PATH}\n`;
 }
@@ -361,7 +424,8 @@ const OPTIONS = {
 
 function main(argv) {
   const { values, positionals } = parseArgs({ args: argv, options: OPTIONS, allowPositionals: true });
-  const [command] = positionals;
+  const [command, ...extra] = positionals;
+  if (extra.length) throw new Error(`알 수 없는 인자: ${extra.join(' ')}\n${USAGE}`);
   const ompBin = values['omp-bin'] ?? 'omp';
   if (values.format && !['md', 'json'].includes(values.format)) throw new Error(`--format은 md 또는 json입니다: ${values.format}`);
   if (command === 'range') {

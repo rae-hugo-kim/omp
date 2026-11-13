@@ -55,6 +55,8 @@ function fixtureRepo(t) {
   put(root, '.omp/agents/advisor.md', agentMd('advisor', '"@advisor"'));
   put(root, '.omp/agents/verifier.md', agentMd('verifier', '["@task", "@default"]'));
   put(root, '.omp/agents/plain.md', agentMd('plain', null));
+  // Block-list form with a trailing comment on the key line; the body names a retired provider in a table.
+  put(root, '.omp/agents/blocky.md', '---\nname: blocky\ndescription: b\nmodel: # list\n  - "@task"\n  - anthropic/claude-fable-5-1 # chat\n---\n\n| member | model |\n|---|---|\n| argon | `google-antigravity/gemini-4-argon` |\n');
   put(root, '.omp/rules/routing.md', [
     '# routing',
     'The panel pins `anthropic/claude-opus-5-5` and `google-antigravity/gemini-4-argon` (third family).',
@@ -115,13 +117,17 @@ test('models: a fixed agent model that resolves to a non-chat catalog kind is fl
 
 test('models: the Markdown report names the unresolved reference, its evidence and the pausing release', (t) => {
   const result = friction.checkModelRefs({ repoRoot: fixtureRepo(t), modelsJson: catalog, rolesJson: roles, releases });
-  const md = friction.renderModelReport(result, { from: '18.11.1', to: '18.18.6' });
+  const md = friction.renderModelReport(result, { from: '18.11.1', to: '18.18.6', releasesSupplied: true });
   assert.match(md, /구간: 18\.11\.1 → 18\.18\.6/);
   assert.match(md, /\| `\.omp\/agents\/argon\.md:4` \| `google-antigravity\/gemini-4-argon` \| 고정값 \| \*\*해석 안 됨\*\* \(provider-missing\) \|/);
   assert.match(md, /\| `\.omp\/agents\/opus\.md:4` \| `anthropic\/claude-opus-5-5` \| 고정값 \| 해석됨 \|/);
   assert.match(md, /\| `\.omp\/agents\/advisor\.md:4` \| `@advisor` \| 롤 참조 \| 검사 안 함 \(modelRoles → `openai-codex\/gpt-6-astra`: 해석됨\) \|/);
   assert.match(md, /- \*\*AGENT-MODEL\*\* `\.omp\/agents\/argon\.md:4` — `google-antigravity\/gemini-4-argon`: 프로바이더 `google-antigravity`가 현재 omp 카탈로그에 없습니다\.\n {2}- v18\.18\.4: Paused Google Antigravity/);
   assert.match(md, /- \*\*AGENT-MODEL\*\* `\.omp\/agents\/gone\.md:4`[^\n]*\n {2}- \(구간 릴리스 노트에 이 프로바이더의 중지·제거 언급 없음\)/);
+  assert.ok(!md.includes('릴리스 기록 없음'), 'releases were supplied, so the hint is absent');
+  const noReleases = friction.renderModelReport(friction.checkModelRefs({ repoRoot: fixtureRepo(t), modelsJson: catalog, rolesJson: roles, releases: [] }));
+  assert.match(noReleases, /- 릴리스 기록 없음 — `--releases-json`을 주면/);
+  assert.ok(!noReleases.includes('언급 없음'), 'without releases the "no mention" line would be a false claim');
 });
 
 test('models: a clean repo reports zero findings', (t) => {
@@ -134,12 +140,44 @@ test('models: a clean repo reports zero findings', (t) => {
   assert.match(friction.renderModelReport(result), /## 지적 \(0건\)\n\n해석되지 않는 고정 모델 참조가 없습니다\./);
 });
 
-test('agentModelRefs: scalar, quoted, inline-list and absent model lines', () => {
+test('agentModelRefs: scalar, quoted, inline-list, block-list, trailing comment and absent model lines', () => {
   assert.deepEqual(friction.agentModelRefs('---\nname: a\nmodel: "x/y"\n---\n'), { line: 3, refs: ['x/y'] });
   assert.deepEqual(friction.agentModelRefs('---\nmodel: @slow\nname: a\n---\n'), { line: 2, refs: ['@slow'] });
   assert.deepEqual(friction.agentModelRefs('---\nmodel: ["@task", "@default"]\n---\n'), { line: 2, refs: ['@task', '@default'] });
+  assert.deepEqual(friction.agentModelRefs('---\nmodel: "x/y" # pinned\n---\n'), { line: 2, refs: ['x/y'] });
+  assert.deepEqual(friction.agentModelRefs('---\nmodel:\n  - "@task"\n  - x/y # chat\ntools: read\n---\n'), { line: 2, refs: ['@task', 'x/y'] });
   assert.equal(friction.agentModelRefs('---\nname: a\n---\n'), null);
   assert.equal(friction.agentModelRefs('no frontmatter\nmodel: x/y\n'), null);
+});
+
+test('models: block-list agents are checked and an agent BODY naming a retired provider is flagged as AGENT-PROSE', (t) => {
+  const result = friction.checkModelRefs({ repoRoot: fixtureRepo(t), modelsJson: catalog, rolesJson: roles, releases });
+  const blocky = result.agents.find((a) => a.file === '.omp/agents/blocky.md');
+  assert.deepEqual(blocky.refs.map((r) => [r.ref, r.status]), [['@task', 'role'], ['anthropic/claude-fable-5-1', 'resolved']]);
+  const prose = result.findings.filter((f) => f.code === 'AGENT-PROSE');
+  assert.deepEqual(prose.map((f) => [f.evidence, f.ref]), [['.omp/agents/blocky.md:11', 'google-antigravity/gemini-4-argon']]);
+});
+
+test('models: a retired provider named only in a rule is still checked (KNOWN_PROVIDERS floor)', (t) => {
+  const root = tmp(t, 'friction-floor-');
+  put(root, '.omp/agents/opus.md', agentMd('opus', '"anthropic/claude-opus-5-5"'));
+  put(root, '.omp/rules/r.md', 'Third family: `google-antigravity/gemini-4-argon`.\n');
+  const result = friction.checkModelRefs({ repoRoot: root, modelsJson: catalog, rolesJson: {}, releases: [] });
+  assert.deepEqual(result.findings.map((f) => [f.code, f.evidence]), [['RULE-MODEL', '.omp/rules/r.md:1']]);
+});
+
+test('releaseMentions: provider name needs word boundaries and a real removal word', () => {
+  const rel = (body) => [{ tagName: 'v1', url: 'u', body }];
+  assert.equal(friction.releaseMentions(rel('- Fixed the webview dropdown removing items'), 'web').length, 0, '"webview" is not the web provider');
+  assert.equal(friction.releaseMentions(rel('- Paused Google Antigravity'), 'google-antigravity').length, 1);
+  assert.equal(friction.releaseMentions(rel('- Google Antigravity requests now carry labels'), 'google-antigravity').length, 0, 'no removal word');
+  assert.equal(friction.releaseMentions(rel('- The dropdown for xai-oauth is wider'), 'xai-oauth').length, 0, '"dropdown" is not "drop"');
+});
+
+test('assertListCoversBaseline: a listing that never reaches the baseline is a truncated listing', () => {
+  const ok = [{ tagName: 'v18.18.6' }, { tagName: 'v18.11.1' }];
+  assert.doesNotThrow(() => friction.assertListCoversBaseline(ok, '18.11.1'));
+  assert.throws(() => friction.assertListCoversBaseline([{ tagName: 'v18.18.6' }, { tagName: 'v18.12.0' }], '18.11.1'), /목록이 잘렸거나/);
 });
 
 test('releasesInRange: (baseline, to] ascending, drafts/prereleases and non-semver tags excluded', () => {
@@ -174,6 +212,9 @@ test('nextBaseline: moves the current entry into history, refuses regressions an
   });
   assert.throws(() => friction.nextBaseline(current, { version: '18.10.0', report: 'r.md', date: '2026-11-13' }), /낮습니다/);
   assert.throws(() => friction.nextBaseline(current, { version: '18.18.6', report: '', date: '2026-11-13' }), /--report/);
+  assert.throws(() => friction.nextBaseline(current, { version: '18.11.1', report: 'r.md', date: '2026-11-13' }), /이미 기준 버전/);
+  assert.throws(() => friction.nextBaseline(current, { version: '18.18.6', report: 'r.md', date: '11/13/2026' }), /--date/);
+  assert.throws(() => friction.nextBaseline(current, { version: '18.18.6', report: 'missing.md', date: '2026-11-13', reportExists: () => false }), /--report 경로가 리포에 없습니다/);
 });
 
 test('CLI: range reads the committed baseline and installed omp, or --from/--to; models runs on fixture inputs', (t) => {
@@ -196,10 +237,10 @@ test('CLI: range reads the committed baseline and installed omp, or --from/--to;
   const models = spawnSync(process.execPath, [scriptPath, 'models', '--repo', root, '--models-json', modelsFile, '--roles-json', rolesFile, '--releases-json', releasesFile, '--format', 'json'], { encoding: 'utf8' });
   assert.equal(models.status, 0, models.stderr);
   const parsed = JSON.parse(models.stdout);
-  assert.deepEqual(parsed.findings.map((f) => f.evidence).sort(), ['.omp/agents/argon.md:4', '.omp/agents/gone.md:4', '.omp/rules/routing.md:2']);
+  assert.deepEqual(parsed.findings.map((f) => f.evidence).sort(), ['.omp/agents/argon.md:4', '.omp/agents/blocky.md:11', '.omp/agents/gone.md:4', '.omp/rules/routing.md:2']);
   const out = join(root, 'report.md');
   const md = spawnSync(process.execPath, [scriptPath, 'models', '--repo', root, '--models-json', modelsFile, '--roles-json', rolesFile, '--releases-json', releasesFile, '--out', out], { encoding: 'utf8' });
   assert.equal(md.status, 0, md.stderr);
-  assert.equal(md.stdout, `지적 3건 -> ${out}\n`);
+  assert.equal(md.stdout, `지적 4건 -> ${out}\n`);
   assert.match(readFileSync(out, 'utf8'), /^# 모델 참조 생존 검사\n/);
 });

@@ -1,7 +1,7 @@
 ---
 name: harness-friction
 argument-hint: "[--from <omp-version>] [--to <omp-version>]"
-description: Audits omp releases against this harness — collects every upstream release note from the last audited omp version to the installed one, checks that every fixed model id in agents and rules still resolves, and files one report that classifies each change as conflict, drift or unrelated with an issue split proposal. Source-repo only; it never edits gates, agents or rules. Use when the omp update notice points here, when the user says "harness-friction", "마찰 감사", "omp 업데이트 대조", "릴리스 노트 대조", or asks whether an omp update broke the harness.
+description: Audits omp releases against this harness — reads every upstream release note since the last audited omp version, checks that fixed model ids in agents and rules still resolve, and files one report (conflict / drift / unrelated + issue split). Source-repo only, read-only. Use for "harness-friction", "마찰 감사", "omp 업데이트 대조", or when the omp update notice points here.
 ---
 
 # harness-friction — omp 릴리스 대 하네스 마찰 감사
@@ -30,7 +30,7 @@ description: Audits omp releases against this harness — collects every upstrea
 
 ```bash
 node .omp/skills/harness-friction/scripts/friction.mjs range
-# 기준 18.11.1 → 대상 18.18.6
+# 기준 <baseline.json의 omp_version> → 대상 <설치된 omp --version>   (예: 기준 18.11.1 → 대상 18.18.6)
 ```
 
 기준 버전은 `baseline.json`의 `omp_version`(마지막으로 감사한 omp 버전)이고, 대상은 설치된 `omp --version`입니다. `--from`/`--to`로 바꿀 수 있습니다(다시 돌려 보거나 특정 구간만 볼 때). 기준이 대상보다 크면 실패합니다 — 기록이 잘못됐거나 omp를 내려받은 것입니다.
@@ -63,8 +63,8 @@ node .omp/skills/harness-friction/scripts/friction.mjs releases --out "$OUT/rele
 node .omp/skills/harness-friction/scripts/friction.mjs models --releases-json "$OUT/releases.json"
 ```
 
-- `.omp/agents/*.md`의 frontmatter `model:` — 고정값(`anthropic/claude-opus-5-5` 같은 `provider/model`)은 `omp models --kind all --json` 카탈로그에서 해석돼야 하고 채팅 모델이어야 합니다. 롤 참조(`@advisor`, `["@task", "@default"]`)는 고정값이 아니므로 지적하지 않고, `modelRoles`가 가리키는 대상을 참고로 적습니다.
-- `.omp/rules/*.md`·`AGENTS.md` 본문의 백틱 안 `provider/model[:level]` — 카탈로그·에이전트·`modelRoles`가 아는 프로바이더만 모델 참조로 봅니다(리포 경로·태그는 걸리지 않습니다).
+- `.omp/agents/*.md`의 frontmatter `model:` — 고정값(`anthropic/claude-opus-5-5` 같은 `provider/model`)은 `omp models --kind all --json` 카탈로그에서 해석돼야 하고 채팅 모델이어야 합니다. 스칼라·인라인 리스트·YAML 블록 리스트를 읽고 ` # 주석`은 값이 아닙니다. 롤 참조(`@advisor`, `["@task", "@default"]`)는 고정값이 아니므로 지적하지 않고, `modelRoles`가 가리키는 대상을 참고로 적습니다.
+- `.omp/rules/*.md`·`AGENTS.md` 본문(`RULE-MODEL`)과 에이전트 본문(`AGENT-PROSE` — frontmatter 아래 표·스폰 예시)의 백틱 안 `provider/model[:level]` — 스크립트에 박힌 프로바이더 목록(`KNOWN_PROVIDERS`, omp가 실어 온 프로바이더 id)과 카탈로그·에이전트·`modelRoles`가 아는 프로바이더만 모델 참조로 봅니다(리포 경로·태그는 걸리지 않습니다). 은퇴한 프로바이더를 규칙만 언급해도 잡히도록 목록이 바닥을 깝니다.
 - 호스트 `modelRoles`는 리포 산출물이 아니라 참고 표로만 냅니다(예: `vision` 롤이 중지된 프로바이더를 가리켜도 지적이 아닙니다).
 - 지적마다 `파일:줄`·참조·사유(`provider-missing`·`model-missing`·`not-chat`)를 내고, `--releases-json`이 있으면 그 프로바이더를 중지·제거한다고 적힌 구간 릴리스 불릿을 인용합니다. 이것이 "어느 릴리스가 원인인가"의 1차 근거입니다.
 
