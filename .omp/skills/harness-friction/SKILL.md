@@ -1,7 +1,7 @@
 ---
 name: harness-friction
 argument-hint: "[--from <omp-version>] [--to <omp-version>]"
-description: Audits omp releases against this harness — reads every upstream release note since the last audited omp version, checks that fixed model ids in agents and rules still resolve, and files one report (conflict / drift / unrelated + issue split). Source-repo only, read-only. Use for "harness-friction", "마찰 감사", "omp 업데이트 대조", or when the omp update notice points here.
+description: Audits omp releases against this harness — reads every release note since the last audited omp version, checks fixed model ids still resolve, and files one conflict/drift report with an issue split. Source-repo only. Use for "harness-friction", "마찰 감사", "omp 업데이트 대조".
 ---
 
 # harness-friction — omp 릴리스 대 하네스 마찰 감사

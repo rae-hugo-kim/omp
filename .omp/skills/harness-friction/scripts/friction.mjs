@@ -96,7 +96,7 @@ export function readBaseline(file = BASELINE_PATH) {
 function resolveRange(values, ompBin) {
   const from = values.from ?? readBaseline().omp_version;
   const to = values.to ?? installedOmpVersion(ompBin);
-  if (!parseVersion(from) || !parseVersion(to)) throw new Error(`--from/--to는 x.y.z 형식입니다: ${from} → ${to}`);
+  if (!tagVersion(from) || !tagVersion(to)) throw new Error(`--from/--to는 x.y.z 형식입니다: ${from} → ${to}`);
   if (compareVersions(from, to) > 0) throw new Error(`기준 버전(${from})이 대상 버전(${to})보다 큽니다 — 기준 기록을 확인하세요.`);
   return { from: versionOf(from), to: versionOf(to) };
 }
@@ -146,7 +146,8 @@ function releasesCommand(values, ompBin) {
 
 // Frontmatter `model:` value of an agent file: the line number and the list of references it
 // names. A scalar is one reference; an inline list (`["@task", "@default"]`) or a YAML block list
-// (`model:` followed by `  - "@task"` lines) is several. A trailing ` # comment` is not a value.
+// (`model:` followed by `- "@task"` lines at any indent, comment lines allowed between) is
+// several. A trailing ` # comment` is not a value. `refs` is empty when the key has no value.
 export function agentModelRefs(content) {
   const lines = content.split(/\r?\n/);
   if ((lines[0] ?? '').trim() !== '---') return null;
@@ -156,14 +157,18 @@ export function agentModelRefs(content) {
     const m = /^model:(.*)$/.exec(lines[i]);
     if (!m) continue;
     const raw = scalar(m[1]);
-    let items;
     const list = /^\[(.*)\]$/.exec(raw);
-    if (list) items = list[1].split(',');
+    let refs;
+    if (list) refs = list[1].split(',').map(scalar);
     else if (raw === '') {
-      items = [];
-      for (let j = i + 1; j < end && /^\s+-\s/.test(lines[j]); j++) items.push(lines[j].replace(/^\s+-\s*/, ''));
-    } else items = [raw];
-    return { line: i + 1, refs: items.map(scalar).filter(Boolean) };
+      refs = [];
+      for (let j = i + 1; j < end; j++) {
+        if (/^\s*#/.test(lines[j]) || lines[j].trim() === '') continue;
+        if (!/^\s*-\s/.test(lines[j])) break;
+        refs.push(scalar(lines[j].replace(/^\s*-\s*/, '')));
+      }
+    } else refs = [raw];
+    return { line: i + 1, refs: refs.filter(Boolean) };
   }
   return null;
 }
@@ -178,16 +183,28 @@ function scalar(raw) {
 }
 
 const isRoleRef = (ref) => ref.startsWith('@');
-// Only a thinking level is a suffix; a catalog id that itself contains a colon (`local/llama3.2:3b`) is kept.
-const stripLevel = (ref) => ref.replace(/:(?:minimal|low|medium|high|xhigh|max|auto)$/, '');
+// Only a thinking level (`omp --thinking` values) is a suffix; a catalog id that itself contains a
+// colon (`local/llama3.2:3b`) is kept.
+const stripLevel = (ref) => ref.replace(/:(?:off|minimal|low|medium|high|xhigh|max|auto)$/, '');
 
-// Providers omp has shipped — the floor for prose checks, so a rule that still names a retired
-// provider is checked even when no agent or role names it any more. The catalog, the agents and
-// the role config extend this set at run time.
+// Provider ids omp ships or has shipped (`omp://providers.md` 18.18.6 plus the paused/retired
+// `google-antigravity`, `google-gemini-cli`, `google-generative-ai`, `kimi-code`) — the floor for
+// prose checks, so a rule that still names a retired provider is checked even when no agent or
+// role names it any more. The catalog, the agents and the role config extend this set at run time.
 export const KNOWN_PROVIDERS = [
-  'anthropic', 'openai', 'openai-codex', 'google', 'google-antigravity', 'google-gemini-cli', 'google-vertex',
-  'google-generative-ai', 'xai', 'xai-oauth', 'groq', 'openrouter', 'mistral', 'deepseek', 'minimax', 'zai',
-  'kimi', 'cerebras', 'github-copilot', 'cursor', 'bedrock', 'azure', 'ollama', 'local', 'web',
+  'abliteration', 'aiand', 'aimlapi', 'alibaba-coding-plan', 'alibaba-token-plan', 'amazon-bedrock',
+  'anthropic', 'azure', 'baseten', 'bedrock-mantle', 'cerebras', 'charm-hyper', 'cline-pass',
+  'cloudflare-ai-gateway', 'cloudflare-workers-ai', 'commandcode', 'coralbricks', 'coreweave', 'cursor',
+  'deepinfra', 'deepseek', 'devin', 'factory-droid', 'firepass', 'fireworks', 'github-copilot', 'gitlab-duo',
+  'gmi-cloud', 'google', 'google-antigravity', 'google-gemini-cli', 'google-generative-ai', 'google-vertex',
+  'groq', 'helmcode', 'huggingface', 'inception', 'kilo', 'kimi-code', 'litellm', 'lm-studio', 'meta',
+  'minimax', 'minimax-code', 'minimax-code-cn', 'mistral', 'modular', 'moonshot', 'nanogpt', 'novita',
+  'nvidia', 'ollama', 'ollama-cloud', 'openai', 'openai-codex', 'opencode-zen', 'openrouter', 'otari',
+  'qianfan', 'qwen-portal', 'sakana', 'sambanova', 'scaleway', 'siliconflow', 'siliconflow-cn',
+  'singularityapi-dev', 'singularityapi-tech', 'snowflake', 'stepfun', 'synthetic', 'together', 'typesafe',
+  'umans', 'venice', 'vercel-ai-gateway', 'vllm', 'wafer-serverless', 'xai', 'xai-oauth', 'xiaomi',
+  'xiaomi-token-plan-ams', 'xiaomi-token-plan-cn', 'xiaomi-token-plan-sgp', 'yolo-auto', 'zai', 'zenmux',
+  'zhipu-coding-plan',
 ];
 
 // Backticked `provider/model[:level]` tokens in prose. Only known providers are considered, so
@@ -294,8 +311,8 @@ export function checkModelRefs({ repoRoot, modelsJson, rolesJson = null, release
 
   for (const { rel, file } of agentFiles(repoRoot)) {
     const parsed = agentModelRefs(fs.readFileSync(file, 'utf8'));
-    if (!parsed) {
-      agents.push({ file: rel, line: null, refs: [], note: 'model 없음(기본 모델 상속)' });
+    if (!parsed || !parsed.refs.length) {
+      agents.push({ file: rel, line: parsed?.line ?? null, refs: [], note: parsed ? 'model 값 비어 있음(기본 모델 상속)' : 'model 없음(기본 모델 상속)' });
       continue;
     }
     const entries = parsed.refs.map((ref) => (isRoleRef(ref) ? { ref, status: 'role' } : resolveFixed(ref, catalog, { chatOnly: true })));
@@ -383,7 +400,7 @@ function modelsCommand(values, ompBin) {
   const releases = Array.isArray(releasesFile) ? releasesFile : releasesFile?.releases ?? [];
   const result = checkModelRefs({ repoRoot, modelsJson, rolesJson, releases });
   const range = releasesFile && !Array.isArray(releasesFile) ? { from: releasesFile.from, to: releasesFile.to } : {};
-  const output = values.format === 'json' ? `${JSON.stringify(result, null, 2)}\n` : renderModelReport(result, { ...range, releasesSupplied: releasesFile !== null });
+  const output = values.format === 'json' ? `${JSON.stringify(result, null, 2)}\n` : renderModelReport(result, { ...range, releasesSupplied: releases.length > 0 });
   if (values.out) fs.writeFileSync(values.out, output);
   return values.out ? `지적 ${result.findings.length}건 -> ${values.out}\n` : output;
 }
@@ -391,10 +408,11 @@ function modelsCommand(values, ompBin) {
 // ---------- baseline ----------------------------------------------------------------------------
 
 export function nextBaseline(current, { version, report, date, reportExists = () => true }) {
-  if (!parseVersion(version)) throw new Error(`--set은 x.y.z 형식입니다: ${version}`);
+  if (!tagVersion(version)) throw new Error(`--set은 x.y.z 형식입니다: ${version}`);
   if (!report) throw new Error('--report <보고서 경로>가 필요합니다.');
   if (!reportExists(report)) throw new Error(`--report 경로가 리포에 없습니다: ${report}`);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`--date는 YYYY-MM-DD 형식입니다: ${date}`);
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00Z`) : new Date(NaN);
+  if (Number.isNaN(day.getTime()) || day.toISOString().slice(0, 10) !== date) throw new Error(`--date는 실제 날짜 YYYY-MM-DD 형식입니다: ${date}`);
   const order = compareVersions(version, current.omp_version);
   if (order < 0) throw new Error(`새 기준(${version})이 현재 기준(${current.omp_version})보다 낮습니다.`);
   if (order === 0) throw new Error(`${current.omp_version}은(는) 이미 기준 버전입니다 — 갱신할 것이 없습니다.`);

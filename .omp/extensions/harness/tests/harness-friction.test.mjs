@@ -146,6 +146,8 @@ test('agentModelRefs: scalar, quoted, inline-list, block-list, trailing comment 
   assert.deepEqual(friction.agentModelRefs('---\nmodel: ["@task", "@default"]\n---\n'), { line: 2, refs: ['@task', '@default'] });
   assert.deepEqual(friction.agentModelRefs('---\nmodel: "x/y" # pinned\n---\n'), { line: 2, refs: ['x/y'] });
   assert.deepEqual(friction.agentModelRefs('---\nmodel:\n  - "@task"\n  - x/y # chat\ntools: read\n---\n'), { line: 2, refs: ['@task', 'x/y'] });
+  assert.deepEqual(friction.agentModelRefs('---\nmodel:\n- "@task"\n# comment line\n\n- x/y:off\ntools: read\n---\n'), { line: 2, refs: ['@task', 'x/y:off'] }, '0-indent list with a comment and a blank line');
+  assert.deepEqual(friction.agentModelRefs('---\nmodel:\ntools: read\n---\n'), { line: 2, refs: [] }, 'an empty key has no refs');
   assert.equal(friction.agentModelRefs('---\nname: a\n---\n'), null);
   assert.equal(friction.agentModelRefs('no frontmatter\nmodel: x/y\n'), null);
 });
@@ -215,6 +217,8 @@ test('nextBaseline: moves the current entry into history, refuses regressions an
   assert.throws(() => friction.nextBaseline(current, { version: '18.11.1', report: 'r.md', date: '2026-11-13' }), /이미 기준 버전/);
   assert.throws(() => friction.nextBaseline(current, { version: '18.18.6', report: 'r.md', date: '11/13/2026' }), /--date/);
   assert.throws(() => friction.nextBaseline(current, { version: '18.18.6', report: 'missing.md', date: '2026-11-13', reportExists: () => false }), /--report 경로가 리포에 없습니다/);
+  assert.throws(() => friction.nextBaseline(current, { version: '18.19.0-rc.1', report: 'r.md', date: '2026-11-13' }), /--set은 x\.y\.z/);
+  assert.throws(() => friction.nextBaseline(current, { version: '18.18.6', report: 'r.md', date: '2026-13-45' }), /실제 날짜/);
 });
 
 test('CLI: range reads the committed baseline and installed omp, or --from/--to; models runs on fixture inputs', (t) => {
