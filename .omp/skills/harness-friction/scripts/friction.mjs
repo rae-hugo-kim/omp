@@ -147,7 +147,8 @@ function releasesCommand(values, ompBin) {
 // Frontmatter `model:` value of an agent file: the line number and the list of references it
 // names. A scalar is one reference; an inline list (`["@task", "@default"]`) or a YAML block list
 // (`model:` followed by `- "@task"` lines at any indent, comment lines allowed between) is
-// several. A trailing ` # comment` is not a value. `refs` is empty when the key has no value.
+// several; a block scalar (`model: |` / `model: >-` with indented lines) is one reference made of
+// its lines. A trailing ` # comment` is not a value. `refs` is empty when the key has no value.
 export function agentModelRefs(content) {
   const lines = content.split(/\r?\n/);
   if ((lines[0] ?? '').trim() !== '---') return null;
@@ -156,36 +157,45 @@ export function agentModelRefs(content) {
   for (let i = 1; i < end; i++) {
     const m = /^model:(.*)$/.exec(lines[i]);
     if (!m) continue;
-    const raw = scalar(m[1]);
-    const list = /^\[(.*)\]$/.exec(raw);
+    const inline = m[1].trim();
     let refs;
-    if (list) refs = list[1].split(',').map(scalar);
-    else if (raw === '') {
-      refs = [];
-      for (let j = i + 1; j < end; j++) {
-        if (/^\s*#/.test(lines[j]) || lines[j].trim() === '') continue;
-        if (!/^\s*-\s/.test(lines[j])) break;
-        refs.push(scalar(lines[j].replace(/^\s*-\s*/, '')));
-      }
-    } else refs = [raw];
+    if (BLOCK_SCALAR.test(inline)) {
+      const body = [];
+      for (let j = i + 1; j < end && (/^\s+\S/.test(lines[j]) || lines[j].trim() === ''); j++) body.push(lines[j].trim());
+      refs = [body.filter(Boolean).join(' ')];
+    } else {
+      const raw = scalar(inline);
+      const list = /^\[(.*)\]$/.exec(raw);
+      if (list) refs = list[1].split(',').map(scalar);
+      else if (raw === '') {
+        refs = [];
+        for (let j = i + 1; j < end; j++) {
+          if (/^\s*#/.test(lines[j]) || lines[j].trim() === '') continue;
+          if (!/^\s*-\s/.test(lines[j])) break;
+          refs.push(scalar(lines[j].replace(/^\s*-\s*/, '')));
+        }
+      } else refs = [raw];
+    }
     return { line: i + 1, refs: refs.filter(Boolean) };
   }
   return null;
 }
 
+const BLOCK_SCALAR = /^[>|][+-]?(?:\s+#.*)?$/;
+
 // One YAML scalar: quotes removed, a ` # comment` after the value dropped, block markers empty.
 function scalar(raw) {
   const inline = raw.trim();
-  if (/^[>|][+-]?(?:\s+#.*)?$/.test(inline)) return '';
+  if (BLOCK_SCALAR.test(inline)) return '';
   const quoted = /^(["'])(.*?)\1(?:\s+#.*)?$/.exec(inline);
   if (quoted) return quoted[2];
   return inline.replace(/(?:^|\s+)#.*$/, '').trim();
 }
 
 const isRoleRef = (ref) => ref.startsWith('@');
-// Only a thinking level (`omp --thinking` values) is a suffix; a catalog id that itself contains a
-// colon (`local/llama3.2:3b`) is kept.
-const stripLevel = (ref) => ref.replace(/:(?:off|minimal|low|medium|high|xhigh|max|auto)$/, '');
+// Only a thinking level (`omp://models.md` selector suffix list) is a suffix; a catalog id that itself
+// contains a colon (`local/llama3.2:3b`) is kept.
+const stripLevel = (ref) => ref.replace(/:(?:off|minimal|low|medium|high|xhigh|max|auto|inherit)$/, '');
 
 // Provider ids omp ships or has shipped (`omp://providers.md` 18.18.6 plus the paused/retired
 // `google-antigravity`, `google-gemini-cli`, `google-generative-ai`, `kimi-code`) — the floor for
@@ -193,23 +203,24 @@ const stripLevel = (ref) => ref.replace(/:(?:off|minimal|low|medium|high|xhigh|m
 // role names it any more. The catalog, the agents and the role config extend this set at run time.
 export const KNOWN_PROVIDERS = [
   'abliteration', 'aiand', 'aimlapi', 'alibaba-coding-plan', 'alibaba-token-plan', 'amazon-bedrock',
-  'anthropic', 'azure', 'baseten', 'bedrock-mantle', 'cerebras', 'charm-hyper', 'cline-pass',
+  'anthropic', 'apple', 'azure', 'baseten', 'bedrock-mantle', 'cerebras', 'charm-hyper', 'cline-pass',
   'cloudflare-ai-gateway', 'cloudflare-workers-ai', 'commandcode', 'coralbricks', 'coreweave', 'cursor',
   'deepinfra', 'deepseek', 'devin', 'factory-droid', 'firepass', 'fireworks', 'github-copilot', 'gitlab-duo',
-  'gmi-cloud', 'google', 'google-antigravity', 'google-gemini-cli', 'google-generative-ai', 'google-vertex',
-  'groq', 'helmcode', 'huggingface', 'inception', 'kilo', 'kimi-code', 'litellm', 'lm-studio', 'meta',
-  'minimax', 'minimax-code', 'minimax-code-cn', 'mistral', 'modular', 'moonshot', 'nanogpt', 'novita',
-  'nvidia', 'ollama', 'ollama-cloud', 'openai', 'openai-codex', 'opencode-zen', 'openrouter', 'otari',
-  'qianfan', 'qwen-portal', 'sakana', 'sambanova', 'scaleway', 'siliconflow', 'siliconflow-cn',
-  'singularityapi-dev', 'singularityapi-tech', 'snowflake', 'stepfun', 'synthetic', 'together', 'typesafe',
-  'umans', 'venice', 'vercel-ai-gateway', 'vllm', 'wafer-serverless', 'xai', 'xai-oauth', 'xiaomi',
+  'gitlab-duo-agent', 'gmi-cloud', 'google', 'google-antigravity', 'google-gemini-cli', 'google-generative-ai',
+  'google-vertex', 'groq', 'helmcode', 'huggingface', 'inception', 'kilo', 'kimi-code', 'litellm', 'llama.cpp',
+  'lm-studio', 'meta', 'minimax', 'minimax-code', 'minimax-code-cn', 'mistral', 'modular', 'moonshot', 'muse-code',
+  'nanogpt', 'novita', 'nvidia', 'ollama', 'ollama-cloud', 'openai', 'openai-codex', 'opencode-go', 'opencode-zen',
+  'openrouter', 'otari', 'qianfan', 'qwen-portal', 'sakana', 'sambanova', 'scaleway', 'siliconflow',
+  'siliconflow-cn', 'singularityapi-dev', 'singularityapi-tech', 'snowflake', 'stepfun', 'synthetic', 'together',
+  'typesafe', 'umans', 'venice', 'vercel-ai-gateway', 'vllm', 'wafer-serverless', 'xai', 'xai-oauth', 'xiaomi',
   'xiaomi-token-plan-ams', 'xiaomi-token-plan-cn', 'xiaomi-token-plan-sgp', 'yolo-auto', 'zai', 'zenmux',
   'zhipu-coding-plan',
 ];
 
 // Backticked `provider/model[:level]` tokens in prose. Only known providers are considered, so
-// repo paths (`docs/harness`) and version tags (`harness/2026.90`) never match.
-const CODE_TOKEN = /`([a-z][a-z0-9-]*)\/([a-z0-9][a-z0-9.-]*)(?::[a-z]+)?`/g;
+// repo paths (`docs/harness`) and version tags (`harness/2026.90`) never match. A provider id may
+// contain a dot (`llama.cpp`).
+const CODE_TOKEN = /`([a-z][a-z0-9.-]*)\/([a-z0-9][a-z0-9.-]*)(?::[a-z]+)?`/g;
 
 export function proseModelRefs(content, knownProviders) {
   const refs = [];

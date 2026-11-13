@@ -148,6 +148,9 @@ test('agentModelRefs: scalar, quoted, inline-list, block-list, trailing comment 
   assert.deepEqual(friction.agentModelRefs('---\nmodel:\n  - "@task"\n  - x/y # chat\ntools: read\n---\n'), { line: 2, refs: ['@task', 'x/y'] });
   assert.deepEqual(friction.agentModelRefs('---\nmodel:\n- "@task"\n# comment line\n\n- x/y:off\ntools: read\n---\n'), { line: 2, refs: ['@task', 'x/y:off'] }, '0-indent list with a comment and a blank line');
   assert.deepEqual(friction.agentModelRefs('---\nmodel:\ntools: read\n---\n'), { line: 2, refs: [] }, 'an empty key has no refs');
+  assert.deepEqual(friction.agentModelRefs('---\nmodel: |\n  google-antigravity/gemini-4-argon\n---\n'), { line: 2, refs: ['google-antigravity/gemini-4-argon'] }, 'a literal block scalar is one reference, not an empty key');
+  assert.deepEqual(friction.agentModelRefs('---\nmodel: >- # folded\n  anthropic/claude-opus-5-5\n\ntools: read\n---\n'), { line: 2, refs: ['anthropic/claude-opus-5-5'] }, 'a folded block scalar stops at the next key');
+  assert.deepEqual(friction.agentModelRefs('---\nmodel: |\n---\n'), { line: 2, refs: [] }, 'an empty block scalar has no refs');
   assert.equal(friction.agentModelRefs('---\nname: a\n---\n'), null);
   assert.equal(friction.agentModelRefs('no frontmatter\nmodel: x/y\n'), null);
 });
@@ -180,6 +183,16 @@ test('assertListCoversBaseline: a listing that never reaches the baseline is a t
   const ok = [{ tagName: 'v18.18.6' }, { tagName: 'v18.11.1' }];
   assert.doesNotThrow(() => friction.assertListCoversBaseline(ok, '18.11.1'));
   assert.throws(() => friction.assertListCoversBaseline([{ tagName: 'v18.18.6' }, { tagName: 'v18.12.0' }], '18.11.1'), /목록이 잘렸거나/);
+});
+
+test('models: every selector thinking suffix (incl. :inherit) is stripped; a dotted provider id in prose is a model reference', (t) => {
+  const root = tmp(t, 'friction-suffix-');
+  put(root, '.omp/agents/inherit.md', agentMd('inherit', '"anthropic/claude-opus-5-5:inherit"'));
+  put(root, '.omp/agents/off.md', agentMd('off', '"anthropic/claude-opus-5-5:off"'));
+  put(root, '.omp/rules/r.md', 'Local serving goes through `llama.cpp/qwen3-1.7b`.\n');
+  const result = friction.checkModelRefs({ repoRoot: root, modelsJson: catalog, rolesJson: {}, releases: [] });
+  assert.deepEqual(result.agents.map((a) => [a.file, a.refs[0].status]), [['.omp/agents/inherit.md', 'resolved'], ['.omp/agents/off.md', 'resolved']]);
+  assert.deepEqual(result.findings.map((f) => [f.code, f.evidence, f.status]), [['RULE-MODEL', '.omp/rules/r.md:1', 'provider-missing']]);
 });
 
 test('releasesInRange: (baseline, to] ascending, drafts/prereleases and non-semver tags excluded', () => {

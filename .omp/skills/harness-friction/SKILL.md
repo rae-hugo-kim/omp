@@ -63,7 +63,7 @@ node .omp/skills/harness-friction/scripts/friction.mjs releases --out "$OUT/rele
 node .omp/skills/harness-friction/scripts/friction.mjs models --releases-json "$OUT/releases.json"
 ```
 
-- `.omp/agents/*.md`의 frontmatter `model:` — 고정값(`anthropic/claude-opus-5-5` 같은 `provider/model`)은 `omp models --kind all --json` 카탈로그에서 해석돼야 하고 채팅 모델이어야 합니다. 스칼라·인라인 리스트·YAML 블록 리스트를 읽고 ` # 주석`은 값이 아닙니다. 롤 참조(`@advisor`, `["@task", "@default"]`)는 고정값이 아니므로 지적하지 않고, `modelRoles`가 가리키는 대상을 참고로 적습니다.
+- `.omp/agents/*.md`의 frontmatter `model:` — 고정값(`anthropic/claude-opus-5-5` 같은 `provider/model`)은 `omp models --kind all --json` 카탈로그에서 해석돼야 하고 채팅 모델이어야 합니다. 스칼라·인라인 리스트·YAML 블록 리스트·블록 스칼라(`|`, `>-`)를 읽고 ` # 주석`은 값이 아니며, `:off`~`:inherit`의 thinking 접미는 벗깁니다. 롤 참조(`@advisor`, `["@task", "@default"]`)는 고정값이 아니므로 지적하지 않고, `modelRoles`가 가리키는 대상을 참고로 적습니다.
 - `.omp/rules/*.md`·`AGENTS.md` 본문(`RULE-MODEL`)과 에이전트 본문(`AGENT-PROSE` — frontmatter 아래 표·스폰 예시)의 백틱 안 `provider/model[:level]` — 스크립트에 박힌 프로바이더 목록(`KNOWN_PROVIDERS`, omp가 실어 온 프로바이더 id)과 카탈로그·에이전트·`modelRoles`가 아는 프로바이더만 모델 참조로 봅니다(리포 경로·태그는 걸리지 않습니다). 은퇴한 프로바이더를 규칙만 언급해도 잡히도록 목록이 바닥을 깝니다.
 - 호스트 `modelRoles`는 리포 산출물이 아니라 참고 표로만 냅니다(예: `vision` 롤이 중지된 프로바이더를 가리켜도 지적이 아닙니다).
 - 지적마다 `파일:줄`·참조·사유(`provider-missing`·`model-missing`·`not-chat`)를 내고, `--releases-json`이 있으면 그 프로바이더를 중지·제거한다고 적힌 구간 릴리스 불릿을 인용합니다. 이것이 "어느 릴리스가 원인인가"의 1차 근거입니다.
