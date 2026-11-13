@@ -1,7 +1,6 @@
 name: harness-friction-audit-129
-status: done
-completed: 2026-11-13
-version: 1
+status: approved
+version: 2
 task_id: "20261113-061313-129f"
 # gh-loop worker Stage 2에 따라 이슈 #129 본문("만들 것" 1~7, "정해 둔 것", AC 8개, "범위 밖", "#131 머지 뒤 알게 된 것")을 명세로 삼습니다.
 # 이슈 본문이 사용자 승인 명세이므로 처음부터 approved로 씁니다. 직전 완료 seed(harness-skill-tune-inspect-127)는 git 이력에 보존합니다.
