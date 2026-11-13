@@ -1,0 +1,17 @@
+{
+  "omp_version": "18.18.6",
+  "audited_at": "2026-11-13",
+  "report": "docs/handoff/handoff_2026-11-13_omp-18-18-6-friction-audit.md",
+  "history": [
+    {
+      "omp_version": "18.3.0",
+      "audited_at": "2026-09-24",
+      "report": "docs/harness/archive/20260924-omp1830-friction/seed.yaml"
+    },
+    {
+      "omp_version": "18.11.1",
+      "audited_at": "2026-10-16",
+      "report": "docs/handoff/handoff_2026-10-16_omp-18-11-1-friction-audit.md"
+    }
+  ]
+}

@@ -1,61 +1,70 @@
-name: harness-skill-tune-update-128
+name: harness-friction-audit-129
 status: done
 completed: 2026-11-13
-version: 1
-task_id: "20261113-061221-128a"
-# gh-loop worker Stage 2에 따라 이슈 #128 본문("만들 것" 1~7, AC 7개, "범위 밖", "#131 머지 뒤 알게 된 것")을 명세로 삼습니다.
+version: 2
+task_id: "20261113-061313-129f"
+# gh-loop worker Stage 2에 따라 이슈 #129 본문("만들 것" 1~7, "정해 둔 것", AC 8개, "범위 밖", "#131 머지 뒤 알게 된 것")을 명세로 삼습니다.
 # 이슈 본문이 사용자 승인 명세이므로 처음부터 approved로 씁니다. 직전 완료 seed(harness-skill-tune-inspect-127)는 git 이력에 보존합니다.
 goal: >
-  #128: harness-skill-tune에 갱신 단계를 더합니다 — 점검 보고서의 지적을 기계적(정답이 하나)·판단 필요(개명·삭제·숨김·설명문·구조)로
-  나눠, 기계적 지적은 고치고 ID와 함께 보고하며, 판단 필요 지적은 근거 수치와 번호 붙인 선택지로 제시해 사용자가 고른 것만 적용하고,
-  가능한 경우 수정 전후를 서브에이전트로 평가한 뒤 재점검으로 지적 ID가 사라졌는지 확인합니다. 이 PR에서 실제 지적 1건을 그 절차로 처리합니다.
+  #129: omp 릴리스 대 하네스 마찰 감사 스킬 harness-friction을 만듭니다 — 마지막 감사 버전(기준 기록)부터 설치된 omp까지의
+  릴리스 노트를 전수 수집·대조하고, 에이전트·규칙의 고정 모델 참조가 현재 omp에서 해석되는지 결정적으로 검사하며,
+  변경마다 충돌/드리프트/무관을 판정한 보고서와 이슈 분할안을 냅니다. 첫 실행으로 18.11.1 → 18.18.6 구간 보고서를 싣습니다.
 constraints:
-  - "판단 필요 지적(개명·삭제·숨김·설명문 재작성·구조 변경)은 사용자 선택 없이 적용하지 않습니다. AC를 채우는 1건을 넘는 지적은 보고서의 선택지로만 남깁니다."
-  - "kickoff의 critic·startdev의 test-engineer REF-AGENT 지적은 열린 #120이 다루므로 여기서 고치지 않고 #120을 가리킵니다."
-  - "리포 밖 스킬(~/.claude/skills 미러 포함)은 고치지 않고 보고만 합니다. 스킬은 직접 커밋하지 않으며 변경은 일반 PR 경로(CHANGELOG 포함)로 나갑니다."
-  - "점검 스크립트(skill-tune.mjs, 796줄)는 늘리지 않습니다 — 갱신 단계는 절차이고 재점검은 check --format json 전후 대조로 합니다. PR #131의 low 메모는 스크립트를 건드리지 않으므로 그대로 남깁니다."
-  - "init 첫 커밋의 risk-assess 부트스트랩 창은 코드이므로 임의로 바꾸지 않습니다 — 창이 .omp/skills/harness-skill-tune/ 삭제를 덮지 않는다는 확인 결과는 결정 요청으로 올립니다."
+  - "스킬 이름은 harness-friction입니다(omp 빌트인 명령·CLI 하위 명령·번들 에이전트·로드된 스킬 83개와 대조해 충돌 없음 — 이슈에서 확정)."
+  - "소스 리포 전용입니다 — scripts/harness-sync.sh 화이트리스트에 넣지 않습니다. 기존 테스트나 문서 검사가 전수 등재를 요구하면 고치지 않고 결정 요청으로 올립니다."
+  - "adversary-argon의 거취(이전·패널 축소)는 사용자가 보류한 결정입니다. 감사는 충돌로 보고하고 선택지만 남기며, 에이전트 정의·규칙·modelRoles를 바꾸지 않습니다."
+  - "보고서는 이슈 분할안까지만 냅니다. 이슈 생성은 사용자 승인 뒤에만 합니다."
+  - "결정적으로 판정되는 것(구간·수집·모델 참조 생존·기준 갱신)만 스크립트로 하고, 릴리스 노트 읽기와 판정은 스킬 절차로 둡니다."
 acceptance_criteria:
   - id: AC1
-    title: "SKILL.md에 갱신 단계가 있고, 기계적·판단 필요의 분류 기준과 각 처리 절차가 적혀 있습니다."
+    title: ".omp/skills/harness-friction/SKILL.md가 있고, frontmatter name이 디렉터리명과 같으며 description이 있습니다."
   - id: AC2
-    title: "판단 필요 지적(개명·삭제·숨김·설명문 재작성·구조 변경)은 사용자 선택 없이 적용하지 않는다고 명시돼 있고, 근거 수치를 담은 선택지 형식 예시가 있습니다."
+    title: "모델 참조 생존 검사가 픽스처에서 해석되지 않는 고정 model: 값을 지적으로 내고, 해석되는 고정값과 롤 참조(@advisor, [\"@task\", \"@default\"])는 지적하지 않습니다."
   - id: AC3
-    title: "평가 단계에 실행 조건, 생략 조건, 결과 기록 형식이 적혀 있습니다."
+    title: "기준 버전 기록이 리포에 있고, 스킬 절차가 감사 뒤 갱신을 지시합니다."
   - id: AC4
-    title: "리포 밖 스킬을 수정하지 않는다는 경계와, 스킬이 직접 커밋하지 않는다는 경계가 적혀 있습니다."
+    title: "18.11.1부터 감사 시점 설치 버전(18.18.6)까지의 감사 보고서가 이 PR에 들어 있고, 구간 릴리스 수와 읽은 수가 같으며, v18.18.4의 Antigravity 중지가 .omp/agents/adversary-argon.md와의 충돌로 실려 있습니다."
   - id: AC5
-    title: "이 PR의 커밋에 실제 점검이 낸 지적 1건 이상을 이 절차로 끝까지 처리한 스킬 수정이 들어 있고, 그 커밋 트리에서 점검을 돌리면 해당 지적 ID가 나오지 않습니다."
+    title: "보고서가 발견한 마찰을 이슈 분할안(번호와 확인 문장)으로 정리하고, 이슈를 직접 만들지 않습니다."
   - id: AC6
-    title: ".omp/skills/init/SKILL.md의 소스 리포 전용 자산 제거 목록에 .omp/skills/harness-skill-tune/이 있습니다."
+    title: "adversary-argon·reviewer.md의 패널 구성과 규칙 본문은 이 PR에서 바뀌지 않습니다."
   - id: AC7
+    title: ".omp/skills/init/SKILL.md의 \"소스 리포 전용 자산 제거\" 목록에 .omp/skills/harness-friction/이 있습니다."
+  - id: AC8
     title: "node --test .omp/extensions/harness/tests/*.test.mjs와 node scripts/docs-drift가 통과하고, CHANGELOG.md의 [Unreleased]에 항목이 있습니다."
 out_of_scope:
-  - "사용자 답 없는 판단 필요 지적의 적용."
-  - "init 개명 실행(선택지 제시까지 — 소비 리포 영향이라 별도 이슈)."
-  - "소비 리포 동기화, 리포 밖 스킬 수정, skill-creator 파일 반입."
-  - "risk-assess 부트스트랩 창 변경(결정 요청으로 올리고 사용자 답에 따릅니다)."
+  - "감사가 찾은 마찰의 수정(각각 별도 이슈)과 이슈 자동 생성."
+  - "adversary-argon·modelRoles.vision 변경."
+  - "렌더된 시스템 프롬프트 diff, harness-check --smoke(#31에 남은 범위)."
+  - "소비 리포 동기화(harness-sync.sh 화이트리스트)와 전역 스킬 미러(~/.claude/skills) 복사."
+  - "18.18.7~18.20.0 릴리스(설치 버전 밖 — 다음 감사 구간)."
 assumptions:
-  - "시작 HEAD는 main ffae347(PR #131 머지 후)이고 작업트리는 깨끗했습니다."
-  - "이 호스트의 점검 결과는 20건(omp 18.18.6)이며, 그중 REF-PATH-gh-loop-3861db는 근거가 하나로 모여(orca-cli는 ~/.agents/skills의 설치형 스킬, gh-fanout이 skill://orca-cli로 참조, 리포 이력에 그 경로 없음) 기계적으로 분류했습니다."
+  - "시작 HEAD는 main ffae347(#131 머지)이고 실측은 omp 18.18.6 WSL 호스트 기준입니다."
+  - "omp 업스트림 저장소는 can1357/oh-my-pi이고 gh release list/view로 본문을 받을 수 있습니다(26개 전부 수신 확인)."
+  - "omp models --kind all --json이 {models:[{provider,id,selector,kind}]} 형태를 냅니다(18.18.6 실측)."
 risks:
-  - "갱신 단계의 분류는 에이전트 판단이라 근거 없이 기계적으로 분류할 수 있습니다 — 보고서에 근거 열을 요구하고 한계 절에 적었습니다."
-  - "8단계 평가는 서브에이전트 실행이라 비결정적이고 프롬프트당 1회라 참고용입니다."
-  - "init 제거 목록에 넣은 스킬 디렉터리 삭제는 risk-assess 부트스트랩 창 밖이라 init 첫 커밋이 high로 채점됩니다 — 게이트 변경 여부는 결정 요청입니다."
+  - "릴리스 노트 판정은 에이전트의 읽기에 기대므로 재현율은 읽은 축 이해에 달려 있습니다 — references/harness-surface.md가 축을 고정하지만 누락은 가능합니다."
+  - "생존 검사는 카탈로그 존재만 봅니다. 로그인·쿼터·요청 거부는 실제 호출에서야 드러납니다."
+  - "규칙 본문의 모델 id는 백틱 안 provider/model 형태만 잡습니다. 산문 속 이름(Argon, opus)은 사람이 읽어야 합니다."
+  - "테스트 파일은 .omp/extensions/harness/tests/에 있어 소비 리포로 동기화됩니다 — 스킬이 없으면 skip합니다(harness-skill-tune.test.mjs와 같은 방식)."
 references:
-  - path: https://github.com/rae-hugo-kim/omp/issues/128
-    reason: 명세(만들 것·AC·범위 밖·#131 머지 뒤 알게 된 것)
-  - path: .omp/skills/harness-skill-tune/SKILL.md
-    reason: 갱신 단계(5~10단계)
-  - path: .omp/skills/gh-loop/SKILL.md
-    reason: 처리한 지적 REF-PATH-gh-loop-3861db(Reuse Map)
-  - path: .omp/skills/init/SKILL.md
-    reason: 소스 리포 전용 자산 제거 목록(Phase 2의 5번)
-  - path: .omp/extensions/harness/gates/risk-assess.mjs
-    reason: 부트스트랩 창(BOOTSTRAP_CLEANUP_PREFIXES·isHarnessAssetPath)의 확인 근거
+  - path: https://github.com/rae-hugo-kim/omp/issues/129
+    reason: 명세(만들 것·정해 둔 것·AC·범위 밖·#131 머지 뒤 알게 된 것)
+  - path: .omp/skills/harness-friction/SKILL.md
+    reason: 스킬 본문(절차 1~7과 한계)
+  - path: .omp/skills/harness-friction/scripts/friction.mjs
+    reason: 결정적 명령(range·releases·models·baseline)
+  - path: .omp/skills/harness-friction/baseline.json
+    reason: 기준 버전 기록(18.11.1 → 18.18.6, history 보존)
+  - path: docs/handoff/handoff_2026-11-13_omp-18-18-6-friction-audit.md
+    reason: 첫 실행 산출물(26개 전수, C1~C4·D1~D8·U1~U3, 사이클 분할안)
+  - path: .omp/extensions/harness/tests/harness-friction.test.mjs
+    reason: 픽스처 테스트(AC2·AC3)
+  - path: docs/handoff/handoff_2026-10-16_omp-18-11-1-friction-audit.md
+    reason: 보고서 형식 선례와 직전 기준선(#109~#111)
 estimate:
   risk: high
-  files: 6
-  depth: low
+  files: 8
+  depth: high
   model: anthropic/claude-fable-5-1
-  effort: high
+  effort: xhigh
