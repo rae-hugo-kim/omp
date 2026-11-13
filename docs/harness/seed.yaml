@@ -1,5 +1,6 @@
 name: omp-update-detection-31
-status: approved
+status: done
+completed: 2026-11-13
 version: 5
 task_id: "20261113-020816-3d97"
 # gh-loop worker Stage 2에 따라 이슈 #31의 2026-11-13 "범위 확정" 댓글(코디네이터 세션 결정)의 범위와 AC 6건을 명세로 삼습니다.
