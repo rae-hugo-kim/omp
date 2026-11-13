@@ -1,11 +1,11 @@
 name: omp-update-detection-31
-status: done
-completed: 2026-11-13
-version: 2
+status: approved
+version: 4
 task_id: "20261113-020816-3d97"
 # gh-loop worker Stage 2에 따라 이슈 #31의 2026-11-13 "범위 확정" 댓글(코디네이터 세션 결정)의 범위와 AC 6건을 명세로 삼습니다.
 # 본문의 제안 2(harness-check --smoke)와 2026-09-25 댓글의 시스템 프롬프트 block 0 diff는 이 seed의 범위가 아닙니다.
 # 직전 완료 seed(adversary-panel-cycle2-112)는 git 이력에 보존합니다.
+# v4: 2026-11-13 세션 결정 B(이슈 댓글 #issuecomment-6843284693, "추천대로 ㄱㄱ")로 `index.ts` 미변경 제약을 풀고 AC7·AC8을 더했습니다.
 goal: >
   #31 사이클 ①(omp 업데이트 감지): `harness-version-check.mjs`가 세션 시작 때 `omp --version`을 `.omp/state/omp-version.json`의
   기록과 비교해, 버전이 바뀌었으면 `HARNESS NOTE` 한 줄을 1회 내고 기록을 갱신합니다. 알림은 소스 리포에서는 마찰 감사 스킬
@@ -14,7 +14,7 @@ goal: >
 constraints:
   - "범위는 이슈 #31 '범위 확정' 댓글의 제안 1(업데이트 감지)뿐입니다."
   - "구현 위치는 `.omp/extensions/harness/gates/harness-version-check.mjs`이고, 기록은 같은 파일의 HOOKS INACTIVE·POLICY SHADOWED 프로브처럼 세션 루트의 `.omp/state/` 아래 JSON 파일(`omp-version.json`)에 둡니다."
-  - "`index.ts`는 바꾸지 않습니다 — 세션 시작 호출의 구분은 기존 배선 계약(턴 시작·커밋 직후 재확인만 `max_age_ms`를 넘김, `drift-recheck-wiring.test.mjs`가 고정)을 씁니다."
+  - "`index.ts`는 `session_start` 호출의 payload에 UI 유무(`has_ui`)를 싣는 변경만 합니다(2026-11-13 세션 결정 B). 턴 시작·커밋 직후 재확인 호출의 배선과 notify/logger 분기는 바꾸지 않습니다."
   - "#129가 머지되기 전에는 문서(CHANGELOG·README 등)에 슬래시 호출 형태의 harness-friction 참조를 적지 않습니다 — `scripts/docs-drift`가 문서의 스킬 참조를 실존 검사합니다. 게이트 코드와 테스트의 문자열에만 씁니다."
   - "프로브는 세션 시작을 막지 않습니다 — 예외를 올리지 않고 exit 0을 유지하며 `omp` 호출에는 timeout을 둡니다."
   - "Stage 2의 체크 완료 seed·scope → 코드 커밋 → 리뷰 후속 → closeout 커밋 순서를 따릅니다."
@@ -31,20 +31,27 @@ acceptance_criteria:
     title: "링크드 워크트리에서는 무발화·무기록(기록 파일을 만들지도 바꾸지도 않음)이고 같은 리포의 메인 체크아웃이 1회 알린다 — fixture 테스트로 고정한다."
   - id: AC6
     title: "`node --test .omp/extensions/harness/tests/*.test.mjs`가 전부 통과하고(신규 케이스는 RED → GREEN) `node scripts/docs-drift`가 0 errors이며 `CHANGELOG.md`의 `[Unreleased]`에 항목이 있다."
+  - id: AC7
+    title: "`index.ts`의 `session_start` 호출이 UI 유무를 payload `has_ui`로 넘기고 게이트는 `has_ui`가 true일 때만 프로브를 돌린다 — UI 없는 세션 시작(`omp -p`, 서브에이전트)과 표시가 없는 호출(재확인, 수동 실행)은 알림도 기록도 하지 않아 다음 UI 세션 시작이 알림을 받는다. 게이트 테스트와 배선 테스트로 고정한다."
+  - id: AC8
+    title: "`omp --version` 출력에 `omp/` 접두 줄이 있으면 다른 버전 꼴 줄보다 우선해 읽고, `omp` 호출은 timeout에 SIGKILL로 끝낸다(SIGTERM을 무시하는 omp가 게이트를 붙잡지 않는다) — 테스트로 고정한다."
 out_of_scope:
   - "이슈 본문의 제안 2(`harness-check --smoke`)와 `harness-sync.sh` 완료 직후 스모크 자동 실행."
   - "2026-09-25 댓글의 렌더된 시스템 프롬프트 block 0 diff 축."
   - "harness-friction 스킬 자체(#129)와 #127·#128."
-  - "`index.ts`·`scripts/harness-sync.sh` 변경(sync의 캐시 삭제 목록에 버전 기록을 넣지 않습니다 — 캐시가 아니라 비교 기준입니다)."
+  - "`scripts/harness-sync.sh` 변경(sync의 캐시 삭제 목록에 버전 기록을 넣지 않습니다 — 캐시가 아니라 비교 기준입니다)."
+  - "`index.ts`에서 `session_start` payload 밖의 변경(재확인 호출 배선, notify/logger 분기, 다른 핸들러)."
   - "PR 생성(본문에 링크드 워크트리 선택 근거 기재)·교차검증 게시·head와 nonce 결정 요청은 커밋 뒤 후속 절차이며 AC 선체크 대상이 아닙니다."
 assumptions:
   - "시작 HEAD는 main 2f136f3(PR #126 머지 후)이고 작업트리는 깨끗했습니다(ingest가 더한 audit.jsonl 1행 제외)."
   - "`omp --version`은 stdout 한 줄 `omp/<semver>`를 내고 이 호스트(omp 18.18.6)에서 약 10ms에 끝납니다(2026-11-13 실측)."
   - "세션 시작 호출의 게이트 출력은 `ctx.ui.notify`(UI가 없으면 logger)로만 가고 에이전트 컨텍스트에는 들어가지 않습니다(`index.ts` session_start 핸들러)."
+  - "`ctx.hasUI`는 TUI 메인 세션에서 true이고 `omp -p` 메인 세션과 task 서브에이전트(부모가 TUI든 `omp -p`든)에서 false입니다(2026-11-13 실측, omp 18.18.6)."
 risks:
   - "링크드 워크트리 무발화를 택했으므로 메인이 bare이거나 메인 체크아웃에서 세션을 열지 않는 리포는 알림을 받지 못합니다."
-  - "UI 없는 세션 시작이 메인 체크아웃에서 버전 변경을 먼저 보면 알림이 logger로만 가고 기록이 갱신돼 1회분이 소비됩니다. headless(`omp -p`) 세션과, TUI 세션이 띄운 task 서브에이전트가 여기에 해당합니다(2026-11-13 실측 — 둘 다 session_start가 전달되고 `ctx.hasUI`가 false). 게이트만으로는 UI 유무를 알 수 없어 고치려면 `index.ts`가 그 값을 넘겨야 하며, 이는 이 seed의 constraint와 충돌하므로 사용자 결정 사항입니다."
-  - "세션 시작 판별이 `max_age_ms` 부재에 의존합니다 — session_start 호출에 창을 넘기도록 배선이 바뀌면 프로브가 조용히 꺼집니다(배선 테스트가 그 변경을 실패시킵니다)."
+  - "UI 없는 세션만 여는 체크아웃(headless 자동화 전용)은 알림을 받지 못합니다 — 알림을 볼 사람이 없는 세션이라 의도한 동작이고, 다음 UI 세션 시작이 알립니다."
+  - "프로브 실행이 `index.ts`가 넘기는 `has_ui`에 의존합니다 — session_start 호출이 표시를 넘기지 않게 배선이 바뀌면 프로브가 조용히 꺼집니다(배선 테스트가 그 변경을 실패시킵니다). 새 `index.ts`는 세션을 다시 시작해야 로드되므로, 옛 확장을 로드한 세션에서는 프로브가 돌지 않습니다."
+  - "`ctx.hasUI`가 true인 비-TUI 모드(ACP 등)에서 `ui.notify`가 실제로 사람에게 보이는지는 확인하지 않았습니다(미실측)."
   - "Windows native에서 `omp`가 `.cmd` shim이면 `execFileSync`가 실행하지 못해 AC3 경로로 무발화합니다(미실측)."
 references:
   - path: https://github.com/rae-hugo-kim/omp/issues/31#issuecomment-6829059756
@@ -52,4 +59,6 @@ references:
   - path: .omp/extensions/harness/gates/harness-version-check.mjs
     reason: 구현 위치와 따라야 할 프로브·마커 방식
   - path: .omp/extensions/harness/tests/drift-recheck-wiring.test.mjs
-    reason: session_start 호출만 max_age_ms를 넘기지 않는다는 배선 계약
+    reason: 게이트 호출 배선 계약(재확인 호출은 max_age_ms, session_start는 has_ui)
+  - path: https://github.com/rae-hugo-kim/omp/issues/31#issuecomment-6843284693
+    reason: 결정 B와 index.ts 제약 해제의 근거(2026-11-13 세션에서 직접 결정함 댓글)
