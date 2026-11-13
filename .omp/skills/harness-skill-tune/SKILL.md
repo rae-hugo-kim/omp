@@ -1,7 +1,7 @@
 ---
 name: harness-skill-tune
 argument-hint: "[--repo-prefix <dir>]... [--format md|json] [--out <file>]"
-description: Inspects this repo's harness skills and prints one report — per-skill usage counts from omp session transcripts, name collisions with omp reserved names and with same-named skills from other sources, and SKILL.md consistency (frontmatter, referenced paths, skills and agents, size) — then applies that report to the skills: mechanical findings (a dangling path, /skill: or agent reference with exactly one correct target, a frontmatter mismatch) are fixed and reported by finding ID; judgment findings (rename, delete, hide, rewrite a description, restructure) are offered as numbered options with usage numbers and applied only when the user picks one; changed skills are evaluated before/after where possible and the check is re-run. The check is read-only, the update never touches skills outside this repo and never commits. Use when the user says "harness-skill-tune", "스킬 점검", "스킬 갱신", "스킬 사용 빈도", "스킬 이름 충돌", "skill audit", or asks which harness skills are unused, colliding, or stale.
+description: Inspects this repo's harness skills and prints one report — per-skill usage counts from omp session transcripts, name collisions with omp reserved names and with same-named skills from other sources, and SKILL.md consistency (frontmatter, referenced paths, skills and agents, size) — then applies that report to the skills. Mechanical findings (a dangling path, skill or agent reference with exactly one correct target) are fixed and reported by finding ID; judgment findings (rename, delete, hide, rewrite a description, restructure, a frontmatter name that differs from the directory) are offered as numbered options with usage numbers and applied only when the user picks one; changed skills are evaluated before/after where possible and the check is re-run. The check is read-only, the update never touches skills outside this repo and never commits. Use when the user says "harness-skill-tune", "스킬 점검", "스킬 갱신", "스킬 사용 빈도", "스킬 이름 충돌", "skill audit", or asks which harness skills are unused, colliding, or stale.
 ---
 
 # harness-skill-tune — 스킬 점검과 갱신
@@ -61,7 +61,7 @@ node .omp/skills/harness-skill-tune/scripts/skill-tune.mjs check
 | `REF-AGENT` | 본문이 부르는 에이전트가 `.omp/agents/`와 omp 번들 에이전트에 없음 | medium | 불가 |
 | `SIZE` | `SKILL.md`가 500줄을 넘음 | low | 불가 |
 
-보고서의 "기계적 수정" 열은 **스크립트가 정답을 아는가**입니다(`FM-NAME`은 디렉터리명이 정답이라 가능, 나머지는 스크립트가 대체 대상을 모릅니다). 갱신 단계의 분류(5단계)는 그와 별개로 **에이전트가 근거로 정답이 하나임을 보일 수 있는가**로 판정하므로, 이 열이 "불가"인 `REF-*` 지적도 5단계에서 기계적으로 분류될 수 있습니다.
+보고서의 "기계적 수정" 열은 **스크립트가 넣을 값을 아는가**입니다(`FM-NAME`은 디렉터리명을 넣을 수 있어 가능, 나머지는 스크립트가 대체 대상을 모릅니다). 갱신 단계의 분류(5단계)는 그와 별개로 **에이전트가 근거로 정답이 하나임을 보일 수 있는가**와 **사용자 가치가 걸리는가**로 판정하므로, 이 열이 "불가"인 `REF-*` 지적이 5단계에서 기계적으로 분류될 수 있고, 반대로 "가능"인 `FM-NAME`은 로더가 frontmatter `name`을 로드 이름으로 쓰기 때문에(`omp skill list --json`의 `name`이 디렉터리명이 아니라 frontmatter 값입니다) 그 값을 바꾸면 개명이라 판단 필요로 다룹니다.
 
 ### 3. 판단이 필요한 항목 (스크립트가 하지 않는 것)
 
@@ -81,10 +81,10 @@ node .omp/skills/harness-skill-tune/scripts/skill-tune.mjs check
 
 입력은 점검 단계의 보고서(지적 ID·근거·스킬별 수치)입니다. 보고서 없이 스킬을 고치지 않습니다.
 
-**갱신에 들어가기 전에, 스킬을 하나라도 고치기 전에** 기준을 보존합니다 — 1단계와 같은 옵션으로 JSON 보고서를 임시 디렉터리에 저장하고, 고칠 가능성이 있는 스킬의 `SKILL.md`를 그 디렉터리에 복사합니다. 9단계의 전후 대조와 8단계의 "수정 전"이 이 사본을 씁니다(git 상태를 되돌려 다시 만들 수 없으므로 순서가 중요합니다). 아래 블록부터 9단계까지는 같은 셸에서 실행합니다(`TUNE_OUT`·`trap`은 그 셸에서만 유효합니다).
+**갱신에 들어가기 전에, 스킬을 하나라도 고치기 전에** 기준을 보존합니다 — 1단계와 같은 옵션으로 JSON 보고서를 임시 디렉터리에 저장하고, 고칠 가능성이 있는 스킬의 `SKILL.md`를 그 디렉터리에 복사합니다. 9단계의 전후 대조와 8단계의 "수정 전"이 이 사본을 씁니다(git 상태를 되돌려 다시 만들 수 없으므로 순서가 중요합니다). `TUNE_OUT` 값은 보고서에 적어 두고, 셸이 바뀌면 그 절대 경로를 다시 대입합니다. `trap … EXIT`로 지우지 않습니다 — 명령마다 셸 사본을 쓰는 실행 환경에서는 블록이 끝나자마자 기준이 사라집니다. 10단계가 끝난 뒤 `rm -rf "$TUNE_OUT"`으로 지웁니다.
 
 ```bash
-TUNE_OUT=$(mktemp -d); trap 'rm -rf "$TUNE_OUT"' EXIT
+TUNE_OUT=$(mktemp -d); echo "$TUNE_OUT"
 node .omp/skills/harness-skill-tune/scripts/skill-tune.mjs check --format json --out "$TUNE_OUT/before.json"   # 1단계와 같은 --repo-prefix 등 옵션
 mkdir -p "$TUNE_OUT/before" && cp .omp/skills/<name>/SKILL.md "$TUNE_OUT/before/<name>.md"                      # 고칠 스킬마다
 ```
@@ -95,8 +95,8 @@ mkdir -p "$TUNE_OUT/before" && cp .omp/skills/<name>/SKILL.md "$TUNE_OUT/before/
 
 | 분류 | 기준 | 해당 코드 |
 |------|------|-----------|
-| **기계적** | 정답이 하나이고 그 근거를 리포에서 보일 수 있음 | `FM-NAME`(frontmatter `name`을 디렉터리명에 맞춥니다 — 로더가 쓰는 이름은 디렉터리명이라 스킬 개명이 아닙니다. 단 그 스킬의 개명 선택지가 열려 있으면 판단 필요로 보냅니다). `REF-PATH`·`REF-SKILL`·`REF-AGENT` 가운데 (ㄱ) 대상의 이동·개명이 git 이력(`git log --all --follow -- <경로>`, `git log -S'<참조 문자열>'`)으로 확인되거나, (ㄴ) 같은 자산을 리포의 다른 문서가 이미 한 가지 방식으로 가리키거나(예: 리포 밖에 설치된 스킬은 `skill://<name>`), (ㄷ) `omp skill list --json`·`.omp/agents/`가 대상의 현재 이름·위치를 보고하는 것. |
-| **판단 필요** | 선택지가 둘 이상이거나 사용자 가치가 걸림 | 개명·삭제·숨김(`hide: true`)·설명문 재작성·본문 구조 변경 전부(`NAME-RESERVED`, `NAME-DUP`, `FM-MISSING`, `FM-DESC`, `SIZE`). 참조를 지울지 다른 문서로 바꿀지 고를 수 있는 `REF-*` — 대상이 리포에 존재한 적이 없거나, 존재했다가 삭제됐는데 대체가 하나로 정해지지 않는 경우(되살릴지 지울지는 사용자 몫입니다). 3단계 3항에서 예시 경로·런타임 산출물로 가려진 `REF-PATH`의 `expected-absent-paths.json` 등재(다음 점검부터 영구 억제되므로 사유를 보여 주고 고르게 합니다). |
+| **기계적** | 정답이 하나이고 그 근거를 리포에서 보일 수 있으며 사용자 가치가 걸리지 않음 | `REF-PATH`·`REF-SKILL`·`REF-AGENT` 가운데 (ㄱ) 대상의 이동·개명이 git 이력(`git log --all --follow -- <경로>`, `git log -S'<참조 문자열>'`)으로 확인되거나, (ㄴ) 같은 자산을 리포의 다른 문서가 이미 한 가지 방식으로 가리키거나(예: 리포 밖에 설치된 스킬은 `skill://<name>`), (ㄷ) `omp skill list --json`·`.omp/agents/`가 대상의 현재 이름·위치를 보고하는 것. |
+| **판단 필요** | 선택지가 둘 이상이거나 사용자 가치가 걸림 | 개명·삭제·숨김(`hide: true`)·설명문 재작성·본문 구조 변경 전부(`NAME-RESERVED`, `NAME-DUP`, `FM-MISSING`, `FM-DESC`, `SIZE`). `FM-NAME` — 로더는 frontmatter `name`을 로드 이름으로 쓰므로 그 값을 디렉터리명에 맞추는 것은 `/skill:<name>`이 바뀌는 개명이고, 디렉터리를 `name`에 맞춰 옮기는 것도 선택지입니다. 참조를 지울지 다른 문서로 바꿀지 고를 수 있는 `REF-*` — 대상이 리포에 존재한 적이 없거나, 존재했다가 삭제됐는데 대체가 하나로 정해지지 않는 경우(되살릴지 지울지는 사용자 몫입니다). 3단계 3항에서 예시 경로·런타임 산출물로 가려진 `REF-PATH`의 `expected-absent-paths.json` 등재(다음 점검부터 영구 억제되므로 사유를 보여 주고 고르게 합니다). |
 
 분류와 무관하게 다음은 고치지 않고 보고만 합니다. **리포 밖 스킬**에 대한 지적(`NAME-DUP`의 사본 쪽 — 사본이 하네스가 안내한 미러이면 `closeout_contract.md` §4의 복사 절차를 가리킵니다), **다른 열린 이슈가 다루는 지적**(그 이슈 번호를 적습니다), **소비 리포에 영향이 있어 별도 이슈가 필요한 변경**(동기화되는 스킬의 개명 등).
 
@@ -128,7 +128,7 @@ mkdir -p "$TUNE_OUT/before" && cp .omp/skills/<name>/SKILL.md "$TUNE_OUT/before/
 사용자가 고르기 전에는 아무것도 적용하지 않습니다. 선택의 결과는 둘로 갈립니다.
 
 - **해결**: 선택이 지적의 원인을 없애는 편집(개명·삭제·설명문 작성·참조 정정 등)이면 6단계처럼 고치고 "해결한 지적" 표에 선택 번호와 함께 적습니다. 9단계에서 그 ID가 사라져야 합니다.
-- **수용**: 선택이 지적을 남기는 결과(그대로 둠, `hide: true` — 이름 지적은 이름만 보므로 남습니다, 별도 이슈로 넘김, 보고만)이면 편집이 있어도 없어도 "수용한 지적" 표에 ID·선택·사유로 적습니다. 9단계는 이 ID가 남아 있어도 통과이고, 다음 점검에서 다시 나옵니다(억제 수단이 없습니다).
+- **수용**: 선택이 지적을 남기는 결과(그대로 둠, `hide: true` — 이름 지적은 이름만 보므로 남습니다, 별도 이슈로 넘김, 보고만)이면 편집이 있어도 없어도 "수용한 지적" 표에 ID·선택·사유로 적습니다. 9단계는 이 ID가 남아 있어도 통과이고, 다음 점검에서 다시 나옵니다(`REF-PATH`의 `expected-absent-paths.json` 등재 선택은 해결입니다. 이름 지적에는 억제 수단이 없습니다).
 
 사용자가 고르지 않은 지적은 선택지 그대로 보고서에 남깁니다.
 
@@ -136,7 +136,7 @@ mkdir -p "$TUNE_OUT/before" && cp .omp/skills/<name>/SKILL.md "$TUNE_OUT/before/
 
 **실행 조건**: 6·7단계에서 `description`이나 본문의 절차를 바꾼 스킬. 참조 경로 한 곳을 정정한 것처럼 동작이 달라지지 않는 변경은 9단계의 재점검이 검증이므로 평가를 생략하고 그 사유를 적습니다.
 
-**방법**: 설명문의 발동 표현에서 대표 프롬프트 2~3개를 만들고, 프롬프트마다 `task` 서브에이전트를 둘 돌려 비교합니다 — 수정 전(갱신 전에 보존한 `$TUNE_OUT/before/<name>.md`를 `local://`로 넘김) 대 수정 후(작업 트리 파일), 또는 스킬 없음(본문을 넘기지 않음) 대 수정 후. 비교하는 것은 **넘긴 본문을 따른 결과**(절차의 어느 단계까지 따랐는지, 산출물 형식)입니다. 설명문 매칭에 따른 자동 발동 여부는 서브에이전트가 같은 작업 트리의 현재 스킬 목록을 보므로 옛 설명문으로는 측정할 수 없어 비교 항목에서 뺍니다. 판정 기준은 프롬프트와 함께 미리 적고, 서브에이전트에는 리포의 어떤 파일도 만들거나 바꾸지 말고 결과를 답으로만 내라고 명시합니다.
+**방법**: 설명문의 발동 표현에서 대표 프롬프트 2~3개를 만들고, 프롬프트마다 `task` 서브에이전트를 둘 돌려 비교합니다 — 수정 전(갱신 전에 보존한 `$TUNE_OUT/before/<name>.md`의 절대 경로를 프롬프트에 적어 그 파일을 읽고 따르게 함) 대 수정 후(작업 트리 `.omp/skills/<name>/SKILL.md`의 절대 경로), 또는 스킬 없음(본문을 주지 않음) 대 수정 후. 비교하는 것은 **넘긴 본문을 따른 결과**(절차의 어느 단계까지 따랐는지, 산출물 형식)입니다. 설명문 매칭에 따른 자동 발동 여부는 서브에이전트가 같은 작업 트리의 현재 스킬 목록을 보므로 옛 설명문으로는 측정할 수 없어 비교 항목에서 뺍니다. 판정 기준은 프롬프트와 함께 미리 적고, 서브에이전트에는 리포의 어떤 파일도 만들거나 바꾸지 말고 결과를 답으로만 내라고 명시합니다.
 
 **생략 조건**(사유를 적고 생략): 대표 프롬프트를 만들 수 없음(발동 표현이 없거나 입력이 실제 리포 상태에 묶여 있음), 스킬이 원격·저장소 상태를 바꿈(`compr`, `compush`, `gh-loop`, `gh-fanout`, `init`, `migrate`, `harness-check` 등 — 서브에이전트가 절차를 따르면 실제로 커밋·push·이슈 생성이 일어납니다), 스킬의 절차가 작업 트리에 산출물을 씀(`kickoff`·`startdev`의 seed·scope, `sum`의 `docs/sum/` 등 — "바꾸지 말라"는 지시 하나에 기대지 않습니다), 동작이 달라지지 않는 참조 정정.
 
@@ -151,7 +151,7 @@ mkdir -p "$TUNE_OUT/before" && cp .omp/skills/<name>/SKILL.md "$TUNE_OUT/before/
 
 ### 9. 재점검
 
-수정 뒤 점검을 다시 돌려, 해결한 지적 ID가 사라졌고 새 지적이 생기지 않았는지 갱신 전에 저장한 `before.json`과 ID 집합으로 대조합니다. 인수로 넘기는 ID는 **해결한 지적**(6단계 표, 7단계의 해결 선택)만이고, 수용한 지적은 넘기지 않습니다. 넘긴 ID가 `before.json`에 없으면(오타, 다른 보고서의 ID) 실패합니다.
+수정 뒤 점검을 다시 돌려, 해결한 지적 ID가 사라졌고 새 지적이 생기지 않았는지 갱신 전에 저장한 `before.json`과 ID 집합으로 대조합니다. 인수로 넘기는 ID는 **해결한 지적**(6단계 표, 7단계의 해결 선택)만이고, 수용한 지적은 넘기지 않습니다. 넘긴 ID가 `before.json`에 없으면(오타, 다른 보고서의 ID) 실패합니다. 새 지적이 나오면 그것을 5단계로 돌립니다 — 이번 수정이 만든 것이면 고치고(개명은 지적 ID의 스킬 부분을 바꾸므로 같은 지적이 새 ID로 다시 나옵니다), 사용자가 수용하면 그 ID를 `TUNE_ALLOW_NEW`(쉼표 구분)로 넘겨 다시 대조하고 "수용한 지적" 표에 적습니다.
 
 ```bash
 node .omp/skills/harness-skill-tune/scripts/skill-tune.mjs check --format json --out "$TUNE_OUT/after.json"   # before.json과 같은 옵션
@@ -161,22 +161,24 @@ node -e '
   const fixed = process.argv.slice(3);
   const unknown = fixed.filter((id) => !before.has(id));
   const left = fixed.filter((id) => after.has(id));
-  const added = [...after].filter((id) => !before.has(id));
+  const allowNew = new Set((process.env.TUNE_ALLOW_NEW || "").split(",").filter(Boolean));
+  const added = [...after].filter((id) => !before.has(id) && !allowNew.has(id));
+  const gone = [...before].filter((id) => !after.has(id));
   if (unknown.length || left.length || added.length) {
     console.error("기준에 없는 ID:", unknown.join(", ") || "없음", "/ 남은 지적:", left.join(", ") || "없음", "/ 새 지적:", added.join(", ") || "없음");
     process.exit(1);
   }
-  console.log(`재점검 통과: ${before.size}건 → ${after.size}건`);
+  console.log(`재점검 통과: ${before.size}건 → ${after.size}건 / 사라진 ID: ${gone.join(", ") || "없음"}`);
 ' "$TUNE_OUT/after.json" "$TUNE_OUT/before.json" <해결한 지적 ID>...
 ```
 
-남은 지적이나 새 지적이 있으면 그 ID를 보고서에 적고, 수정을 되돌리거나 7단계 선택지로 돌립니다.
+남은 지적이나 새 지적이 있으면 그 ID를 보고서에 적고, 수정을 되돌리거나 7단계 선택지로 돌립니다. "사라진 ID"에 넘기지 않은 ID가 있으면 어떤 수정이 그것을 없앴는지 확인해 해결 표에 더합니다.
 
 ### 10. 보고와 전달
 
-점검 보고서 아래에 "갱신" 절을 덧붙여 사용자에게 전달합니다. 절은 다섯 부분입니다 — **해결한 지적**(6단계 표, 7단계의 해결 선택 포함), **수용한 지적**(7단계의 수용 선택), **선택지**(7단계, 사용자가 아직 고르지 않은 것), **평가**(8단계 표 또는 생략 사유), **재점검**(9단계 결과: 전후 건수, 사라진 ID, 새 ID), 그리고 **보고만**(5단계의 리포 밖·다른 이슈·별도 이슈 항목)을 끝에 붙입니다.
+점검 보고서 아래에 "갱신" 절을 덧붙여 사용자에게 전달합니다. 절은 여섯 부분입니다 — **해결한 지적**(6단계 표, 7단계의 해결 선택 포함), **수용한 지적**(7단계의 수용 선택), **선택지**(7단계, 사용자가 아직 고르지 않은 것), **평가**(8단계 표 또는 생략 사유), **재점검**(9단계 결과: 전후 건수, 사라진 ID, 새 ID), **보고만**(5단계의 리포 밖·다른 이슈·별도 이슈 항목).
 
-변경은 작업 트리에 남깁니다. 커밋·PR은 사용자가 일반 경로로 합니다 — 하네스 소유 스킬은 소비 리포로 동기화되므로 `CHANGELOG.md`의 `[Unreleased]`에 항목을 넣고 `compr`로 PR을 엽니다. 이 스킬은 git 상태를 바꾸지 않습니다.
+변경은 작업 트리에 남기고, 갱신 단계가 써 둔 `CHANGELOG.md` `[Unreleased]` 항목·README 스킬 표와 함께 사용자가 일반 경로(`compr`)로 커밋·PR합니다 — 하네스 소유 스킬은 소비 리포로 동기화되기 때문입니다. 이 스킬은 git 상태를 바꾸지 않습니다.
 
 ## 예약 이름 기준 갱신
 
