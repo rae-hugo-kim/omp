@@ -18,7 +18,7 @@
 //     COMMITTED meta is current, STALE (linked worktree) otherwise, never /skill:harness-check; main and
 //     single checkouts keep the original STALE; the worktree uses its own cache file
 //   - the omp update probe (#31) has its own file, omp-version-probe.test.mjs. The cases here never
-//     stub `omp`, so on a host that has one the gate also runs it (first run: record only, silent)
+//     pass `has_ui`, so the probe does not run in them
 //
 // Fixture tags are ANNOTATED (`git tag -a`) on purpose: only annotated tags make
 // the tag-object sha differ from the commit sha, which is what the peeled-sha

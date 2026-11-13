@@ -156,7 +156,7 @@ Mechanisms that operate automatically in the kickoff → startdev flow. There ar
 | `tool_result` (bash) | backpressure-tracker / failure-tracker | Record verification PASS/FAIL |
 | `tool_result` (bash commit·verify / edit·write) | breadcrumb-tracker | Record session-resume breadcrumbs (commits, tests, file changes; no-LLM) |
 | `before_agent_start` | kickoff-detector | Inject kickoff reminder when new work is detected |
-| `session_start` | harness-version-check | Remote harness drift notice (24h cache), hooks-inactive and policy-shadow (non-empty `.omp/AGENTS.md`) probes, omp version-change notice (compared with the `.omp/state/omp-version.json` record, once per change) |
+| `session_start` | harness-version-check | Remote harness drift notice (24h cache), hooks-inactive and policy-shadow (non-empty `.omp/AGENTS.md`) probes, omp version-change notice (at a session start with a UI, compared with the `.omp/state/omp-version.json` record, once per change) |
 | `session_start` | breadcrumb-surface | Surface recent docs/sum (un-orphan prior summaries; no-LLM) |
 
 Commit enforcement happens at git's own boundary, so it holds for every spelling and for human commits too:

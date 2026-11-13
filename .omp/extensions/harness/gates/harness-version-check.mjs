@@ -20,8 +20,9 @@
 // commit, then merge). Cache file: harness-version-check.linked.json (main/single checkouts keep
 // harness-version-check.json).
 //
-// omp update probe (#31): at session start only, `omp --version` is compared with the version recorded
-// in .omp/state/omp-version.json; a change emits one HARNESS NOTE (emitIfOmpChanged).
+// omp update probe (#31): at a session start whose output reaches a UI (payload `has_ui: true`),
+// `omp --version` is compared with the version recorded in .omp/state/omp-version.json; a change
+// emits one HARNESS NOTE (emitIfOmpChanged).
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, renameSync, realpathSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
@@ -39,13 +40,17 @@ const SAFE_REF = /^[A-Za-z0-9][A-Za-z0-9._\/-]*$/;
 const REPO_ENV_VARS = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE', 'GIT_PREFIX', 'GIT_NAMESPACE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES'];
 // A line of `omp --version` output that carries the version (`omp/18.18.6` today): an optional
 // `omp/` or `omp ` prefix, an optional `v`, a dotted numeric version with an optional
-// prerelease/build suffix, then whitespace or end of line. Text after the version
-// (`omp/18.19.0 (canary)`) and other lines (a banner) are ignored, so a cosmetic format change does
-// not silently switch the probe off. The same shape vets the RECORDED value before a notice echoes it.
-const OMP_VERSION_LINE_RE = /^(?:omp[\/ ])?v?(\d+(?:\.\d+){2,}(?:[-+][0-9A-Za-z.+-]*[0-9A-Za-z])?)(?:\s|$)/;
+// prerelease/build suffix, then whitespace or end of line. Group 1 is set for the `omp/` prefix —
+// such a line is authoritative; the looser shapes are used only when no line has it, so a banner that
+// names another version ("omp 18.20.0 is available") is not taken for the installed one. Text after
+// the version (`omp/18.19.0 (canary)`) and unrelated lines are ignored: the common cosmetic changes do
+// not silently switch the probe off (other shapes still read as "no version"). The same pattern vets
+// the RECORDED value before a notice echoes it.
+const OMP_VERSION_LINE_RE = /^(?:(omp\/)|omp )?v?(\d+(?:\.\d+){2,}(?:[-+][0-9A-Za-z.+-]*[0-9A-Za-z])?)(?:\s|$)/;
 const OMP_VERSION_MAX_LENGTH = 64;   // longer than any real version; bounds what a notice can echo
-// `omp --version` answers in ~15 ms. The bound keeps a hung omp from eating the caller's 15s gate
-// budget, which the ls-remote probe (10s) further down also draws on.
+// `omp --version` answers in ~15 ms. The bound (enforced with SIGKILL — a process that ignores
+// SIGTERM would otherwise hold the gate) keeps a hung omp from eating the caller's 15s gate budget,
+// which the ls-remote probe (10s) further down also draws on.
 const OMP_VERSION_TIMEOUT_MS = 2000;
 let linkedMemo;   // detectLinkedWorktree(cwd) result, computed at most once and only when something needs it
 function getLinked() {
@@ -88,11 +93,13 @@ emitIfHooksInactive(cwd);
 // AGENTS.md at the same depth when a non-empty `.omp/AGENTS.md` exists, so the harness
 // policy is silently absent from the session. Runs before the source-repo skip.
 emitIfPolicyShadowed(cwd);
-// omp update probe (#31): session start only. The turn-start and post-commit rechecks identify
-// themselves by passing `max_age_ms` (pinned by tests/drift-recheck-wiring.test.mjs) and hand gate
-// stdout to the AGENT — a notice there would spend the one-shot on an agent mid-task instead of the
-// user-facing session-start notice. Runs before the source-repo skip: both repo kinds get it.
-if (rawMaxAge === undefined) emitIfOmpChanged(cwd, Boolean(meta?.source_remote));
+// omp update probe (#31): only for a session start whose output reaches a person. index.ts passes
+// `has_ui: true` from session_start when the session has a UI (pinned by
+// tests/drift-recheck-wiring.test.mjs). Every other call leaves the one-shot note alone: the
+// turn-start and post-commit rechecks hand gate stdout to the AGENT, a headless `omp -p` or subagent
+// session start would only log it (measured 2026-11-13: ctx.hasUI is false there), and a manual run
+// carries no flag. Runs before the source-repo skip: both repo kinds get it.
+if (data?.has_ui === true) emitIfOmpChanged(cwd, Boolean(meta?.source_remote));
 
 const sourceRemote = meta.source_remote;
 if (!sourceRemote) process.exit(0);
@@ -445,19 +452,23 @@ function emitIfOmpChanged(root, isConsumer) {
 function readOmpVersion() {
   try {
     return parseOmpVersion(execFileSync('omp', ['--version'],
-      { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: OMP_VERSION_TIMEOUT_MS }));
+      { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: OMP_VERSION_TIMEOUT_MS, killSignal: 'SIGKILL' }));
   } catch { return null; }
 }
 
-// The version on the first line of `text` shaped like a version line; null when there is none or
-// the value is implausibly long.
+// The version in `text`: that of the first `omp/`-prefixed version line, else of the first line
+// shaped like a version; null when there is none or the value is implausibly long.
 function parseOmpVersion(text) {
   if (typeof text !== 'string') return null;
+  const bounded = (version) => (version && version.length <= OMP_VERSION_MAX_LENGTH ? version : null);
+  let loose = null;
   for (const line of text.split(/\r?\n/)) {
     const match = OMP_VERSION_LINE_RE.exec(line.trim());
-    if (match) return match[1].length <= OMP_VERSION_MAX_LENGTH ? match[1] : null;
+    if (!match) continue;
+    if (match[1]) return bounded(match[2]);
+    loose ??= match[2];
   }
-  return null;
+  return bounded(loose);
 }
 
 // Notice window shared by the health probes: true when a marker inside NOTICE_TTL_MS exists and

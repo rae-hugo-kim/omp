@@ -7,7 +7,9 @@
 //   - the note routes a consumer repo to harness-check and the source repo to harness-friction
 //   - no usable record (first run, corrupt, not a version) => record only, no note
 //   - omp unrunnable, or no version line in its output => nothing at all (no note, no record write)
-//   - only the session-start call (no `max_age_ms`) probes; a mid-session recheck never notes or records
+//   - only a session start whose output reaches a UI (`has_ui: true` from index.ts) probes; a mid-session
+//     recheck, a UI-less session start (`omp -p`, a subagent) or a manual run never notes or records
+//   - an `omp/`-prefixed line outranks other version-shaped lines; a hung omp is killed at the timeout
 //   - a linked worktree neither notes nor records; the main checkout notes once
 //   - the note is still emitted when the record cannot be written
 //
@@ -68,13 +70,15 @@ function withRepo(opts, fn) {
   try { return fn(fx); } finally { rmSync(fx.root, { recursive: true, force: true }); }
 }
 
-// `payload` without `max_age_ms` is the session-start call; with it, a mid-session recheck.
-function runGate(cwd, env, payload = {}) {
+// The default payload is the session start of a session WITH a UI — the only call that probes.
+const UI_SESSION_START = { has_ui: true };
+function runGate(cwd, env, payload = UI_SESSION_START, timeout) {
   return spawnSync('node', [GATE], {
     input: JSON.stringify({ session_state: { cwd }, ...payload }),
     cwd,
     encoding: 'utf-8',
     env: { ...cleanEnv(), ...env },
+    timeout,
   });
 }
 
@@ -151,14 +155,18 @@ test('an unreadable record is treated as a first run — replaced, never echoed'
   }
 });
 
-// The version is read from the first output line shaped like one; text after it and lines around it
-// are ignored, so a cosmetic change to `omp --version` does not silently switch the probe off.
+// An `omp/`-prefixed line is the version line and outranks everything else; without one, the first
+// line shaped like a version is used. Text after the version and unrelated lines are ignored, so a
+// cosmetic change to `omp --version` does not silently switch the probe off, and a banner naming
+// ANOTHER version ("omp 18.20.0 is available") is not mistaken for the installed one.
 test('the version is read from a version line with trailing text, a `v` prefix, CRLF, or a banner line before it', { skip: POSIX_ONLY }, () => {
   const stubs = {
     'trailing build info': 'echo "omp/18.19.0 (canary linux-x64)"',
     'bare v-prefixed version': 'echo "v18.19.0"',
     'CRLF line ending': 'printf "omp/18.19.0\\r\\n"',
     'banner line first': 'echo "A newer omp 18.20.0 is available"; echo "omp/18.19.0"',
+    'version-shaped banner before the omp/ line': 'echo "omp 18.20.0 is available"; echo "omp/18.19.0"',
+    'bare-version banner before the omp/ line': 'echo "18.20.0 released - run omp update"; echo "omp/18.19.0"',
     'prerelease with build metadata': 'echo "omp/18.19.0-rc.1+build.5"',
   };
   for (const [name, body] of Object.entries(stubs)) {
@@ -214,19 +222,43 @@ test('omp missing from PATH changes nothing — no notice, no record write, exit
   });
 });
 
-// Only the session-start call probes. The turn-start and post-commit rechecks pass `max_age_ms`
-// (drift-recheck-wiring.test.mjs) and hand gate stdout to the AGENT: a notice there would spend the
-// one-shot on an agent mid-task, and a silent record write would swallow it altogether.
-test('a mid-session recheck (max_age_ms) neither notes nor records, leaving the notice for the next session start', { skip: POSIX_ONLY }, () => {
+// The probe bounds `omp --version` with a hard kill: an omp that ignores SIGTERM must not hold the
+// gate (and the session start behind it) until the process gives up on its own, 20s later here.
+test('a hung omp that ignores SIGTERM is cut off at the probe timeout — no notice, no record write, exit 0', { skip: POSIX_ONLY }, () => {
+  withRepo({}, (fx) => {
+    writeRecord(fx.repo, STALE);
+    const r = runGate(fx.repo, ompStubEnv(fx, "trap '' TERM; exec sleep 20"), undefined, 10_000);
+    assert.equal(r.status, 0, `the gate must return on its own well inside 10s (signal: ${r.signal})`);
+    assert.equal(r.stdout + r.stderr, '', 'no notice and no error output');
+    assert.equal(readFileSync(recordPath(fx.repo), 'utf-8'), STALE, 'the record must stay byte-identical');
+  });
+});
+
+// Only a session start whose output reaches a person probes: index.ts passes `has_ui: true` from
+// session_start when the session has a UI (drift-recheck-wiring.test.mjs). Every other call must
+// leave the one-shot alone — no note AND no record write: the turn-start and post-commit rechecks
+// hand gate stdout to the AGENT, a headless `omp -p` or subagent session start has no UI (measured
+// 2026-11-13: ctx.hasUI is false there, so the note would only reach the logger), and a manual run
+// carries no flag at all.
+test('a call without `has_ui: true` (recheck, UI-less session start, manual run) neither notes nor records, leaving the notice for the next UI session start', { skip: POSIX_ONLY }, () => {
   withRepo({}, (fx) => {
     const env = ompAt(fx, '18.18.6');
-    const recheck = { max_age_ms: 60 * 60 * 1000 };
-    assert.equal(runGate(fx.repo, env, recheck).stdout.trim(), '');
-    assert.ok(!existsSync(recordPath(fx.repo)), 'a recheck must not create the baseline');
+    const others = {
+      'mid-session recheck': { max_age_ms: 60 * 60 * 1000 },
+      'UI-less session start': { has_ui: false },
+      'no flag at all': {},
+      'a truthy non-boolean flag': { has_ui: 'true' },
+    };
+    for (const [name, payload] of Object.entries(others)) {
+      assert.equal(runGate(fx.repo, env, payload).stdout.trim(), '', `${name}: no notice`);
+      assert.ok(!existsSync(recordPath(fx.repo)), `${name}: must not create the baseline`);
+    }
 
     writeRecord(fx.repo, STALE);
-    assert.equal(runGate(fx.repo, env, recheck).stdout.trim(), '', 'a recheck must not emit the notice to the agent');
-    assert.equal(readFileSync(recordPath(fx.repo), 'utf-8'), STALE, 'a recheck must not move the record');
+    for (const [name, payload] of Object.entries(others)) {
+      assert.equal(runGate(fx.repo, env, payload).stdout.trim(), '', `${name}: must not emit the notice`);
+      assert.equal(readFileSync(recordPath(fx.repo), 'utf-8'), STALE, `${name}: must not move the record`);
+    }
 
     const start = runGate(fx.repo, env);
     assert.ok(start.stdout.trim().startsWith('HARNESS NOTE: omp '), `the next session start still owes the notice, got: ${JSON.stringify(start.stdout)}`);
