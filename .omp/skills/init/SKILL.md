@@ -84,6 +84,14 @@ cd <project-name>
    - claudedocs/                 → 삭제 (AGENTS.md 한국어 미러 등 소스 리포 문서)
    - docs/harness/handoff_*.md   → 삭제 (있으면; 소스 리포 세션 간 인수인계 문서)
    - CHANGELOG.md                → 삭제 (하네스 릴리스 히스토리; harness-sync PATHS 밖이라 소비 리포에서 영구 stale)
+   - .omp/skills/harness-skill-tune/ → 제거 대상이지만 **이 커밋에서는 건너뛴다**. 소스 리포 전용 스킬
+                                   점검·갱신 스킬이라 harness-sync PATHS 밖이고 소비 리포에서 영구 stale이다
+                                   (함께 동기화되는 테스트는 이 디렉터리가 없으면 skip한다).
+                                   그런데 risk-assess의 부트스트랩 창은 docs/·claudedocs/·scripts/docs-drift·
+                                   CHANGELOG.md 삭제만 덮고 `.omp/skills/`는 하네스 자산 경로라 이 삭제는
+                                   평소대로 채점된다 — .mjs 796줄 삭제로 high가 되어 Phase 5의 첫 커밋을
+                                   review-gate가 막는다. 창이 이 경로를 덮게 되면 그때 이 줄을 삭제로 바꾼다.
+                                   남겨 둔 디렉터리를 지우려면 리뷰 증거가 있는 별도 커밋으로 한다.
    (artifacts/README.md는 소비자 자산 — 유지)
    판단 기준: `scripts/harness-sync.sh`의 PATHS 배열이 "소비 리포가 가져야 할 하네스 파일"의
    SoT다. 그 밖의 하네스성 파일이 템플릿에서 딸려왔다면 같은 이유로 제거 대상이다.
