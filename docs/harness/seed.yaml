@@ -1,5 +1,6 @@
 name: adversary-panel-two-135
-status: approved
+status: done
+completed: 2026-11-16
 version: 1
 task_id: "20261116-053149-135b"
 # gh-loop worker Stage 2에 따라 이슈 #135 본문과 2026-11-16 "세션에서 직접 결정함" 댓글(결정 B, AC 6개, 제약, 범위 밖)을 명세로 삼습니다.
