@@ -133,7 +133,7 @@ Description: API key "sk-abc..." is hardcoded. It will be committed to git histo
 Suggestion: Move to an environment variable (process.env.API_KEY) and add the key to .env.example with a placeholder.
 ```
 
-Group findings by severity (CRITICAL first, LOW last). End every review with a summary table and a `## Verdict` line that uses the agent vocabulary (`PASS / PASS WITH NOTES / FAIL`) — the same shape the `reviewer` agent requires of its Pass 2 panel members (`.omp/agents/reviewer.md:83-84`: a parseable `## Verdict` line plus at least one `file:line` from the diff) and cross-validates Pass 3 against (`:142-147`):
+Group findings by severity (CRITICAL first, LOW last). End every review with a summary table and a `## Verdict` line that uses the agent vocabulary (`PASS / PASS WITH NOTES / FAIL`) — the same shape the `reviewer` agent requires of its Pass 2 panel members (`.omp/agents/reviewer.md:82-83`: a parseable `## Verdict` line plus at least one `file:line` from the diff) and cross-validates Pass 3 against (`:141-146`):
 
 ```
 ## Review Summary
