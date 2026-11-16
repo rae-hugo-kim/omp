@@ -483,14 +483,30 @@ test('bootstrap (#134): a synced skill or a prefix-sharing sibling deleted insid
   });
 });
 
+// Review r1 (opus): the exemption is keyed on status 'D' — a MODIFICATION under an exempt prefix
+// inside the window is scored like any other harness-asset edit.
+test('bootstrap (#134): modifying a file under a source-only skill prefix inside the window is scored, not exempted', () => {
+  withTemplateClone(0, ({ dir, git, cleanup }) => {
+    cleanup();
+    writeFileSync(join(dir, '.omp/skills/harness-friction/SKILL.md'), '# friction\nedited\n');
+    git(['add', '-A']);
+    const r = assessRisk(dir, parseCommitForm('git commit -m x'));
+    assert.deepEqual(r.files, ['.omp/skills/harness-friction/SKILL.md'], 'the modification is the scored remainder');
+    assert.ok(!r.bootstrap.includes('.omp/skills/harness-friction/SKILL.md'), 'only deletions under the prefix are cleanup');
+  });
+});
+
+// The meta transition is staged too, so the ONLY axis closing the window is the second commit
+// (review r1, self: do not let two closing conditions hide which one the test depends on).
 test('bootstrap (#134): outside the window the same source-only skill deletions are scored (high)', () => {
   withTemplateClone(1, ({ dir, git }) => {
     for (const f of SOURCE_ONLY_SKILL_FILES) rmSync(join(dir, f));
+    writeFileSync(join(dir, META), BOOTSTRAP_META);
     git(['add', '-A']);
     const r = assessRisk(dir, parseCommitForm('git commit -m x'));
     assert.equal(r.level, 'high', r.reason);
     assert.equal(r.bootstrap.length, 0, 'nothing may be exempted outside the window');
-    assert.deepEqual(r.files.sort(), [...SOURCE_ONLY_SKILL_FILES].sort());
+    assert.deepEqual(r.files.sort(), [...SOURCE_ONLY_SKILL_FILES, META].sort());
   });
 });
 

@@ -113,26 +113,31 @@ test('W3: whitelist directory entries are harness-owned; shared dirs are listed 
 
 // W3d (#134): risk-assess exempts the DELETION of the source-only skill directories inside the
 // template-bootstrap window. The gate enumerates them (it never derives the set from the whitelist
-// in the worktree), so the list is pinned both ways: every entry is absent from harness-sync PATHS
-// (a synced skill must never become bootstrap cleanup — that would be fail-open), and, in the
-// SOURCE repo, every entry is a directory that exists and that init/SKILL.md Phase 2 lists as
-// `→ 삭제` (a renamed or un-listed skill would otherwise leave init's first commit scored again).
-// Consumers are exempt from the existence/init checks: init has deleted these directories there.
+// in the worktree), so the list is pinned both ways: no whitelist entry lies under any exempt prefix
+// (a synced skill — as a directory, a file, or a glob beneath it — must never become bootstrap
+// cleanup: that would be fail-open), and, in the SOURCE repo, every entry is a directory that exists
+// and the set of `.omp/skills/<name>/ → 삭제` items in init/SKILL.md Phase 2 equals the constant
+// (an item listed in only one place would leave init's first commit scored again, or exempt a
+// deletion init does not perform). Consumers are exempt from the existence/init checks: init has
+// deleted these directories there. Review r1 (self·opus·argon): prefix match, not exact entry.
 test('W3d: bootstrap source-only skill exemptions are off the whitelist, exist in the source repo, and match init Phase 2', () => {
   const paths = syncPaths();
   assert.ok(BOOTSTRAP_SOURCE_ONLY_SKILLS.length > 0, 'the exemption list must not be empty');
   for (const p of BOOTSTRAP_SOURCE_ONLY_SKILLS) {
     assert.match(p, /^\.omp\/skills\/[^/]+\/$/, `"${p}" must be one skill directory prefix ending in "/"`);
-    assert.ok(!paths.includes(p.slice(0, -1)), `"${p}" is on the harness-sync whitelist — a synced skill must never be bootstrap cleanup`);
+    const under = paths.filter((e) => e === p.slice(0, -1) || e.startsWith(p));
+    assert.deepEqual(under, [], `"${p}" is covered by the harness-sync whitelist (${under.join(', ')}) — a synced skill must never be bootstrap cleanup`);
   }
   const metaPath = join(repoRoot, '.omp', 'extensions', 'harness', 'harness-meta.json');
   const meta = existsSync(metaPath) ? JSON.parse(readFileSync(metaPath, 'utf8')) : {};
   if (meta.source_remote) return;
-  const init = readFileSync(join(repoRoot, '.omp', 'skills', 'init', 'SKILL.md'), 'utf8');
   for (const p of BOOTSTRAP_SOURCE_ONLY_SKILLS) {
     assert.equal(spawnSync('test', ['-d', join(repoRoot, p)]).status, 0, `"${p}" does not exist in the source repo`);
-    assert.ok(new RegExp(`^\\s*- ${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*→ 삭제`, 'm').test(init), `init/SKILL.md Phase 2 must list "${p}" as "→ 삭제"`);
   }
+  // `→ 삭제` followed by punctuation/whitespace/EOL only — `→ 삭제하지 않는다` is not a deletion item.
+  const init = readFileSync(join(repoRoot, '.omp', 'skills', 'init', 'SKILL.md'), 'utf8');
+  const listed = [...init.matchAll(/^\s*- (\.omp\/skills\/[^/\s]+\/)\s*→ 삭제(?=[.\s]|$)/gm)].map((m) => m[1]).sort();
+  assert.deepEqual(listed, [...BOOTSTRAP_SOURCE_ONLY_SKILLS].sort(), 'init/SKILL.md Phase 2 `.omp/skills/<name>/ → 삭제` items must equal BOOTSTRAP_SOURCE_ONLY_SKILLS');
 });
 
 // W3c (#112 cycle ②): the agent-coverage rule above is source-repo only. Fixed both ways so a
