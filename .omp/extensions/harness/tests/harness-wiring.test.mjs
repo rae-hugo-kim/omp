@@ -12,6 +12,7 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, dirname, basename, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { BOOTSTRAP_SOURCE_ONLY_SKILLS } from '../gates/risk-assess.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..', '..', '..');
@@ -107,6 +108,30 @@ test('W3: whitelist directory entries are harness-owned; shared dirs are listed 
   }
   for (const consumer of ['.omp/rules/consumer-x.md', '.omp/rules/harness/x.md', '.omp/rules/xharness-core.md']) {
     assert.ok(!globs.some((re) => re.test(consumer)), `whitelist glob would sweep consumer file ${consumer}`);
+  }
+});
+
+// W3d (#134): risk-assess exempts the DELETION of the source-only skill directories inside the
+// template-bootstrap window. The gate enumerates them (it never derives the set from the whitelist
+// in the worktree), so the list is pinned both ways: every entry is absent from harness-sync PATHS
+// (a synced skill must never become bootstrap cleanup — that would be fail-open), and, in the
+// SOURCE repo, every entry is a directory that exists and that init/SKILL.md Phase 2 lists as
+// `→ 삭제` (a renamed or un-listed skill would otherwise leave init's first commit scored again).
+// Consumers are exempt from the existence/init checks: init has deleted these directories there.
+test('W3d: bootstrap source-only skill exemptions are off the whitelist, exist in the source repo, and match init Phase 2', () => {
+  const paths = syncPaths();
+  assert.ok(BOOTSTRAP_SOURCE_ONLY_SKILLS.length > 0, 'the exemption list must not be empty');
+  for (const p of BOOTSTRAP_SOURCE_ONLY_SKILLS) {
+    assert.match(p, /^\.omp\/skills\/[^/]+\/$/, `"${p}" must be one skill directory prefix ending in "/"`);
+    assert.ok(!paths.includes(p.slice(0, -1)), `"${p}" is on the harness-sync whitelist — a synced skill must never be bootstrap cleanup`);
+  }
+  const metaPath = join(repoRoot, '.omp', 'extensions', 'harness', 'harness-meta.json');
+  const meta = existsSync(metaPath) ? JSON.parse(readFileSync(metaPath, 'utf8')) : {};
+  if (meta.source_remote) return;
+  const init = readFileSync(join(repoRoot, '.omp', 'skills', 'init', 'SKILL.md'), 'utf8');
+  for (const p of BOOTSTRAP_SOURCE_ONLY_SKILLS) {
+    assert.equal(spawnSync('test', ['-d', join(repoRoot, p)]).status, 0, `"${p}" does not exist in the source repo`);
+    assert.ok(new RegExp(`^\\s*- ${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*→ 삭제`, 'm').test(init), `init/SKILL.md Phase 2 must list "${p}" as "→ 삭제"`);
   }
 });
 
