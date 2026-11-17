@@ -177,9 +177,11 @@ function syncedSubset(cwd, changedFiles, ranges) {
 //      + `source_remote` (init Phase 3 writes them; the source repo never has them, and a
 //      consumer that already has them at HEAD — any later clone — cannot re-open the window);
 //   3. the path is a DELETION of a SOURCE-ONLY asset (init Phase 2: docs/, claudedocs/,
-//      scripts/docs-drift, CHANGELOG.md — never a harness asset path, so deleting
-//      `.omp/extensions/harness/index.ts`, `.githooks/*` or `.omp/rules/harness-*` inside the window is
-//      scored like any other change), or one of the files init edits.
+//      scripts/docs-drift, CHANGELOG.md, and the two source-only skill directories named in
+//      BOOTSTRAP_SOURCE_ONLY_SKILLS — never any other harness asset path, so deleting
+//      `.omp/extensions/harness/index.ts`, `.githooks/*`, `.omp/rules/harness-*` or a synced
+//      `.omp/skills/<name>/` inside the window is scored like any other change), or one of the
+//      files init edits.
 // Everything else in that commit is scored exactly as before: user code mixed into the
 // bootstrap commit, an edit to AGENTS.md, or a harness-asset deletion is never covered.
 const META_REL = '.omp/extensions/harness/harness-meta.json';
@@ -191,8 +193,18 @@ const BOOTSTRAP_EDITED_PATHS = new Set([
 // harness asset paths and fall out through isHarnessAssetPath.
 const BOOTSTRAP_CLEANUP_PREFIXES = ['docs/', 'claudedocs/'];
 const BOOTSTRAP_CLEANUP_FILES = new Set(['scripts/docs-drift', 'CHANGELOG.md']);
+// Source-only SKILL directories init Phase 2 also deletes (#134). `.omp/skills/` is a harness asset
+// path, so these are named one by one and tested ahead of the isHarnessAssetPath exclusion instead
+// of widening it: every other `.omp/skills/<name>/` (the synced skills) stays scored. Enumerated,
+// not derived from scripts/harness-sync.sh PATHS — the gate never reads the whitelist from the
+// worktree (see HARNESS_ASSET_PATHS), and a new source-only skill missing here fails CLOSED (init's
+// first commit is scored, as before #134) whereas a derived set that drifted would let a synced
+// skill's deletion through. harness-wiring W3d pins each entry to a directory that exists in the
+// source repo, is absent from PATHS, and is listed as a deletion in init/SKILL.md Phase 2.
+export const BOOTSTRAP_SOURCE_ONLY_SKILLS = ['.omp/skills/harness-skill-tune/', '.omp/skills/harness-friction/'];
 const isBootstrapCleanupPath = (f) =>
-  !isHarnessAssetPath(f) && (BOOTSTRAP_CLEANUP_FILES.has(f) || BOOTSTRAP_CLEANUP_PREFIXES.some((p) => f.startsWith(p)));
+  BOOTSTRAP_SOURCE_ONLY_SKILLS.some((p) => f.startsWith(p)) ||
+  (!isHarnessAssetPath(f) && (BOOTSTRAP_CLEANUP_FILES.has(f) || BOOTSTRAP_CLEANUP_PREFIXES.some((p) => f.startsWith(p))));
 
 const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const nonEmpty = (v) => typeof v === 'string' && v.trim() !== '';

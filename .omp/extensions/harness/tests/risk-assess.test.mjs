@@ -230,6 +230,12 @@ test('assessRisk(no form): legacy union default is unchanged -> critical', () =>
 // nothing changes.
 
 const META = '.omp/extensions/harness/harness-meta.json';
+// The two source-only skill directories init Phase 2 deletes (#134): a script long enough that
+// scoring it lands on `high` (>100 code lines), so a missing exemption is visible as a level.
+const SOURCE_ONLY_SKILL_FILES = [
+  '.omp/skills/harness-skill-tune/SKILL.md', '.omp/skills/harness-skill-tune/scripts/skill-tune.mjs',
+  '.omp/skills/harness-friction/SKILL.md', '.omp/skills/harness-friction/scripts/friction.mjs',
+];
 const TEMPLATE = {
   'README.md': '# omp template\nlong\n',
   'AGENTS.md': '# policy\n',
@@ -237,6 +243,12 @@ const TEMPLATE = {
   '.omp/extensions/harness/index.ts': 'export default function harness() {}\n',
   '.githooks/pre-commit': '#!/usr/bin/env bash\nexit 0\n',
   '.omp/rules/harness-tdd_policy.md': '# tdd\n',
+  '.omp/skills/compr/SKILL.md': '# compr\n',                              // synced skill (harness-sync PATHS)
+  '.omp/skills/harness-frictionless/SKILL.md': '# sibling-named skill\n',  // shares a prefix with harness-friction
+  '.omp/skills/harness-skill-tune/SKILL.md': '# skill-tune\n',
+  '.omp/skills/harness-skill-tune/scripts/skill-tune.mjs': 'export const x = 1;\n'.repeat(120),
+  '.omp/skills/harness-friction/SKILL.md': '# friction\n',
+  '.omp/skills/harness-friction/scripts/friction.mjs': 'export const y = 1;\n'.repeat(120),
   'claudedocs/CLAUDEKR.md': '# mirror\n',
   'docs/plans/agent-browser-credentials-plan.md': '# plan\n',
   'scripts/docs-drift': '#!/usr/bin/env node\n',
@@ -440,6 +452,62 @@ test('bootstrap: a deletion under a harness-owned docs/ prefix (docs/rules) is n
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// #134: init Phase 2 also deletes the two source-only skill directories (harness-skill-tune,
+// harness-friction). `.omp/skills/` is a harness asset path, so the window names those two
+// directories one by one; every other `.omp/skills/<name>/` — the synced skills a consumer must keep,
+// and a sibling that merely shares the prefix — stays scored, and outside the window nothing is exempt.
+test('bootstrap (#134): deleting the two source-only skill directories inside the window is cleanup -> low', () => {
+  withTemplateClone(0, ({ dir, git, cleanup }) => {
+    cleanup();
+    for (const f of SOURCE_ONLY_SKILL_FILES) rmSync(join(dir, f));
+    git(['add', '-A']);
+    const r = assessRisk(dir, parseCommitForm('git commit -m x'));
+    assert.equal(r.level, 'low', r.reason);
+    assert.match(r.reason, /template bootstrap/);
+    assert.equal(r.files.length, 0, 'nothing is left to score');
+    for (const f of SOURCE_ONLY_SKILL_FILES) assert.ok(r.bootstrap.includes(f), `${f} must be inside the window`);
+  });
+});
+
+test('bootstrap (#134): a synced skill or a prefix-sharing sibling deleted inside the window is scored', () => {
+  withTemplateClone(0, ({ dir, git, cleanup }) => {
+    cleanup();
+    for (const f of [...SOURCE_ONLY_SKILL_FILES, '.omp/skills/compr/SKILL.md', '.omp/skills/harness-frictionless/SKILL.md']) rmSync(join(dir, f));
+    git(['add', '-A']);
+    const r = assessRisk(dir, parseCommitForm('git commit -m x'));
+    assert.deepEqual(r.files.sort(), ['.omp/skills/compr/SKILL.md', '.omp/skills/harness-frictionless/SKILL.md'], 'exactly the non-exempt skill deletions are scored');
+    assert.ok(!r.bootstrap.some((f) => f.startsWith('.omp/skills/compr/') || f.startsWith('.omp/skills/harness-frictionless/')), 'no synced or sibling skill may appear in the exempt set');
+    for (const f of SOURCE_ONLY_SKILL_FILES) assert.ok(r.bootstrap.includes(f), `${f} stays exempt`);
+  });
+});
+
+// Review r1 (opus): the exemption is keyed on status 'D' — a MODIFICATION under an exempt prefix
+// inside the window is scored like any other harness-asset edit.
+test('bootstrap (#134): modifying a file under a source-only skill prefix inside the window is scored, not exempted', () => {
+  withTemplateClone(0, ({ dir, git, cleanup }) => {
+    cleanup();
+    writeFileSync(join(dir, '.omp/skills/harness-friction/SKILL.md'), '# friction\nedited\n');
+    git(['add', '-A']);
+    const r = assessRisk(dir, parseCommitForm('git commit -m x'));
+    assert.deepEqual(r.files, ['.omp/skills/harness-friction/SKILL.md'], 'the modification is the scored remainder');
+    assert.ok(!r.bootstrap.includes('.omp/skills/harness-friction/SKILL.md'), 'only deletions under the prefix are cleanup');
+  });
+});
+
+// The meta transition is staged too, so the ONLY axis closing the window is the second commit
+// (review r1, self: do not let two closing conditions hide which one the test depends on).
+test('bootstrap (#134): outside the window the same source-only skill deletions are scored (high)', () => {
+  withTemplateClone(1, ({ dir, git }) => {
+    for (const f of SOURCE_ONLY_SKILL_FILES) rmSync(join(dir, f));
+    writeFileSync(join(dir, META), BOOTSTRAP_META);
+    git(['add', '-A']);
+    const r = assessRisk(dir, parseCommitForm('git commit -m x'));
+    assert.equal(r.level, 'high', r.reason);
+    assert.equal(r.bootstrap.length, 0, 'nothing may be exempted outside the window');
+    assert.deepEqual(r.files.sort(), [...SOURCE_ONLY_SKILL_FILES, META].sort());
+  });
 });
 
 // Review 2026-09-23 round 2 (C-1): a HEAD meta with a PARTIAL or empty bootstrap marker is still a

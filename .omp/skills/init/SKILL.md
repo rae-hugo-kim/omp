@@ -84,21 +84,16 @@ cd <project-name>
    - claudedocs/                 → 삭제 (AGENTS.md 한국어 미러 등 소스 리포 문서)
    - docs/harness/handoff_*.md   → 삭제 (있으면; 소스 리포 세션 간 인수인계 문서)
    - CHANGELOG.md                → 삭제 (하네스 릴리스 히스토리; harness-sync PATHS 밖이라 소비 리포에서 영구 stale)
-   - .omp/skills/harness-skill-tune/ → 제거 대상이지만 **이 커밋에서는 건너뛴다**. 소스 리포 전용 스킬
-                                   점검·갱신 스킬이라 harness-sync PATHS 밖이고 소비 리포에서 영구 stale이다
-                                   (함께 동기화되는 테스트는 이 디렉터리가 없으면 skip한다).
-                                   그런데 risk-assess의 부트스트랩 창은 docs/·claudedocs/·scripts/docs-drift·
-                                   CHANGELOG.md 삭제만 덮고 `.omp/skills/`는 하네스 자산 경로라 이 삭제는
-                                   평소대로 채점된다 — .mjs 796줄 삭제로 high가 되어 Phase 5의 첫 커밋을
-                                   review-gate가 막는다. 창이 이 경로를 덮게 되면 그때 이 줄을 삭제로 바꾼다.
-                                   남겨 둔 디렉터리를 지우려면 리뷰 증거가 있는 별도 커밋으로 한다.
-   - .omp/skills/harness-friction/ → 제거 대상이지만 **이 커밋에서는 건너뛴다**. omp 릴리스 대 하네스 마찰 감사
-                                   스킬이라 harness-sync PATHS 밖이고 소비 리포에서 영구 stale이며, 기준 버전 기록
-                                   baseline.json도 이 디렉터리 안에 있다(함께 동기화되는 테스트는 이 디렉터리가
-                                   없으면 skip한다). 위 harness-skill-tune과 같은 이유로 — risk-assess의 부트스트랩
-                                   창이 `.omp/skills/`를 덮지 않아 friction.mjs 466줄 삭제가 high로 채점돼 Phase 5의
-                                   첫 커밋을 review-gate가 막는다 — 창이 이 경로를 덮게 되면(#134) 그때 삭제로 바꾼다.
-                                   남겨 둔 디렉터리를 지우려면 리뷰 증거가 있는 별도 커밋으로 한다.
+   - .omp/skills/harness-skill-tune/ → 삭제. 소스 리포 전용 스킬 점검·갱신 스킬이라 harness-sync PATHS 밖이고
+                                   소비 리포에서 영구 stale이다(함께 동기화되는 테스트는 이 디렉터리가 없으면 skip한다).
+   - .omp/skills/harness-friction/ → 삭제. omp 릴리스 대 하네스 마찰 감사 스킬이라 harness-sync PATHS 밖이고
+                                   소비 리포에서 영구 stale이며, 기준 버전 기록 baseline.json도 이 디렉터리 안에
+                                   있다(함께 동기화되는 테스트는 이 디렉터리가 없으면 skip한다).
+   위 두 스킬 디렉터리의 삭제는 risk-assess의 부트스트랩 창이 경로를 하나씩 이름으로 덮는다(#134 —
+   `BOOTSTRAP_SOURCE_ONLY_SKILLS`). 다른 `.omp/skills/<name>/`은 하네스 자산 경로라 창 안에서도 삭제가
+   평소대로 채점되므로, 새 소스 전용 스킬을 이 목록에 올릴 때는 그 상수에도 함께 올린다(wiring 테스트
+   W3d가 둘의 일치를 검사한다). 이미 `/init`으로 만든 소비 리포에 두 디렉터리가 남아 있으면 리뷰 증거가
+   있는 별도 커밋으로 지운다(동작 영향 없음 — 테스트는 skip).
    (artifacts/README.md는 소비자 자산 — 유지)
    판단 기준: `scripts/harness-sync.sh`의 PATHS 배열이 "소비 리포가 가져야 할 하네스 파일"의
    SoT다. 그 밖의 하네스성 파일이 템플릿에서 딸려왔다면 같은 이유로 제거 대상이다.
@@ -196,12 +191,13 @@ git push
 부트스트랩 창**에 들어간다 — (1) HEAD가 템플릿 "Initial commit" 하나뿐이고(shallow clone 아님)
 `refs/harness/` 아래 ref가 없으며, (2) HEAD의 `harness-meta.json`에는 `bootstrapped_at`·`source_remote` 키가
 아예 없고 스테이징된 사본에는 두 값이 비어 있지 않은 문자열로 있으며(템플릿→소비자 전이가 바로 이 커밋),
-(3) 변경이 **소스 전용 자산의 삭제**(docs/·claudedocs/·scripts/docs-drift·CHANGELOG.md — 단
-docs/rules/·docs/templates/·docs/checklists/ 같은 하네스 자산 경로는 제외)이거나
+(3) 변경이 **소스 전용 자산의 삭제**(docs/·claudedocs/·scripts/docs-drift·CHANGELOG.md와 Phase 2-5의
+소스 전용 스킬 디렉터리 두 개 `.omp/skills/harness-skill-tune/`·`.omp/skills/harness-friction/` — 단
+docs/rules/·docs/templates/·docs/checklists/ 같은 다른 하네스 자산 경로는 제외)이거나
 README.md·README.en.md·harness-meta.json·docs/glossary.yaml·docs/harness/audit.jsonl 편집일 때
 그 파일들은 채점에서 제외되어 커밋 전체가 low로 판정된다(`HARNESS WARNING: No scope file`은
 뜨지만 차단 아님). **같은 커밋에 다른 파일(사용자 코드, AGENTS.md 편집, 새 파일, 하네스 자산
-삭제 — `.omp/extensions/harness/`·`.githooks/`·`.omp/rules/harness-*.md` 등)을 섞으면 그 나머지가
+삭제 — `.omp/extensions/harness/`·`.githooks/`·`.omp/rules/harness-*.md`·동기화되는 `.omp/skills/<name>/` 등)을 섞으면 그 나머지가
 평소대로 채점**되어 review-gate/backpressure-gate에 걸릴 수 있다 — 초기 커밋은 Phase 2~3의 결과만
 담고, 프로젝트 고유 변경은 `/kickoff` 이후 별도 커밋으로 한다. Phase 3에서 `bootstrapped_at`을
 빠뜨렸거나 `git commit`이 세 번째 커밋이면 창이 닫혀 실제 위험도로 채점된다.
