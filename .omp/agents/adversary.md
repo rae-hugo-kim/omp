@@ -50,7 +50,7 @@ Same-model review inherits the same blind spots. A heterogeneous model catches d
 PASS / PASS WITH NOTES / FAIL — rationale
 Heterogeneity: exactly one line, always present, using your `<workstation>` `Model:` value verbatim —
 - `Heterogeneity: CONFIRMED — primary=<family>, adversary=<provider/id>` (different families; the reviewer transcript-verifies this before counting you as a second family in the review sidecar's models array)
-- `Heterogeneity: SAME-FAMILY — primary=<family>, adversary=<provider/id>` (you supply no second family; the reviewer's sidecar decision then rests on the other panel members)
+- `Heterogeneity: SAME-FAMILY — primary=<family>, adversary=<provider/id>` (you supply no second family; the reviewer's sidecar decision then rests on the other panel member)
 - `Heterogeneity: UNVERIFIED — primary model not provided; adversary=<provider/id>` (assignment omitted the primary model)
 </Output_Format>
 </Agent_Prompt>
