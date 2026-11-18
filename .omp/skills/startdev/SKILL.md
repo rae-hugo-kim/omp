@@ -51,7 +51,7 @@ seed.yaml을 확인하고 유효성을 검증한다. status 판정은 `docs/rule
    - status 확인 (active = `draft` 또는 `approved`):
      - `approved` → 진행
      - `draft` → 착수 전에 `ask` 도구로 사용자에게 seed 승인을 묻는다 → 아래 "draft seed 승인"
-     - `done` 또는 `superseded` (종료상태) → seed 무효가 아니라 닫힌 작업이다. 중단하고 아래 "닫힌 seed 재개"의 두 경로를 안내
+     - `done` 또는 `superseded` (종료상태) → seed 무효가 아니라 닫힌 작업이다. 중단하고 아래 "닫힌 seed 재개"의 두 경로를 사용자에게 안내 (reopen을 직접 실행하지 않는다)
    - 그 외(필드 누락·파싱 실패 등) 실패 시: "seed.yaml이 유효하지 않습니다. /kickoff를 먼저 실행하세요." 출력 후 중단
 3. 없으면:
    - $ARGUMENTS에 epic 패턴이 있으면 → Phase 1 fallback으로 진행
@@ -62,17 +62,20 @@ seed.yaml을 확인하고 유효성을 검증한다. status 판정은 `docs/rule
 
 seed가 `draft`면 착수 전에 사용자에게 seed 승인을 묻습니다. 승인 없이 `approved`로 바꾸지 않습니다.
 
-- **승인**: 승인을 받는 즉시 `status` 한 줄만 `approved`로 바꿔 단독 커밋으로 HEAD에 올린 뒤 진행합니다. kickoff는 산출물을 커밋하지 않으므로 seed가 아직 HEAD에 없으면 이 첫 커밋에 `seed.yaml` 전체(와 kickoff 산출물)가 함께 들어갑니다. kickoff scope의 AC가 모두 미체크라 일반 커밋은 acceptance-gate Check 3가 막으므로 WIP 레인으로 커밋합니다(WIP 면제로 통과한 커밋마다 `acceptance_wip` 감사 행이 1건 남습니다). 이 전이는 `version`을 올리지 않습니다.
+- **승인**: 승인을 받는 즉시 `status` 한 줄만 `approved`로 바꿔 단독 커밋으로 HEAD에 올린 뒤 진행합니다. kickoff는 산출물을 커밋하지 않으므로 seed가 아직 HEAD에 없으면 이 첫 커밋에 `seed.yaml` 전체(와 kickoff 산출물)가 함께 들어갑니다. "HEAD에 없다"는 HEAD의 `seed.yaml`이 없거나 `task_id`가 다른 경우(직전 작업의 닫힌 seed가 같은 경로에 남아 있는 경우 포함)입니다. kickoff scope의 AC가 모두 미체크라 일반 커밋은 acceptance-gate Check 3가 막으므로 WIP 레인으로 커밋합니다(WIP 면제로 통과한 커밋마다 `acceptance_wip` 감사 행이 1건 남습니다). 이 전이는 `version`을 올리지 않습니다.
   ```bash
-  git status --short                      # 다른 변경이 스테이징돼 있지 않은지 확인 (단독 커밋)
-  git add docs/harness/seed.yaml          # seed가 아직 HEAD에 없으면 kickoff 산출물(docs/harness/)도 함께
+  git status --short                                         # 다른 변경이 스테이징돼 있지 않은지 확인 (단독 커밋)
+  git show HEAD:docs/harness/seed.yaml | grep '^task_id:'    # 이 seed의 task_id와 같은지 확인 (파일이 없으면 오류 = HEAD에 없음)
+  git add docs/harness/seed.yaml                             # task_id가 같을 때: status 한 줄만
+  git add docs/harness/                                      # HEAD에 없을 때: kickoff 산출물 전체 (scope·summary·rubric·audit 등; kickoff-done은 gitignore)
   OMP_COMMIT_WIP=1 git commit -m "docs(harness): seed <task_id>를 approved로 승인합니다"
   ```
+  두 `git add` 줄은 둘 중 해당하는 하나만 실행합니다.
 - **보류**: 사용자가 승인을 보류하면 `draft`로 진행할 수 있습니다. 다만 closeout은 HEAD seed가 `approved`일 때만 마감하므로 closeout 전에 승인을 받아 같은 방법(그 줄만 단독 커밋, 미체크 AC가 남았으면 WIP 레인)으로 올려야 합니다.
 
 #### 닫힌 seed 재개 (`done`/`superseded`)
 
-종료상태 seed는 무효가 아니라 닫힌 작업입니다. 진행하지 않고 중단한 뒤, 작업의 성격에 따라 두 경로를 안내합니다(`seed_contract.md` §생애주기 "닫힌 seed의 재개").
+종료상태 seed는 무효가 아니라 닫힌 작업입니다. 진행하지 않고 중단한 뒤, 작업의 성격에 따라 두 경로를 안내합니다(`seed_contract.md` §생애주기 "닫힌 seed의 재개"). 두 경로는 사용자에게 주는 안내입니다. 사용자가 경로를 고르기 전에는 에이전트가 `thread-scope open`을 실행하지 않습니다(seed와 `current-scope.md`를 다시 쓰는 명령입니다).
 
 - **같은 기능의 반복·연장** → `node .omp/extensions/harness/thread-scope.mjs open`으로 그 seed를 제자리에서 reopen한 뒤 다시 시작합니다(`status → approved`, `version +1`, `completed` 제거, `audit.jsonl`에 `seed_reopened`, 같은 `task_id`, `current-scope.md` 재생성). 승인받지 않은 채 종료된 seed(`draft`에서 `superseded`가 된 seed)는 reopen 전에 사용자 승인을 받습니다. reopen 결과도 closeout 전에 HEAD에 있어야 마감할 수 있으며, 새 scope가 미체크라 따로 커밋할 때는 WIP 레인을 씁니다.
 - **새 기능** → `/kickoff`(OMP: `/skill:kickoff`)로 새 seed(새 `task_id`)를 만듭니다.
@@ -264,15 +267,15 @@ GATE 3 통과 후 실행한다. 정책: `AGENTS.md` Completion Contract, [`.omp/
 
 ```
 1. `task` 도구로 verifier 에이전트 스폰 (.omp/agents/verifier.md):
-   - acceptance_criteria 각 항목의 구현 증거 확인
-   - constraints 위반·out_of_scope 이탈 여부 확인
+   - acceptance_criteria 각 항목의 구현 증거와 out_of_scope 이탈 여부 확인 (verifier 기본 프로토콜)
+   - seed.yaml의 constraints 위반 여부도 확인하라고 스폰 프롬프트에 명시한다 (기본 프로토콜에는 없는 항목)
 2. 스폰은 완료가 아니다 — verdict가 도착할 때까지 완료를 선언하지 않는다
 3. 판정:
    - PASS → 완료 선언 가능
    - FAIL / INCOMPLETE → 미완료. 지적을 수정한 뒤 verifier 재실행
 ```
 
-`task` 도구가 없는 세션은 자체 검증으로 대신하지 않고 "검증 BLOCKED"로 보고합니다(`.omp/rules/harness-harness_integration_contract.md` "Fallback Behavior When a Gate Is Unavailable").
+`task` 도구가 없는 세션은 자체 검증으로 대신하지 않습니다. "검증 BLOCKED"로 보고하고, 같은 리포에서 새 top-level `omp -p` 세션을 띄워 그 세션이 `verifier`를 스폰하게 상향합니다. verdict가 도착하기 전에는 완료를 선언하지 않습니다(`.omp/rules/harness-harness_integration_contract.md` "Fallback Behavior When a Gate Is Unavailable").
 
 #### 2. Completion Attack (적대적 검증 — 현재 미도입, 건너뜀)
 
@@ -320,7 +323,7 @@ GATE 3 통과 후 실행한다. 정책: `AGENTS.md` Completion Contract, [`.omp/
 3. `ghi9012` — refactor: ...
 
 ### Checklist
-- [x] All gates passed
+- [x] All gates passed (GATE 3.5 `verifier` PASS 포함 — 미도입 단계는 건너뜀)
 - [x] No anti-patterns detected
 
 ### Next Steps
