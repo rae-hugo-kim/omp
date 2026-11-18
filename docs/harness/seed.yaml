@@ -1,60 +1,61 @@
-name: repo-rename-pylon-140
-status: done
-completed: 2026-11-19
+name: selective-commit-probe-139
+status: approved
 version: 1
-task_id: "20261118-155334-140a"
-# gh-loop worker Stage 2에 따라 이슈 #140 본문("고칠 곳" 1~5, "바꾸지 않는 것", AC 5개, "확인 문장", "주의")과
-# 라벨 조회 항목을 정정한 댓글(2026-11-18 15:49Z — 빈 결과는 일시 지연이었고 이 이슈의 이유와 AC는 그대로)을 명세로 삼습니다.
-# 이슈 본문이 사용자 승인 명세이므로 처음부터 approved로 씁니다. 직전 완료 seed(bootstrap-source-only-skills-134)는 git 이력에 보존합니다.
+task_id: "20261118-163330-139a"
+# gh-loop worker Stage 2에 따라 이슈 #139 본문("배경", "결정(사용자, 2026-11-18)", "범위" 1~4, AC 4개, "확인 문장", "범위 밖")을 명세로 삼습니다.
+# 이슈 본문이 사용자 승인 명세이므로 처음부터 approved로 씁니다. 직전 완료 seed(repo-rename-pylon-140)는 git 이력에 보존합니다.
 goal: >
-  #140: GitHub 리포 이름 변경(omp → rae-hugo-kim/pylon, 2026-11-18)을 하네스에 반영합니다.
-  scripts/harness-sync.sh의 원본 자가 판정이 origin의 옛 이름과 새 이름을 모두 원본으로 받게 해
-  origin을 새 주소로 옮긴 원본 체크아웃이 자신을 소비 리포로 보고 하네스 파일을 덮어쓰지 않게 하고,
-  기본 소스 주소와 살아 있는 스킬·README·테스트 픽스처의 옛 이름을 새 이름으로 고칩니다.
+  #139: omp 18.20.1+의 선택 커밋(/commit, eval commit 네임스페이스, commit.enabled)이 켜진 리포를
+  세션 경고로 알립니다. harness-version-check.mjs가 세션 루트에서 omp config get commit.enabled를 읽어
+  true면 HARNESS STALE과 같은 경로·주기(세션 시작·턴 시작 리마인더)로 수정 방법(.omp/config.yml에
+  commit: / enabled: false)을 에이전트에게 전달하고, init·migrate가 소비 리포의 .omp/config.yml에
+  그 키를 넣으며, 통합 계약 :61이 "eval commit 경로는 설정으로 끈다"는 결정과 잔존면을 적습니다.
 constraints:
-  - "이 체크아웃의 origin 주소, 로컬 디렉터리 이름, Orca 워크스페이스 이름은 바꾸지 않습니다."
-  - "시점 기록 문서의 옛 이름은 바꾸지 않습니다 — docs/harness/archive/**, docs/harness/audit.jsonl, CHANGELOG 과거 항목, docs/handoff/, claudedocs/의 분석 기록(rule://harness-doc_standards R6)."
-  - "버전 범프·태그는 이 PR에서 하지 않습니다. 발행은 승인제라 머지 뒤 코디네이터가 승인을 받아 실행하며(워커 프롬프트 지시), PR 본문에 머지 뒤 범프가 필요하다고 적습니다."
-  - "소비 리포의 source_remote(고칠 곳 5)는 sync가 새 주소로 갱신할지 그대로 둘지를 비교해 정하고, 결정과 근거를 harness-check 스킬과 PR 본문에 적습니다."
-  - "원본 판정은 전처럼 호스트·경로 경계에 앵커합니다 — 접두만 같은 주소(notrae-hugo-kim/pylon 등)는 원본이 아닙니다."
+  - "eval commit 경로로 전환하지 않습니다 — 하네스의 커밋 경로는 bash git commit(compr/compush) 하나입니다(사용자 결정 2026-11-18)."
+  - "경고하지 않는 경우: 값이 false, Unknown setting(18.20.1 미만), omp가 PATH에 없음, 타임아웃. 판정은 하드 킬 타임아웃으로 묶습니다."
+  - ".omp/config.yml을 scripts/harness-sync.sh 화이트리스트에 넣지 않습니다(원본이 덮어써 소비 리포의 자체 설정을 지움). 전역 설정도 쓰지 않습니다."
+  - "init·migrate는 파일이 이미 있으면 키만 추가합니다(다른 설정은 그대로)."
+  - "버전 범프·태그·force-push·머지를 하지 않습니다."
 acceptance_criteria:
   - id: AC1
-    title: "origin이 git@github.com:rae-hugo-kim/omp.git이든 …/pylon.git이든 bash scripts/harness-sync.sh가 원본으로 판정하고 끝납니다. 접두만 같은 주소는 원본으로 판정하지 않습니다(테스트)."
+    title: "commit.enabled가 켜진 리포에서 세션을 열면 수정 방법이 든 경고가 에이전트 컨텍스트에 실립니다. 꺼져 있거나 키가 없는 omp에서는 나오지 않습니다."
   - id: AC2
-    title: "살아 있는 문서와 스킬(고칠 곳 2·3)에 옛 이름이 남지 않습니다 — git grep -n 'rae-hugo-kim/omp' -- README.md README.en.md .omp/skills scripts의 결과가 AC1의 '옛 이름도 받는다'를 구현한 줄뿐입니다."
+    title: "init·migrate 절차를 따른 리포의 .omp/config.yml에 commit.enabled: false가 있습니다."
   - id: AC3
-    title: "init의 gh repo create --template rae-hugo-kim/pylon과 SOURCE_REMOTE가 새 이름입니다."
+    title: "통합 계약 :61이 결정과 일치하고 node scripts/docs-drift가 0 error로 통과합니다."
   - id: AC4
-    title: "node --test .omp/extensions/harness/tests/*.test.mjs와 node scripts/docs-drift가 통과하고, 소비 리포가 받을 동작 변경이므로 버전을 한 번 올립니다 — 범프는 머지 뒤 코디네이터가 승인을 받아 실행하고, 이 PR은 CHANGELOG [Unreleased] 항목과 PR 본문의 '머지 뒤 범프 필요'로 준비합니다."
-  - id: AC5
-    title: "PR 본문에 머지 뒤 각 머신에서 할 일을 적습니다 — git remote set-url origin git@github.com:rae-hugo-kim/pylon.git 한 줄과, 그 전에는 새 이름으로 새로 clone한 체크아웃에서 harness-check를 돌리지 말라는 주의."
+    title: "새 테스트가 통과하고 기존 harness-version-check 테스트가 깨지지 않습니다."
 out_of_scope:
-  - "시점 기록 문서의 옛 이름 수정(constraints 참조)."
-  - "로컬 디렉터리 이름(…/workspace/omp)과 Orca 워크스페이스 이름 변경."
-  - "gh issue list 라벨 조회 지연에 대한 gh-loop Stage 1 상한 백스톱 개선(정정 댓글이 이 이슈의 범위 밖으로 둔 관찰)."
-  - "버전 범프·태그·릴리스 실행, 각 머신의 origin 주소 변경 실행."
+  - "eval commit으로의 전환(재검토 조건은 이슈 본문)."
+  - "eval 도구 호출에서 no_verify를 감시하는 방안(통합 계약 :61이 거부한 방향)."
+  - "감사의 다른 분할안: read의 ; 목록(#109), wait·Antigravity 서술(#110), 감사 도구 기준 갱신."
 assumptions:
-  - "시작 HEAD는 main d86a5e1(2026.91 범프)이고 이 체크아웃의 origin은 옛 주소(리다이렉트로 동작)입니다."
-  - "기존 소비 리포의 source_remote는 init·migrate가 쓴 GitHub 주소(git@github.com:<옛 이름>.git 리터럴, 또는 그 https/ssh:// 표기)입니다."
-  - "gh repo create --template <새 이름>의 동작은 리포를 실제로 만들어야 확인할 수 있어 확인하지 않습니다(이슈 '주의'와 같은 한계)."
+  - "시작 HEAD는 main a2f6c62(#140 머지)이고 이 리포의 .omp/config.yml은 이미 commit.enabled: false입니다(9c1229c)."
+  - "omp config get은 프로세스 cwd의 .omp/config.yml만 읽고 상위 디렉터리를 올라가지 않습니다(omp settings.md; 이 호스트 18.22.0 실측 — 하위 디렉터리에서는 true)."
+  - "omp config get commit.enabled는 18.22.0에서 값을 stdout에 쓰고 exit 0, 모르는 키는 stderr에 Unknown setting을 쓰고 exit 1입니다(실측)."
 risks:
-  - "옛 이름 판정은 전환이 끝날 때까지 남습니다. 그 이름으로 새 리포가 만들어지면 GitHub 리다이렉트가 끊기고 그 리포가 원본으로 판정됩니다(SOURCE_REPO_OLD 주석과 harness-check 스킬에 적습니다)."
-  - "source_remote 갱신은 GitHub 표기 세 가지만 다룹니다. SSH 호스트 별칭·미러 주소는 그대로 남아 수동 수정이 필요합니다(잘못 바꾸는 쪽보다 안 바꾸는 쪽으로 실패하게 한 선택)."
-  - "이 변경이 든 스크립트를 받기 전에 origin을 새 주소로 바꾸거나, 새 주소로 새로 clone한 옛 리비전에서 harness-check를 돌리면 하네스 파일이 덮어써집니다(PR 본문과 스킬의 주의로만 막습니다)."
+  - "프로브는 매 호출 omp 프로세스를 하나 띄웁니다(0.13초 실측). 느린 호스트에서는 3초 하드 킬로 묶여 게이트 예산(15초) 안에 머뭅니다."
+  - "--config 오버레이로 켠 세션은 별도 프로세스인 omp config get이 보지 못합니다(통합 계약 :61 잔존면)."
+  - "경고는 advisory라 켜진 채로 eval commit을 쓰는 에이전트를 막지 못합니다(:61 잔존면 — 결정대로 방어하지 않습니다)."
+  - "harness-version-check.test.mjs는 호스트 omp를 읽지 않도록 실패하는 omp 스텁을 PATH 앞에 둡니다 — 스텁 없이는 commit.enabled가 켜진 호스트에서 기존 케이스가 전부 깨집니다."
 references:
-  - path: https://github.com/rae-hugo-kim/pylon/issues/140
-    reason: 명세(고칠 곳·바꾸지 않는 것·AC·확인 문장·주의)와 정정 댓글
-  - path: scripts/harness-sync.sh
-    reason: 원본 자가 판정(SOURCE_REPO·SOURCE_REPO_OLD·SOURCE_MATCH_RE), 기본 소스 주소, step 7의 source_remote 갱신
-  - path: .omp/extensions/harness/tests/harness-sync.test.mjs
-    reason: 회귀 테스트 2건(옛·새 이름 원본 판정과 접두 일치 제외, source_remote 갱신)
-  - path: .omp/skills/harness-check/SKILL.md
-    reason: 원본 판정 서술, 폴백 주소, "Repository rename" 절(source_remote 결정)
+  - path: https://github.com/rae-hugo-kim/pylon/issues/139
+    reason: 명세(배경·결정·범위·AC·확인 문장·범위 밖)
+  - path: .omp/extensions/harness/gates/harness-version-check.mjs
+    reason: emitIfSelectiveCommitEnabled — 프로브 본체와 호출 지점(소스 리포 스킵 앞)
+  - path: .omp/extensions/harness/tests/selective-commit-probe.test.mjs
+    reason: 프로브 테스트(true·false·Unknown setting·부재·타임아웃·질문 형태·소스/소비)
   - path: .omp/skills/init/SKILL.md
-    reason: gh repo create --template, SOURCE_REMOTE, source_remote 예시
+    reason: Phase 4 선택 커밋 끄기 절차
+  - path: .omp/skills/migrate/SKILL.md
+    reason: Phase 5 선택 커밋 끄기 절차
+  - path: .omp/rules/harness-harness_integration_contract.md
+    reason: ":61 잔존면 서술과 :69 게이트 목록"
+  - path: docs/handoff/handoff_2026-11-17_omp-18-22-0-friction-audit.md
+    reason: §1 C1·C2, §9 — 실측 근거
 estimate:
   risk: high
-  files: 12
+  files: 8
   depth: low
-  model: anthropic/claude-fable-5-2
+  model: anthropic/claude-fable-5-1
   effort: high
