@@ -246,10 +246,18 @@ test('#140: a sync moves a GitHub source_remote naming the pre-rename repository
       + ['https://github.com/rae-hugo-kim/', 'git@github.com:rae-hugo-kim/', 'ssh://git@github.com/rae-hugo-kim/', 'git@github-alias:rae-hugo-kim/']
         .map((base) => `\tinsteadOf = ${base}\n`).join(''));
     const env = cleanEnv({ GIT_CONFIG_GLOBAL: gitconfig, GIT_CONFIG_NOSYSTEM: '1', GIT_ALLOW_PROTOCOL: 'file' });
-    const sync = () => spawnSync('bash', [join(fx.consumer, 'scripts', 'harness-sync.sh')], { cwd: fx.consumer, encoding: 'utf-8', env });
+    const sync = (args = []) => spawnSync('bash', [join(fx.consumer, 'scripts', 'harness-sync.sh'), ...args], { cwd: fx.consumer, encoding: 'utf-8', env });
     const metaPath = join(fx.consumer, '.omp', 'extensions', 'harness', 'harness-meta.json');
     const readMeta = () => JSON.parse(readFileSync(metaPath, 'utf-8'));
     const setRemote = (url) => writeFileSync(metaPath, JSON.stringify({ ...readMeta(), source_remote: url }, null, 2));
+
+    // --dry-run previews the rewrite next to the paths and writes nothing.
+    setRemote('git@github.com:rae-hugo-kim/omp.git');
+    const untouched = readFileSync(metaPath, 'utf-8');
+    const dry = sync(['--dry-run']);
+    assert.equal(dry.status, 0, `dry-run failed:\n${dry.stdout}\n${dry.stderr}`);
+    assert.ok(dry.stdout.includes('  META   source_remote git@github.com:rae-hugo-kim/omp.git -> git@github.com:rae-hugo-kim/pylon.git'), `dry-run must list the source_remote rewrite:\n${dry.stdout}`);
+    assert.equal(readFileSync(metaPath, 'utf-8'), untouched, 'dry-run must not write the meta');
 
     for (const [written, expected] of [
       ['git@github.com:rae-hugo-kim/omp.git', 'git@github.com:rae-hugo-kim/pylon.git'],
@@ -281,6 +289,14 @@ test('#140: a sync moves a GitHub source_remote naming the pre-rename repository
     assert.match(again.stdout, /Synced to harness\/2026\.99/);
     assert.doesNotMatch(again.stdout, /source_remote: .* -> /);
     assert.equal(readMeta().source_remote, 'git@github.com:rae-hugo-kim/pylon.git');
+
+    // An unregistered repository (no source_remote) falls back to the default source. That default
+    // is the new name: only pylon.git is left here, so the pre-rename default could not be fetched.
+    const { source_remote: _registered, ...unregistered } = readMeta();
+    writeFileSync(metaPath, JSON.stringify(unregistered, null, 2));
+    const fallback = sync();
+    assert.equal(fallback.status, 0, `unregistered sync failed:\n${fallback.stdout}\n${fallback.stderr}`);
+    assert.equal(readMeta().source_remote, 'git@github.com:rae-hugo-kim/pylon.git', 'the default source is the renamed repository');
   });
 });
 

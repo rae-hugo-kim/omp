@@ -61,7 +61,8 @@ DRY_RUN=0
 
 # --- 0a. Source repository identity ---
 # Renamed on GitHub 2026-11-18 (#140). Both names are needed by the local preamble (self-skip)
-# and by step 7 (meta rewrite), which also runs on the fetched fast path — hence up here.
+# and by the source_remote rewrite (steps 5.5 and 7), which also runs on the fetched fast path —
+# hence up here.
 SOURCE_REPO="rae-hugo-kim/pylon"
 # Pre-rename name. Checkouts move their origin one machine at a time, so it stays a valid source
 # origin; drop it once no checkout or consumer meta carries it (a NEW repository created under
@@ -310,6 +311,18 @@ for p in "${PATHS[@]}"; do
   fi
 done
 
+# --- 5.5 Repository rename: a source_remote that names the old repository (#140) ---
+# A consumer registered before the rename names the old repository. That address only works
+# through GitHub's redirect, so step 7 writes the new name instead (scheme and a trailing .git
+# kept as written). Only the three GitHub spellings are rewritten: an SSH host alias or a mirror
+# is not provably the renamed repository and is written back verbatim, like every other remote.
+# Decided here, before the dry-run exit, so --dry-run can list it.
+RENAMED_SOURCE_RE="^(git@github\\.com:|ssh://git@github\\.com/|https://github\\.com/)$SOURCE_REPO_OLD(\\.git)?\$"
+renamed_source=""
+if [[ "$source_remote" =~ $RENAMED_SOURCE_RE ]]; then
+  renamed_source="${BASH_REMATCH[1]}$SOURCE_REPO${BASH_REMATCH[2]:-}"
+fi
+
 if [[ $DRY_RUN -eq 1 ]]; then
   echo "--- Dry run: paths that would be overwritten ---"
   for p in "${PATHS[@]}"; do
@@ -336,6 +349,9 @@ if [[ $DRY_RUN -eq 1 ]]; then
     [[ -d "$REPO_ROOT/$d" && ! -L "$REPO_ROOT/$d" && ! -e "$tmp/$d" ]] || continue
     echo "  RETIRE $d/ (files matching the previous synced harness tree, if one is recorded, are removed; others are kept with an advisory)"
   done
+  if [[ -n "$renamed_source" ]]; then
+    echo "  META   source_remote $source_remote -> $renamed_source (repository renamed)"
+  fi
   exit 0
 fi
 
@@ -389,15 +405,8 @@ for p in "${PATHS[@]}"; do
   fi
 done
 
-# --- 7. Rewrite harness-meta.json (bootstrapped_at captured in step 5.6) ---
-# A consumer registered before the rename (#140) names the old repository. That address only
-# works through GitHub's redirect, so the sync that lands this version moves it to the new name
-# (scheme and a trailing .git kept as written). Only the three GitHub spellings are rewritten:
-# an SSH host alias or a mirror is not provably the renamed repository and is written back
-# verbatim, like every other remote.
-RENAMED_SOURCE_RE="^(git@github\\.com:|ssh://git@github\\.com/|https://github\\.com/)$SOURCE_REPO_OLD(\\.git)?\$"
-if [[ "$source_remote" =~ $RENAMED_SOURCE_RE ]]; then
-  renamed_source="${BASH_REMATCH[1]}$SOURCE_REPO${BASH_REMATCH[2]:-}"
+# --- 7. Rewrite harness-meta.json (bootstrapped_at captured in step 5.6; rename from 5.5) ---
+if [[ -n "$renamed_source" ]]; then
   echo "source_remote: $source_remote -> $renamed_source (repository renamed)"
   source_remote="$renamed_source"
 fi
