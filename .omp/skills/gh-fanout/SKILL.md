@@ -183,4 +183,4 @@ node .omp/extensions/harness/gh-loop-controller.mjs scale --state-json "$STATE" 
 - **로컬 온디맨드** 컨트롤러(이 박스). **24/7 상시응답**은 분리(robo-omp/cloud — WSL2 데스크톱은 상시서버 아님).
 - **라이브 N워커 실주행**은 비용 N배 — 결정 로직은 테스트로 검증됨; 실제 다중 구동은 환경/예산 따라.
 - 워커끼리 **직접 통신 안 함**(이슈 단위 분할이라 대부분 불요); fine 조정은 컨트롤러 경유.
-- **audit 충돌은 A+C로 처리합니다.** [이슈 #71](https://github.com/rae-hugo-kim/omp/issues/71)의 승인에 따라 한 경로의 로컬 union과 §7의 순차 PR 절차를 사용합니다. 작업별 감사 파일 이주·과거 로그 재작성·추가 러너 기능·기존 PR 일괄 rebase/머지는 범위 밖입니다.
+- **audit 충돌은 A+C로 처리합니다.** [이슈 #71](https://github.com/rae-hugo-kim/pylon/issues/71)의 승인에 따라 한 경로의 로컬 union과 §7의 순차 PR 절차를 사용합니다. 작업별 감사 파일 이주·과거 로그 재작성·추가 러너 기능·기존 PR 일괄 rebase/머지는 범위 밖입니다.

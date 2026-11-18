@@ -8,7 +8,7 @@ description: Create a new project from the omp template repository
 
 ## Goal
 
-템플릿 리포지토리(rae-hugo-kim/omp)에서 새 프로젝트를 생성하고, 바로 작업 가능한 상태로 만든다.
+템플릿 리포지토리(rae-hugo-kim/pylon)에서 새 프로젝트를 생성하고, 바로 작업 가능한 상태로 만든다.
 
 ## Inputs
 
@@ -46,7 +46,7 @@ description: Create a new project from the omp template repository
 ### Phase 1: Repository 생성
 
 ```bash
-gh repo create <project-name> --template rae-hugo-kim/omp [--private] --clone
+gh repo create <project-name> --template rae-hugo-kim/pylon [--private] --clone
 cd <project-name>
 ```
 
@@ -139,7 +139,7 @@ cd <project-name>
 
 ```bash
 # 소스 레포 URL (SSH 형식 권장 — 비공개 접근 호환)
-SOURCE_REMOTE="git@github.com:rae-hugo-kim/omp.git"
+SOURCE_REMOTE="git@github.com:rae-hugo-kim/pylon.git"
 
 # 템플릿이 담고 있는 하네스 버전 (harness-meta.json의 version)
 HARNESS_VERSION=$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(".omp/extensions/harness/harness-meta.json","utf8")).version)')
@@ -160,7 +160,7 @@ BOOTSTRAPPED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   "version": "<existing>",
   "updated": "<existing>",
   "description": "<existing>",
-  "source_remote": "git@github.com:rae-hugo-kim/omp.git",
+  "source_remote": "git@github.com:rae-hugo-kim/pylon.git",
   "commit_sha": "<COMMIT_SHA>",
   "bootstrapped_at": "<BOOTSTRAPPED_AT>"
 }
@@ -236,5 +236,5 @@ Do NOT create `.omp/AGENTS.md` (any non-empty file makes OMP's native provider r
 | gh 미설치 | "gh CLI를 설치하세요: https://cli.github.com" |
 | gh 미인증 | "! gh auth login을 실행하세요" |
 | repo 이름 충돌 | "이미 존재합니다. 다른 이름을 사용하세요" |
-| template 접근 불가 | "rae-hugo-kim/omp 접근 권한을 확인하세요" |
+| template 접근 불가 | "rae-hugo-kim/pylon 접근 권한을 확인하세요" |
 | clone 실패 | 네트워크 확인 안내 |

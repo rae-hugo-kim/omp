@@ -192,6 +192,98 @@ test('consumer-custom agent survives a sync (agents are listed per file, not swe
   });
 });
 
+// --- #140: repository rename rae-hugo-kim/omp -> rae-hugo-kim/pylon (2026-11-18) ---
+// During the transition a source checkout's origin carries either name. A source checkout that
+// fails the self-skip would treat itself as a consumer and overwrite its own harness files with
+// the tagged version ("remote wins").
+test('#140: an origin under the old or the new repository name self-skips as the source; a look-alike is synced', () => {
+  withFixture({}, (fx) => {
+    const metaPath = join(fx.consumer, '.omp', 'extensions', 'harness', 'harness-meta.json');
+    const before = readFileSync(metaPath, 'utf-8');
+    for (const origin of [
+      'git@github.com:rae-hugo-kim/omp.git',
+      'git@github.com:rae-hugo-kim/pylon.git',
+      'https://github.com/rae-hugo-kim/omp',
+      'https://github.com/rae-hugo-kim/pylon',
+      'https://github.com/rae-hugo-kim/pylon.git',
+      'ssh://git@github.com/rae-hugo-kim/pylon.git',
+    ]) {
+      git(fx.consumer, ['remote', 'set-url', 'origin', origin]);
+      const r = runSync(fx.consumer);
+      assert.equal(r.status, 0, `${origin}: ${r.stderr}`);
+      assert.match(r.stdout, /This IS the source harness repo/, `${origin} must be recognised as the source repo`);
+      assert.doesNotMatch(r.stdout, /Target: harness\//, `${origin}: a self-skip resolves no target`);
+    }
+    assert.equal(readFileSync(metaPath, 'utf-8'), before, 'a self-skipping run writes nothing');
+    for (const origin of [
+      'git@github.com:notrae-hugo-kim/pylon.git',
+      'git@github.com:notrae-hugo-kim/omp.git',
+      'git@github.com:rae-hugo-kim/pylon-fork.git',
+      'https://github.com/rae-hugo-kim/pylons',
+      'https://github.com/rae-hugo-kim/omp2.git',
+    ]) {
+      git(fx.consumer, ['remote', 'set-url', 'origin', origin]);
+      const r = runSync(fx.consumer, ['--dry-run']);
+      assert.equal(r.status, 0, `${origin}: ${r.stderr}`);
+      assert.doesNotMatch(r.stdout, /This IS the source harness repo/, `${origin} only shares a prefix with the source repo and must not self-skip`);
+      assert.match(r.stdout, /Target: harness\/2026\.99/, `${origin}: the sync must go on to resolve the target tag`);
+    }
+  });
+});
+
+// A consumer registered before the rename has the old GitHub address in source_remote. It keeps
+// working only through GitHub's redirect, so the sync moves it to the new name. The fixture stands
+// in for that redirect: insteadOf maps the GitHub addresses onto local bare repos that answer under
+// both names, and GIT_ALLOW_PROTOCOL=file makes a missed mapping fail instead of reaching the network.
+test('#140: a sync moves a GitHub source_remote naming the pre-rename repository to the new name; other remotes are kept as written', () => {
+  withFixture({}, (fx) => {
+    const ns = join(fx.root, 'rae-hugo-kim');
+    mkdirSync(ns);
+    renameSync(fx.bare, join(ns, 'pylon.git'));
+    cpSync(join(ns, 'pylon.git'), join(ns, 'omp.git'), { recursive: true });
+    const gitconfig = join(fx.root, 'gitconfig');
+    writeFileSync(gitconfig, `[url "${pathToFileURL(ns).href}/"]\n`
+      + ['https://github.com/rae-hugo-kim/', 'git@github.com:rae-hugo-kim/', 'ssh://git@github.com/rae-hugo-kim/', 'git@github-alias:rae-hugo-kim/']
+        .map((base) => `\tinsteadOf = ${base}\n`).join(''));
+    const env = cleanEnv({ GIT_CONFIG_GLOBAL: gitconfig, GIT_CONFIG_NOSYSTEM: '1', GIT_ALLOW_PROTOCOL: 'file' });
+    const sync = () => spawnSync('bash', [join(fx.consumer, 'scripts', 'harness-sync.sh')], { cwd: fx.consumer, encoding: 'utf-8', env });
+    const metaPath = join(fx.consumer, '.omp', 'extensions', 'harness', 'harness-meta.json');
+    const readMeta = () => JSON.parse(readFileSync(metaPath, 'utf-8'));
+    const setRemote = (url) => writeFileSync(metaPath, JSON.stringify({ ...readMeta(), source_remote: url }, null, 2));
+
+    for (const [written, expected] of [
+      ['git@github.com:rae-hugo-kim/omp.git', 'git@github.com:rae-hugo-kim/pylon.git'],
+      ['https://github.com/rae-hugo-kim/omp.git', 'https://github.com/rae-hugo-kim/pylon.git'],
+      ['ssh://git@github.com/rae-hugo-kim/omp', 'ssh://git@github.com/rae-hugo-kim/pylon'],
+    ]) {
+      setRemote(written);
+      const r = sync();
+      assert.equal(r.status, 0, `${written}: sync failed:\n${r.stdout}\n${r.stderr}`);
+      assert.equal(readMeta().source_remote, expected, `${written} must be moved to the new name, keeping scheme and suffix`);
+      assert.ok(r.stdout.includes(`source_remote: ${written} -> ${expected}`), `the rewrite must be reported:\n${r.stdout}`);
+      assert.equal(readMeta().bootstrapped_at, '2026-01-01T00:00:00Z', 'the rest of the meta is written as before');
+    }
+
+    // Not provably the renamed GitHub repository (an SSH host alias, a mirror): kept as written.
+    setRemote('git@github-alias:rae-hugo-kim/omp.git');
+    const alias = sync();
+    assert.equal(alias.status, 0, `alias: sync failed:\n${alias.stdout}\n${alias.stderr}`);
+    assert.equal(readMeta().source_remote, 'git@github-alias:rae-hugo-kim/omp.git');
+    assert.doesNotMatch(alias.stdout, /source_remote: .* -> /);
+
+    // Once rewritten, the old name is not needed any more (the redirect may end): the next sync
+    // resolves the new address and reports no further rewrite.
+    setRemote('git@github.com:rae-hugo-kim/omp.git');
+    assert.equal(sync().status, 0);
+    rmSync(join(ns, 'omp.git'), { recursive: true, force: true });
+    const again = sync();
+    assert.equal(again.status, 0, `sync after the old name is gone failed:\n${again.stdout}\n${again.stderr}`);
+    assert.match(again.stdout, /Synced to harness\/2026\.99/);
+    assert.doesNotMatch(again.stdout, /source_remote: .* -> /);
+    assert.equal(readMeta().source_remote, 'git@github.com:rae-hugo-kim/pylon.git');
+  });
+});
+
 // --- Commit gates on sync commits (handoff 2026-09-02, option C) ---
 // After a sync the consumer commits a multi-thousand-line diff that risk-assess used to score
 // HIGH unconditionally, blocking on backpressure + review evidence every time. The manifest
