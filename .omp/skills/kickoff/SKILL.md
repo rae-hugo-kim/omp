@@ -235,7 +235,7 @@ No coding. Only information gathering + state file saving to `docs/harness/`.
 
 ### Completion: Save & Signal (MANDATORY)
 
-**⚠️ 이 단계를 건너뛰면 안 됨. 반드시 모든 Step을 완료해야 kickoff 완료.**
+**⚠️ 이 단계를 건너뛰면 안 됨. 반드시 모든 Step을 완료해야 kickoff 완료.** (예외는 Step 3.5 Plan Attack 하나다 — kickoff 완료 조건이 아니다.)
 
 #### Step 1: kickoff-done 플래그 생성
 ```bash
@@ -286,13 +286,15 @@ echo "$(date -Iseconds)" > docs/harness/kickoff-done
 - (doc-ingest 시) 원본 요구가 전부 AC≥1 또는 `out_of_scope`로 매핑됐는가 — 매핑표 잔차 0 (`coverage`; Step 4 연동)
 - (doc-ingest 시) 도출 AC가 각각 출처 앵커(`source:`)를 보유하는가 (AC3)
 
-#### Step 3.5: Plan Attack Gate (적대적 검증)
+#### Step 3.5: Plan Attack (적대적 검증 — 롤아웃 Phase 1, kickoff 완료 조건 아님)
 
-seed.yaml 생성 후 자동 실행. 정책: [`.omp/rules/harness-adversarial_review.md`](../../../.omp/rules/harness-adversarial_review.md)
+seed.yaml 생성 후 실행한다. 정책: [`.omp/rules/harness-adversarial_review.md`](../../../.omp/rules/harness-adversarial_review.md) ("3개 게이트 정의"·"도입 상태")
+
+담당 에이전트는 OMP 번들 `task`입니다. 하네스가 보장하는 대응 에이전트이며, seed 공격 템플릿은 호출자가 아래대로 공급합니다. Plan Attack은 **kickoff 완료 조건이 아닙니다**(`docs/rules/kickoff_output_contract.md` Output Roles·Completion Definition). 기본은 실행이지만, `task` 도구를 쓸 수 없는 세션에서는 건너뛰고 그 사실을 사용자에게 알린 뒤 Step 4로 갑니다. `plan-attack-report.md`와 `adversarial_plan_attack` 행은 Plan Attack을 실행했을 때만 남깁니다.
 
 ```
 1. audit.jsonl에서 현재 task_id의 adversarial_plan_attack 이벤트 수를 세어 run_count 결정
-2. critic 에이전트 (opus) 호출:
+2. `task` 에이전트 호출 (`task` 도구):
    - seed.yaml 전체를 입력으로 제공
    - 구조적 공격 템플릿:
      a) "이 goal이 달성 불가능한 이유 3가지"
@@ -305,7 +307,7 @@ seed.yaml 생성 후 자동 실행. 정책: [`.omp/rules/harness-adversarial_rev
      (3) 구체적 증거 제시 (seed.yaml 필드 인용)
 3. 결과를 docs/harness/plan-attack-report.md에 저장
 4. audit.jsonl에 append:
-   {"ts":"<ISO>","event":"adversarial_plan_attack","actor":"critic","meta":{"task_id":"<id>","run_count":<N>,"result":"<PASS|WARN|BLOCK>","findings":[...]}}
+   {"ts":"<ISO>","event":"adversarial_plan_attack","actor":"task","meta":{"task_id":"<id>","run_count":<N>,"result":"<PASS|WARN|BLOCK>","findings":[...]}}
 5. 판정:
    - run_count=1: WARN (결과를 사용자에게 표시, 진행 가능)
    - run_count≥2: CRITICAL 발견 시 BLOCK → 사용자에게 보완 요구
@@ -533,7 +535,7 @@ Next: `/startdev` or manual planning.
 | `docs/harness/kickoff-done` | Flag that kickoff completed | Created at end |
 | `docs/harness/kickoff-summary.md` | 사람 중심 요약 | Created at end |
 | `docs/harness/seed.yaml` | 하네스 중심 구조화 명세 (1급 입력) | Created at end |
-| `docs/harness/plan-attack-report.md` | 적대적 계획 검증 결과 | Created at Step 3.5 |
+| `docs/harness/plan-attack-report.md` | 적대적 계획 검증 결과 | Created at Step 3.5 (Plan Attack을 실행했을 때만) |
 | `docs/harness/rubric-report.md` | 명확도 4축 + `coverage` 판정 보고서 | Created at end |
 | `docs/harness/current-scope.md` | 훅 호환용 scope 정의 (파생물) | Created at end |
 | `docs/harness/audit.jsonl` | Append-only 감사 로그 | Appended throughout |
