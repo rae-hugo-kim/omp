@@ -18,7 +18,8 @@
 //     COMMITTED meta is current, STALE (linked worktree) otherwise, never /skill:harness-check; main and
 //     single checkouts keep the original STALE; the worktree uses its own cache file
 //   - the omp update probe (#31) has its own file, omp-version-probe.test.mjs. The cases here never
-//     pass `has_ui`, so the probe does not run in them
+//     pass `has_ui`, so the probe does not run in them; the selective-commit probe (#139,
+//     selective-commit-probe.test.mjs) runs on every call and is kept silent here by a failing omp stub
 //
 // Fixture tags are ANNOTATED (`git tag -a`) on purpose: only annotated tags make
 // the tag-object sha differ from the commit sha, which is what the peeled-sha
@@ -27,18 +28,35 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, existsSync, symlinkSync, realpathSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, existsSync, symlinkSync, realpathSync, linkSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { skipUnless } from './helpers/capabilities.mjs';
 
 const GATE = join(dirname(fileURLToPath(import.meta.url)), '..', 'gates', 'harness-version-check.mjs');
 
-// Hermetic env: strip ambient GIT_* so a hook-provided GIT_DIR/GIT_INDEX_FILE cannot redirect fixtures.
+// Hermetic env: strip ambient GIT_* so a hook-provided GIT_DIR/GIT_INDEX_FILE cannot redirect fixtures,
+// and put a failing `omp` stub first on PATH so the selective-commit probe (#139) never reads the host's
+// real omp — on a host where `commit.enabled` is on, every fixture would otherwise carry its reminder.
+// A failing omp is the probe's documented silent case. On POSIX the stub is a `sh` script; on Windows
+// `execFileSync` resolves a bare name only to `.com`/`.exe` (libuv `search_path` — a `.cmd` is never
+// found, review r1), so the stub is `omp.exe` = this node binary: `node config get commit.enabled --json`
+// fails on a missing module `config` and exits 1. (Hard link first; copy when tmp is on another volume.)
+const OMP_STUB_BIN = mkdtempSync(join(tmpdir(), 'hvc-omp-stub-'));
+if (process.platform === 'win32') {
+  try { linkSync(process.execPath, join(OMP_STUB_BIN, 'omp.exe')); } catch { copyFileSync(process.execPath, join(OMP_STUB_BIN, 'omp.exe')); }
+} else {
+  writeFileSync(join(OMP_STUB_BIN, 'omp'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+}
+process.on('exit', () => rmSync(OMP_STUB_BIN, { recursive: true, force: true }));
 function cleanEnv() {
   const env = {};
-  for (const [k, v] of Object.entries(process.env)) if (!k.startsWith('GIT_')) env[k] = v;
+  // The PATH key is `Path` on native Windows: drop every spelling, then prepend the stub to the value
+  // `process.env.PATH` resolves case-insensitively — a plain-object `env.PATH` would be undefined there
+  // and the child would lose the host PATH (git, node) entirely (review r2).
+  for (const [k, v] of Object.entries(process.env)) if (!k.startsWith('GIT_') && k.toUpperCase() !== 'PATH') env[k] = v;
+  env.PATH = `${OMP_STUB_BIN}${delimiter}${process.env.PATH ?? ''}`;
   return env;
 }
 

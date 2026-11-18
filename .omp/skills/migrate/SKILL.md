@@ -150,6 +150,13 @@ EOF
 git config core.hooksPath .githooks
 ```
 
+**선택 커밋 끄기(#139)**: omp `18.20.1`+의 `/commit`·eval `commit` 경로는 `bash` 도구 밖에서 커밋해 명령 계층 가드(커밋 우회 트립와이어·cross-repo 가드·커밋 뒤 후속 처리)가 침묵하고 리뷰 해시를 커밋 전에 계산할 수 없으므로, 하네스의 커밋 경로는 `bash`의 `git commit`(compr/compush) 하나로 둔다(사용자 결정 2026-11-18). `.omp/config.yml`은 `harness-sync.sh`가 동기화하지 않는 프로젝트 설정이라 여기서 보장한다 — 파일이 이미 있으면 **키만 추가**한다(타겟 프로젝트의 다른 설정은 그대로). 켜진 채 세션을 열면 `harness-version-check.mjs`가 매 턴 `HARNESS SELECTIVE COMMIT ON`으로 같은 수정을 요구한다.
+
+```bash
+grep -qE '^commit:' .omp/config.yml 2>/dev/null || printf '\n# Selective commit (/commit, eval `commit`; omp 18.20.1+) is off: the harness commit path is bash `git commit` (#139).\ncommit:\n  enabled: false\n' >> .omp/config.yml
+omp config get commit.enabled   # → false (true면 기존 commit: 매핑 안에 enabled: false를 손으로 넣는다; 설정 파싱 오류면 파일이 플로우 매핑 `{…}`·따옴표 키 형식이라 append가 깨뜨린 것이니 손으로 고친다; `Unknown setting`이면 omp가 18.20.1 미만이라 그대로 둔다)
+```
+
 ### Phase 6: 게이트 스모크 (확장이 실제로 배선됐는지 증명)
 
 읽지 않은 기존 파일(AGENTS.md) 수정 시도를 context-gate에 직접 먹여 BLOCK(exit 2)을 확인 → 게이트가 로드·실행됨을 증명.
