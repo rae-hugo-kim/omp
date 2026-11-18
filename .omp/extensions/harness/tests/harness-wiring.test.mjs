@@ -157,7 +157,7 @@ test('W3c: unlisted agents fail the source repo but not a consumer (custom + ret
   };
   assert.deepEqual(unlistedHarnessAgents(tree({ version: '2026.90' }), listed).sort(), ['adversary-sol.md', 'consumer-custom.md'], 'source repo (no source_remote): every unlisted .md agent is reported');
   assert.deepEqual(unlistedHarnessAgents(tree(null), listed).sort(), ['adversary-sol.md', 'consumer-custom.md'], 'missing meta is treated as the source repo (strict)');
-  assert.deepEqual(unlistedHarnessAgents(tree({ version: '2026.90', source_remote: 'git@github.com:rae-hugo-kim/omp.git' }), listed), [], 'consumer (source_remote set): custom and retired agents are not failures');
+  assert.deepEqual(unlistedHarnessAgents(tree({ version: '2026.90', source_remote: 'git@github.com:rae-hugo-kim/pylon.git' }), listed), [], 'consumer (source_remote set): custom and retired agents are not failures');
 });
 
 // W3b (#35-7): the kickoff/init skills read these consumer-space files directly; if any drops off

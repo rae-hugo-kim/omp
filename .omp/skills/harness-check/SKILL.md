@@ -22,7 +22,7 @@ One command that both **reports drift** and **resolves it** by overwriting local
 
 | Rule | Rationale |
 |------|-----------|
-| Source repo self-skip | If `origin` remote matches `rae-hugo-kim/omp`, this IS the source — nothing to do |
+| Source repo self-skip | If `origin` remote matches `rae-hugo-kim/pylon` — or the same repository under its pre-rename name `omp`, see "Repository rename" — this IS the source: nothing to do |
 | Remote wins | Local tuning is explicitly out of scope; overwrite without merge |
 | Whitelist only | Only harness asset paths are overwritten — user code (`docs/`, `src/`, etc.) is never touched |
 | Preserve `bootstrapped_at` | Keep the original first-registration timestamp |
@@ -39,7 +39,7 @@ git remote get-url origin
 
 | Mode | Condition |
 |------|-----------|
-| **source repo** | `origin` URL matches `rae-hugo-kim/omp` |
+| **source repo** | `origin` URL matches `rae-hugo-kim/pylon` (or its pre-rename name, same owner, `omp`) |
 | **unregistered** | meta has no `source_remote` field (and origin doesn't match source) |
 | **registered** | meta has `source_remote` field |
 | **linked worktree** (#68) | `git rev-parse --git-dir` ≠ `--git-common-dir`. Takes precedence over `registered`/`unregistered`; the **source repo** self-skip still wins first |
@@ -71,14 +71,21 @@ bash scripts/harness-sync.sh [--dry-run]
 
 The script:
 - Self-skips in the source repo
-- Falls back to `git@github.com:rae-hugo-kim/omp.git` if no `source_remote` (unregistered case)
+- Falls back to `git@github.com:rae-hugo-kim/pylon.git` if no `source_remote` (unregistered case)
 - Fetches the latest `harness/*` tag from remote
 - Shallow-clones that tag into a temp dir, then **hands execution to that tag's own `scripts/harness-sync.sh`** (#24) so the whitelist applied is the target version's, not the consumer's stale copy — a new whitelist entry lands on the first sync
 - Overwrites whitelist paths (`.omp/rules/harness-*.md` (file glob — stale `harness-*` files pruned, other `.omp/rules/` files kept), `checklists/`, `templates/`, `AGENTS.md`, `.omp/extensions/harness/`, the five harness agents in `.omp/agents/` (per file — reviewer, verifier, code-reviewer, adversary and its one panel mirror `adversary-opus`; consumer agents next to them are kept, and a retired harness agent such as `adversary-sol.md` or `adversary-argon.md` is not removed — delete it by hand; the synced suite no longer fails on it (W3 checks agent coverage only in the source repo)), `.githooks/*`, `scripts/harness-*.sh`, harness skill dirs)
 - Retires the legacy `rules/` directory (ADR 002): removes only files whose blob matches the previous synced tree (`refs/harness/<prev>`), keeps consumer-edited/added files with an advisory, and removes nothing when no previous tree is recorded — the advisory tells you to fix project docs that link `rules/<name>.md` (→ `.omp/rules/harness-<name>.md`, see the migrate skill)
-- Rewrites `harness-meta.json` with new version/SHA + preserved `bootstrapped_at`
+- Rewrites `harness-meta.json` with new version/SHA + preserved `bootstrapped_at`. A `source_remote` that names the pre-rename GitHub repository is moved to the new name in the same write and reported as `source_remote: <old> -> <new> (repository renamed)` (#140, see "Repository rename")
 - Sets `core.hooksPath=.githooks` when `.githooks/` exists and git is not already pointing at it (idempotent). This is local git config that no file sync can carry, so a repo registered before `bootstrap` gained the step is otherwise disarmed forever (#26) — the `HARNESS HOOKS INACTIVE` session/turn notice from `harness-version-check.mjs` routes here.
 - Clears the `harness-version-check` and `harness-hooks-check` caches
+
+#### Repository rename: `omp` → `pylon` (#140)
+
+The source repository was renamed on GitHub on 2026-11-18. The owner is unchanged; only the repository name moved from `omp` to `pylon`. GitHub redirects the old address for git and `gh`, but the redirect ends if a new repository is ever created under the old name — so do not create one, and do not rely on the redirect longer than needed.
+
+- **Source checkout (`origin`)**: both names self-skip, because each machine moves its `origin` separately (`git remote set-url origin git@github.com:rae-hugo-kim/pylon.git`). `origin` is shared by the main checkout and every linked worktree of it, so moving it changes all of them at once. Move it only after every one of them in which `harness-check` or `scripts/harness-sync.sh` may still run carries the #140 change (`grep -q 'rae-hugo-kim/pylon' scripts/harness-sync.sh`): an older script knows the old name only, so under the new `origin` it treats the source checkout as a consumer and overwrites the harness files with the tagged version. For the same reason do not run `harness-check` in a fresh clone of the new address unless that clone's script passes the same check.
+- **Consumer (`source_remote`)**: decided as **sync rewrites it** — no manual step. The first sync that lands the #140 change still fetches through the old address (the redirect) and writes the new one into `harness-meta.json`; later syncs and the `session_start` drift probe use the new address. `--dry-run` lists the pending rewrite as `META   source_remote <old> -> <new> (repository renamed)`. Only the three GitHub spellings are rewritten (`git@github.com:…`, `ssh://git@github.com/…`, `https://github.com/…`; a trailing `.git` is kept as written). An SSH host alias or a mirror is written back unchanged — edit `source_remote` by hand if it points at the renamed repository. A consumer that never syncs keeps the old address and keeps depending on the redirect.
 
 #### Windows native: upgrading from 2026.86 or earlier
 
@@ -101,7 +108,7 @@ git ls-files --eol -- '*.sh' '.githooks/*'                   # expect w/lf every
 | Unregistered → synced | "Retrofitted to harness/<version> from default source" |
 | Registered, up to date | "Harness was already at latest (harness/<version>) — files re-synced anyway" |
 | Registered, drift → synced | "Synced local <old> → remote <new>" |
-| `--dry-run` | List of paths that would be overwritten (+ `RETIRE rules/` when a legacy copy would be retired) |
+| `--dry-run` | List of paths that would be overwritten (+ `RETIRE rules/` when a legacy copy would be retired, + `META source_remote` when the pre-rename address would be rewritten) |
 | Network failure | "Could not reach remote. Check `source_remote` URL and network" |
 
 ## Verification

@@ -44,7 +44,7 @@ ls -d .claude CLAUDE.md 2>/dev/null   # 둘 다 없으면 아래 안내 후 중�
 gh auth status
 
 # 4. 소스 최신 harness 태그 해석 + 임시 클론 (Phase 2 감사 + Phase 3 부트스트랩에 재사용)
-SRC="git@github.com:rae-hugo-kim/omp.git"
+SRC="git@github.com:rae-hugo-kim/pylon.git"
 TAG=$(git ls-remote --tags "$SRC" 'refs/tags/harness/*' | awk '{print $2}' \
   | sed 's|refs/tags/harness/||; s|\^{}$||' | sort -u -t. -k1,1n -k2,2n | tail -1)
 TMPL=$(mktemp -d)

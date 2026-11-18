@@ -59,6 +59,16 @@ _realfile() { local d; d="$(_realdir "$(dirname -- "$1")")" || return 1; printf 
 DRY_RUN=0
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
 
+# --- 0a. Source repository identity ---
+# Renamed on GitHub 2026-11-18 (#140). Both names are needed by the local preamble (self-skip)
+# and by the source_remote rewrite (steps 5.5 and 7), which also runs on the fetched fast path —
+# hence up here.
+SOURCE_REPO="rae-hugo-kim/pylon"
+# Pre-rename name. Checkouts move their origin one machine at a time, so it stays a valid source
+# origin; drop it once no checkout or consumer meta carries it (a NEW repository created under
+# this name would end GitHub's redirect and be taken for the source here).
+SOURCE_REPO_OLD="rae-hugo-kim/omp"
+
 # --- 0b. Fetched-script fast path (#24) ---
 # The local copy of this script resolved the remote, cloned the target tag, and
 # then exec'd THIS file out of that clone (step 4b). Everything up to the clone is
@@ -101,10 +111,11 @@ if [[ -z "${_HARNESS_SYNC_FETCHED:-}" ]]; then
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 REPO_ROOT="$(_realdir "$REPO_ROOT")"
 META_FILE="$REPO_ROOT/.omp/extensions/harness/harness-meta.json"
-DEFAULT_SOURCE="git@github.com:rae-hugo-kim/omp.git"
-# Anchor to a host/path boundary so e.g. `notrae-hugo-kim/omp.git` does NOT
-# match and wrongly self-skip sync (codex review nit).
-SOURCE_MATCH_RE='(^|[:/])rae-hugo-kim/omp(\.git)?$'
+DEFAULT_SOURCE="git@github.com:$SOURCE_REPO.git"
+# Anchor to a host/path boundary so e.g. `notrae-hugo-kim/pylon.git` does NOT
+# match and wrongly self-skip sync (codex review nit). A source checkout that fails this
+# match syncs as a consumer and overwrites its own harness files with the tag's.
+SOURCE_MATCH_RE="(^|[:/])($SOURCE_REPO|$SOURCE_REPO_OLD)(\\.git)?\$"
 
 # --- 1. Detect source repo (self-skip) ---
 origin_url=$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || true)
@@ -300,6 +311,18 @@ for p in "${PATHS[@]}"; do
   fi
 done
 
+# --- 5.5 Repository rename: a source_remote that names the old repository (#140) ---
+# A consumer registered before the rename names the old repository. That address only works
+# through GitHub's redirect, so step 7 writes the new name instead (scheme and a trailing .git
+# kept as written). Only the three GitHub spellings are rewritten: an SSH host alias or a mirror
+# is not provably the renamed repository and is written back verbatim, like every other remote.
+# Decided here, before the dry-run exit, so --dry-run can list it.
+RENAMED_SOURCE_RE="^(git@github\\.com:|ssh://git@github\\.com/|https://github\\.com/)$SOURCE_REPO_OLD(\\.git)?\$"
+renamed_source=""
+if [[ "$source_remote" =~ $RENAMED_SOURCE_RE ]]; then
+  renamed_source="${BASH_REMATCH[1]}$SOURCE_REPO${BASH_REMATCH[2]:-}"
+fi
+
 if [[ $DRY_RUN -eq 1 ]]; then
   echo "--- Dry run: paths that would be overwritten ---"
   for p in "${PATHS[@]}"; do
@@ -326,6 +349,9 @@ if [[ $DRY_RUN -eq 1 ]]; then
     [[ -d "$REPO_ROOT/$d" && ! -L "$REPO_ROOT/$d" && ! -e "$tmp/$d" ]] || continue
     echo "  RETIRE $d/ (files matching the previous synced harness tree, if one is recorded, are removed; others are kept with an advisory)"
   done
+  if [[ -n "$renamed_source" ]]; then
+    echo "  META   source_remote $source_remote -> $renamed_source (repository renamed)"
+  fi
   exit 0
 fi
 
@@ -379,7 +405,11 @@ for p in "${PATHS[@]}"; do
   fi
 done
 
-# --- 7. Rewrite harness-meta.json (bootstrapped_at captured in step 5.6) ---
+# --- 7. Rewrite harness-meta.json (bootstrapped_at captured in step 5.6; rename from 5.5) ---
+if [[ -n "$renamed_source" ]]; then
+  echo "source_remote: $source_remote -> $renamed_source (repository renamed)"
+  source_remote="$renamed_source"
+fi
 
 src_desc=$(grep -o '"description"[[:space:]]*:[[:space:]]*"[^"]*"' "$tmp/.omp/extensions/harness/harness-meta.json" \
   | sed 's/.*"description"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || echo "")

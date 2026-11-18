@@ -1,6 +1,6 @@
 **[English](README.en.md)**
 
-# omp — OMP 하네스 템플릿
+# pylon — OMP 하네스 템플릿
 
 OMP(Oh My Pi) 코딩 에이전트가 일관되고 안전하게 동작하도록 만드는 정책 프레임워크입니다.
 
@@ -35,7 +35,7 @@ OMP(Oh My Pi) 코딩 에이전트가 일관되고 안전하게 동작하도록 �
 | 플랫폼 | 지위 |
 |---|---|
 | Linux · WSL · macOS | **공식 지원** — 전체 하네스 테스트 통과가 기준선입니다 |
-| Windows 네이티브 | **동작을 목표로 하며 일부 테스트는 skip** — OS 기능(심볼릭 링크·FIFO)이 없는 환경의 테스트만 사유를 출력하고 건너뜁니다. [#93](https://github.com/rae-hugo-kim/omp/issues/93)의 런타임 수정(review-gate의 `shasum` 의존 제거, cross-repo·`git -C` 절대 경로 판정)과 [#99](https://github.com/rae-hugo-kim/omp/issues/99)의 `repo-root.mjs` 수정(`C:\…`·`C:/…`·UNC 경로를 자기 루트에서 걸어 리포에 귀속 — 그 전에는 모든 Windows 경로가 어느 리포에도 속하지 않아 cross-repo 가드가 조용히 꺼졌습니다)은 들어 있지만, 둘 다 주입한 `path.win32` 단위 테스트 근거이고 실제 Windows 호스트에서 전체 suite를 실행해 확인하지는 않았습니다. Git Bash의 MSYS 표기(`/c/Users/…`)는 변환하지 않아 edit/write·mutator 피연산자·`git -C /c/… commit`은 귀속 null → 허용이고(`cd /c/… && git commit`만 cwd 불명으로 fail-closed), 실기 확인이 필요합니다 |
+| Windows 네이티브 | **동작을 목표로 하며 일부 테스트는 skip** — OS 기능(심볼릭 링크·FIFO)이 없는 환경의 테스트만 사유를 출력하고 건너뜁니다. [#93](https://github.com/rae-hugo-kim/pylon/issues/93)의 런타임 수정(review-gate의 `shasum` 의존 제거, cross-repo·`git -C` 절대 경로 판정)과 [#99](https://github.com/rae-hugo-kim/pylon/issues/99)의 `repo-root.mjs` 수정(`C:\…`·`C:/…`·UNC 경로를 자기 루트에서 걸어 리포에 귀속 — 그 전에는 모든 Windows 경로가 어느 리포에도 속하지 않아 cross-repo 가드가 조용히 꺼졌습니다)은 들어 있지만, 둘 다 주입한 `path.win32` 단위 테스트 근거이고 실제 Windows 호스트에서 전체 suite를 실행해 확인하지는 않았습니다. Git Bash의 MSYS 표기(`/c/Users/…`)는 변환하지 않아 edit/write·mutator 피연산자·`git -C /c/… commit`은 귀속 null → 허용이고(`cd /c/… && git commit`만 cwd 불명으로 fail-closed), 실기 확인이 필요합니다 |
 
 Windows 네이티브 전제:
 
@@ -119,7 +119,7 @@ OMP에서 스킬은 `/skill:<이름>`으로 호출하거나, 설명에 매칭되
 | `/skill:compr` | 브랜치 → 커밋 → 푸시 → PR |
 | `/skill:compush` | 커밋 → 푸시 (PR 없이) |
 | `/skill:receiving-code-review` | 받은 리뷰 의견 검증·반영 |
-| `/skill:harness-check` | 하네스 버전 드리프트 체크 + 원격 sync (`--audit`로 품질 점수 — [#87](https://github.com/rae-hugo-kim/omp/issues/87)에서 폐지가 결정돼 실행 사이클 전까지만 남아 있습니다) |
+| `/skill:harness-check` | 하네스 버전 드리프트 체크 + 원격 sync (`--audit`로 품질 점수 — [#87](https://github.com/rae-hugo-kim/pylon/issues/87)에서 폐지가 결정돼 실행 사이클 전까지만 남아 있습니다) |
 | `/skill:migrate` | 기존 Claude Code 프로젝트(.claude/CLAUDE.md)를 OMP로 컷오버 (보험 태그 + 하네스 이식) |
 | `/skill:design-mockup` | 슬라이더/노브로 파라미터 튜닝 가능한 단일 HTML mockup 생성 |
 | `/skill:grepai-search` | 의미 기반 코드 검색 (콜드스타트 탐색) |
@@ -207,7 +207,7 @@ git push --follow-tags
 /skill:harness-check --audit      # sync 후 7-카테고리(0~70) 품질 점수 출력
 ```
 
-`--audit`은 `scripts/harness-audit.sh`(rubric v3)를 호출하며, 버전 bump 시 결과가 `.omp/state/harness-scores.jsonl`에 누적됩니다. 이 점수는 4개월간 값이 변한 적이 없고 결정에 쓰인 사례가 없어 **폐지가 결정됐습니다**([#87](https://github.com/rae-hugo-kim/omp/issues/87), 검토 문서 [`docs/harness/audit-score-review-2026-10-06.md`](docs/harness/audit-score-review-2026-10-06.md)) — 실행 사이클이 끝나면 이 절과 `--audit`이 사라집니다.
+`--audit`은 `scripts/harness-audit.sh`(rubric v3)를 호출하며, 버전 bump 시 결과가 `.omp/state/harness-scores.jsonl`에 누적됩니다. 이 점수는 4개월간 값이 변한 적이 없고 결정에 쓰인 사례가 없어 **폐지가 결정됐습니다**([#87](https://github.com/rae-hugo-kim/pylon/issues/87), 검토 문서 [`docs/harness/audit-score-review-2026-10-06.md`](docs/harness/audit-score-review-2026-10-06.md)) — 실행 사이클이 끝나면 이 절과 `--audit`이 사라집니다.
 
 링크드 워크트리(`git worktree add`, Orca 워크트리 포함)에서는 게이트가 `/skill:harness-check` 대신 `HARNESS BEHIND MAIN`(메인이 이미 최신 — 워크트리에서 `git merge <메인 브랜치>`) 또는 `HARNESS STALE (linked worktree)`(메인 체크아웃에서 sync·커밋 후 merge)를 안내하고, `/skill:harness-check`도 워크트리에서는 중단합니다(`--force-worktree`만 진행). 워크트리별 sync는 하네스 파일을 main과 갈라 머지 충돌을 만들기 때문입니다.
 

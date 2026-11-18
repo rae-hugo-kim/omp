@@ -1,6 +1,6 @@
 **[한국어](README.md)**
 
-# omp — OMP Harness Template
+# pylon — OMP Harness Template
 
 A policy framework that makes the OMP (Oh My Pi) coding agent behave consistently and safely.
 
@@ -35,7 +35,7 @@ One improvement over the original: failed bash verifications are recorded as FAI
 | Platform | Status |
 |---|---|
 | Linux · WSL · macOS | **Officially supported** — a fully green harness test run is the baseline |
-| Windows native | **Targeted, with some tests skipped** — only tests that need an OS feature (symlinks, FIFOs) the host lacks are skipped, with the reason printed. The runtime fixes from [#93](https://github.com/rae-hugo-kim/omp/issues/93) (no `shasum` dependency in review-gate, platform-aware absolute-path detection in cross-repo and `git -C`) and [#99](https://github.com/rae-hugo-kim/omp/issues/99) (`repo-root.mjs` walks `C:\…`, `C:/…` and UNC paths from their own root and attributes them to a repo — before that no Windows path belonged to any repo and the cross-repo guard was silently off) are in, but both rest on unit tests with an injected `path.win32`; the full suite has not been run on a real Windows host. Git Bash's MSYS spelling (`/c/Users/…`) is not translated: an edit/write target, a mutator operand or `git -C /c/… commit` attributes to no repo → allowed (only `cd /c/… && git commit` stays fail-closed as an unknown cwd); needs a real-host check |
+| Windows native | **Targeted, with some tests skipped** — only tests that need an OS feature (symlinks, FIFOs) the host lacks are skipped, with the reason printed. The runtime fixes from [#93](https://github.com/rae-hugo-kim/pylon/issues/93) (no `shasum` dependency in review-gate, platform-aware absolute-path detection in cross-repo and `git -C`) and [#99](https://github.com/rae-hugo-kim/pylon/issues/99) (`repo-root.mjs` walks `C:\…`, `C:/…` and UNC paths from their own root and attributes them to a repo — before that no Windows path belonged to any repo and the cross-repo guard was silently off) are in, but both rest on unit tests with an injected `path.win32`; the full suite has not been run on a real Windows host. Git Bash's MSYS spelling (`/c/Users/…`) is not translated: an edit/write target, a mutator operand or `git -C /c/… commit` attributes to no repo → allowed (only `cd /c/… && git commit` stays fail-closed as an unknown cwd); needs a real-host check |
 
 Windows-native prerequisites:
 
@@ -119,7 +119,7 @@ In OMP, invoke skills as `/skill:<name>` or trigger them with natural language m
 | `/skill:compr` | Branch → commit → push → PR |
 | `/skill:compush` | Commit → push (no PR) |
 | `/skill:receiving-code-review` | Verify and apply received review feedback |
-| `/skill:harness-check` | Harness version drift check + remote sync (`--audit` for the quality score — retirement decided in [#87](https://github.com/rae-hugo-kim/omp/issues/87); it stays only until the removal cycle lands) |
+| `/skill:harness-check` | Harness version drift check + remote sync (`--audit` for the quality score — retirement decided in [#87](https://github.com/rae-hugo-kim/pylon/issues/87); it stays only until the removal cycle lands) |
 | `/skill:migrate` | Cut over an existing Claude Code project (.claude/CLAUDE.md) to OMP (insurance tag + harness port) |
 | `/skill:design-mockup` | Generate a single-file HTML mockup with tunable sliders/knobs |
 | `/skill:grepai-search` | Semantic code search (cold-start exploration) |
@@ -207,7 +207,7 @@ Projects created via `/skill:init` get a `session_start` gate that checks remote
 /skill:harness-check --audit      # 7-category (0-70) quality score after sync
 ```
 
-`--audit` runs `scripts/harness-audit.sh` (rubric v3); on version bumps results accumulate in `.omp/state/harness-scores.jsonl`. The score has not changed in four months and has never driven a decision, so its **retirement is decided** ([#87](https://github.com/rae-hugo-kim/omp/issues/87), review in [`docs/harness/audit-score-review-2026-10-06.md`](docs/harness/audit-score-review-2026-10-06.md)) — this section and `--audit` disappear once the removal cycle lands.
+`--audit` runs `scripts/harness-audit.sh` (rubric v3); on version bumps results accumulate in `.omp/state/harness-scores.jsonl`. The score has not changed in four months and has never driven a decision, so its **retirement is decided** ([#87](https://github.com/rae-hugo-kim/pylon/issues/87), review in [`docs/harness/audit-score-review-2026-10-06.md`](docs/harness/audit-score-review-2026-10-06.md)) — this section and `--audit` disappear once the removal cycle lands.
 
 In a linked worktree (`git worktree add`, Orca worktrees included) the gate reports `HARNESS BEHIND MAIN` (main is already current — `git merge <main branch>` in the worktree) or `HARNESS STALE (linked worktree)` (sync and commit in the main checkout, then merge) instead of pointing at `/skill:harness-check`, and `/skill:harness-check` itself stops in a worktree (only `--force-worktree` proceeds) — a per-worktree sync forks the harness files from main and the later merge conflicts.
 
