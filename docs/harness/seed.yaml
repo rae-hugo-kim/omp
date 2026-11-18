@@ -1,5 +1,6 @@
 name: selective-commit-probe-139
-status: approved
+status: done
+completed: 2026-11-19
 version: 1
 task_id: "20261118-163330-139a"
 # gh-loop worker Stage 2에 따라 이슈 #139 본문("배경", "결정(사용자, 2026-11-18)", "범위" 1~4, AC 4개, "확인 문장", "범위 밖")을 명세로 삼습니다.
