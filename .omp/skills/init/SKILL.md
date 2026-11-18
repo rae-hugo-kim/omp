@@ -185,7 +185,7 @@ git config --get core.hooksPath   # → .githooks
 # commit 키가 어느 표기로든 이미 있거나(따옴표 키 포함) 파일이 플로우 매핑({…})이면 append하지 않는다 —
 # 두 번째 commit: 매핑은 첫 매핑을 덮어쓰고(last-key-wins), {…}에 append하면 파싱이 깨진다(리뷰 r3).
 if [ -f .omp/config.yml ] && grep -qE "^[[:space:]]*[\"']?commit[\"']?[[:space:]]*:" .omp/config.yml; then
-  echo "commit 키가 이미 있음 — 그 매핑 안의 enabled를 false로 손으로 맞춘다"
+  echo "commit 키가 이미 있음(템플릿 기본) — 아래 확인이 false면 할 일 없음, true면 그 매핑 안의 enabled를 false로 손으로 맞춘다"
 elif [ -f .omp/config.yml ] && grep -vE '^[[:space:]]*(#|$)' .omp/config.yml | head -1 | grep -q '^[[:space:]]*{'; then
   echo ".omp/config.yml이 플로우 매핑({…}) — commit: {enabled: false}를 손으로 넣는다"
 else
