@@ -1,5 +1,6 @@
 name: repo-rename-pylon-140
-status: approved
+status: done
+completed: 2026-11-19
 version: 1
 task_id: "20261118-155334-140a"
 # gh-loop worker Stage 2에 따라 이슈 #140 본문("고칠 곳" 1~5, "바꾸지 않는 것", AC 5개, "확인 문장", "주의")과
