@@ -17,3 +17,10 @@ statusLine:
     - cost
   rightSegments:
     - session_name
+
+# Selective commit (`/commit`, the eval `commit` namespace; omp 18.20.1+) is off in
+# this repo: the harness commit path is bash `git commit` (compr/compush), which the
+# command-layer guards and the reviewer's diff hash are built on. Measured trade-offs:
+# docs/handoff/handoff_2026-11-17_omp-18-22-0-friction-audit.md §1 C1-C2, §9.
+commit:
+  enabled: false
