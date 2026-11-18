@@ -239,17 +239,17 @@ const seedStatus = (raw) => {
   return typeof v === 'string' ? v.toLowerCase() : v;
 };
 // The object-form AC ids of a seed (#122): what `thread-scope open` writes at the head of each
-// checkbox it generates. The block/item grammar follows thread-scope.mjs `parseAC` (the tests
-// run the real thread-scope, so the scope it generates from a seed is one this gate accepts):
+// checkbox it generates. The block/item grammar follows thread-scope.mjs `parseAC` (the tests run
+// the real thread-scope on LF seeds, so the scope it generates there is one this gate accepts):
 // the block under a top-level `acceptance_criteria:` line up to the next top-level key (comment
 // lines skipped, a leading tab counted as two spaces), items at the block's FIRST list indent
-// only (deeper `-` lines are must/verify sub-bullets), an id only where `id:` is the item's first
-// key, the id being the first whitespace-free token after it. Where the two differ the gate reads
-// MORE (fail-closed): CRLF / CR / U+2028 line ends, a BOM and a repeated block yield ids here and
-// none in parseAC. Flat string items, an id that is not the first key, a flow-style list and a
-// seed without the block yield no id — the checkbox-only judgement (fail-open boundary, pinned by
-// tests). A line reader, not a YAML parser. Ids are compared bare — surrounding quotes, backticks,
-// `*` and a trailing colon dropped on both sides — unless that leaves nothing: then as written.
+// only (deeper `-` lines are sub-bullets), an id only where `id:` is the item's first key — its
+// first whitespace-free token. On an LF seed the two agree. They differ on line ends (CRLF / CR /
+// U+2028 and a BOM: ids here, none in parseAC; a stray CR / U+2028 at the START of a line splits
+// it here only, so this can read fewer) and on a repeated block (parseAC stops at the first, this
+// adds the rest). Flat string items, an id that is not the first key, a flow-style list and no
+// block yield no id — the checkbox-only judgement (fail-open boundary, pinned by tests). A line
+// reader, not a YAML parser. Ids compare bare (quotes, backticks, `*`, a trailing colon dropped) unless nothing is left.
 const bareId = (token) => token.replace(/^["'`*]+/, '').replace(/["'`*:]+$/, '') || token;
 function seedAcIds(raw) {
   const ids = [];
