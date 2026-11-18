@@ -1,5 +1,6 @@
 name: closeout-seed-ac-coverage-122
-status: approved
+status: done
+completed: 2026-11-19
 version: 1
 task_id: "20261118-164530-122a"
 # gh-loop worker Stage 2에 따라 이슈 #122 본문("항목" 1~2, AC 5개, "범위 밖")과 코디네이터 댓글(2026-11-18, #61을 이 워커가 함께 처리 — 사용자 승인)을 명세로 삼습니다.
