@@ -1515,6 +1515,15 @@ test('#122 the seed ids are read the way thread-scope reads them: quoted ids, co
   assert.equal(closeoutVerdict(acSeed('acceptance_criteria:\n- id: AC1\n  title: first\n- id: AC2\n  title: second\n'), scopeOf('- [x] AC1 — first')), 'AC2');
   assert.equal(closeoutVerdict(acSeed('acceptance_criteria:\n\t- id: AC1\n\t  title: first\n\t- id: AC2\n\t  title: second\n'), scopeOf('- [x] AC1 — first')), 'AC2');
   assert.equal(closeoutVerdict(`\uFEFF${SEED_3AC}`.replace(/\n/g, '\r\n'), scopeOf('- [x] AC2 — second')), 'AC1, AC3');
+  // r1 review: an id made only of decoration (`":"`, `"*"`) strips to nothing — it is kept as
+  // written and stays required, never dropped from the set; thread-scope's own scope still lands
+  const decorated = acSeed('acceptance_criteria:\n  - id: ":"\n    title: odd\n  - id: "*"\n    title: odder\n  - id: AC3\n    title: third\n');
+  assert.equal(closeoutVerdict(decorated, scopeOf('- [x] AC3 — third')), '":", "*"');
+  withDir({}, (dir) => {
+    const git = repoAtCheckedScope(dir, decorated);
+    stageCloseout(dir, git, decorated);
+    assert.equal(runGateHermetic(dir, 'git commit -m x', { TEST_RISK_LEVEL: 'low' }).status, 0);
+  });
 });
 
 test('#122 the ids come from HEAD\'s seed: dropping criteria from the seed in the closeout commit itself does not shrink the requirement; unchecked boxes are still reported first', () => {

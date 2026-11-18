@@ -239,18 +239,18 @@ const seedStatus = (raw) => {
   return typeof v === 'string' ? v.toLowerCase() : v;
 };
 // The object-form AC ids of a seed (#122): what `thread-scope open` writes at the head of each
-// checkbox it generates. Read with the SAME grammar as thread-scope.mjs `parseAC`, so the scope it
-// generates from a seed is a scope this gate accepts for that seed (the tests run the real
-// thread-scope): the block under a top-level `acceptance_criteria:` line up to the next top-level
-// key (comment lines skipped, a leading tab counted as two spaces), items at the block's FIRST
-// list indent only (deeper `-` lines are must/verify sub-bullets), and an id only where `id:` is
-// the item's first key. Flat string items, an item whose id is not its first key, a flow-style
-// list and a seed without the block yield no id — such a seed keeps the checkbox-only judgement
-// (the fail-open boundary, pinned by tests). A repeated block (invalid YAML) adds its ids rather
-// than being ignored. Like every seed reader here this is a line reader, not a YAML parser.
-// Ids are compared bare: surrounding quotes / backticks / `*` and a trailing colon are dropped on
-// both sides, so `- id: "AC1"` is met by `"AC1" — …` (thread-scope's output) and by `AC1: …`.
-const bareId = (token) => token.replace(/^["'`*]+/, '').replace(/["'`*:]+$/, '');
+// checkbox it generates. The block/item grammar follows thread-scope.mjs `parseAC` (the tests
+// run the real thread-scope, so the scope it generates from a seed is one this gate accepts):
+// the block under a top-level `acceptance_criteria:` line up to the next top-level key (comment
+// lines skipped, a leading tab counted as two spaces), items at the block's FIRST list indent
+// only (deeper `-` lines are must/verify sub-bullets), an id only where `id:` is the item's first
+// key, the id being the first whitespace-free token after it. Where the two differ the gate reads
+// MORE (fail-closed): CRLF / CR / U+2028 line ends, a BOM and a repeated block yield ids here and
+// none in parseAC. Flat string items, an id that is not the first key, a flow-style list and a
+// seed without the block yield no id — the checkbox-only judgement (fail-open boundary, pinned by
+// tests). A line reader, not a YAML parser. Ids are compared bare — surrounding quotes, backticks,
+// `*` and a trailing colon dropped on both sides — unless that leaves nothing: then as written.
+const bareId = (token) => token.replace(/^["'`*]+/, '').replace(/["'`*:]+$/, '') || token;
 function seedAcIds(raw) {
   const ids = [];
   let indent = null; // null = outside the block, -1 = inside it before the first item
@@ -264,7 +264,7 @@ function seedAcIds(raw) {
     if (indent === -1) indent = dash[1].length;
     if (dash[1].length !== indent) continue;
     const id = line.match(/^\s*-\s+id:\s*(\S+)/);
-    if (id && bareId(id[1]) !== '') ids.push(bareId(id[1]));
+    if (id) ids.push(bareId(id[1]));
   }
   return [...new Set(ids)];
 }
