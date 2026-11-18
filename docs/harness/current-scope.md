@@ -19,5 +19,5 @@
 - [x] AC2 — `seedAcIds`·closeout id 포함 검사(`acceptance-gate.mjs:241-270,368-380`)가 빠진 id를 전부 이름으로 내며 exit 2; 문자열형·id가 첫 키가 아닌 항목·flow 스타일·블록 없음은 기존 판정(`acceptance-gate.test.mjs` "#122 fail-open boundary")
 - [x] AC3 — RED 9건 실패 확인 뒤 GREEN: "#122 closeout of a `thread-scope open --ac` partial thread" → BLOCK(`AC2, AC3` 명시, docs-only·WIP·hook·`-a`), "full scope … lands", "fail-open boundary" 기존 동작; `acceptance-gate.test.mjs` 87건 전부 통과(공용 픽스처 `AC_BLOCK`은 문자열형으로 전환 — 객체형 `AC1` + `- [x] done`은 AC2가 막는 형태)
 - [x] AC4 — `harness-harness_integration_contract.md` 잔존면 단락이 "object-form ids mechanically enforced since #122"와 남는 경계 5가지를 적고, `closeout_contract.md` §2 (ii)·마지막 문단·새 §3f가 같은 판정을 서술
-- [x] AC5 — `node --test .omp/extensions/harness/tests/*.test.mjs` 828 pass / 0 fail, `node scripts/docs-drift` `OK (0 errors, 0 warnings)`
-- [x] AC6 — `scopeForCommit`(`acceptance-gate.mjs:523-549`): "#61 staged `- [ ]` + worktree `- [x]` + staged code -> BLOCK (plain, hook)", 반대 방향은 plain allow·`-a` BLOCK, 판정 불가 형태(pathspec·`bash -c`)는 미체크가 많은 쪽, untracked·intent-to-add는 종전대로 디스크 판정
+- [x] AC5 — `node --test .omp/extensions/harness/tests/*.test.mjs` 829 pass / 0 fail, `node scripts/docs-drift` `OK (0 errors, 0 warnings)`
+- [x] AC6 — `scopeForCommit`(`acceptance-gate.mjs:523-549`): "#61 staged `- [ ]` + worktree `- [x]` + staged code -> BLOCK (plain, hook)", 반대 방향은 plain allow·`-a` BLOCK, 판정 불가 형태(pathspec·`bash -c`)는 미체크가 많은 쪽, untracked·intent-to-add는 종전대로 디스크 판정; 실제 훅 경로는 `hook-gates.test.mjs` "U9s"(plain BLOCK·`-a` 착지·pathspec BLOCK — 수정 전 게이트로는 실패 확인)

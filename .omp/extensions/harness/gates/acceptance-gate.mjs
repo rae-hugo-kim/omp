@@ -1,5 +1,9 @@
 #!/usr/bin/env node
-// acceptance-gate.mjs - PreToolUse hook for Bash(git commit*)
+// acceptance-gate.mjs - commit gate: .githooks/pre-commit -> gates/commit-gates.mjs spawns it in hook
+// mode with {"mode":"hook","hook":"pre-commit"} on stdin and git's hook environment (GIT_INDEX_FILE
+// names the index the commit will capture). Not an OMP `tool_call` hook — index.ts keeps only the
+// commit-bypass tripwire there; the `tool_input.command` path below serves a direct standalone run
+// and the tests.
 // Purpose: Block commits if acceptance criteria not met
 // Logic: Pass if (all checkboxes checked) OR (acceptance-done flag exists and is <24h old)
 // Exit 0 = allow, Exit 2 = block (uses stderr for messages)
@@ -82,6 +86,8 @@ if (!isHookMode && !isGitCommit(command)) {
   log('Not a git commit, allowing');
   process.exit(0);
 }
+// The commit form every reader below judges by: hook mode's synthetic form, or the parsed command.
+const commitForm = hookForm ?? parseCommitForm(command);
 
 log('Git commit detected, checking acceptance criteria');
 log(`CWD: ${cwd}`);
@@ -175,6 +181,24 @@ function acceptanceRecord(text) {
   return found ? items : null;
 }
 
+// git plumbing shared by the closeout landing and Check 3. A failure throws; each caller decides
+// what that means (fail-closed in the closeout landing, "judge the on-disk file" in Check 3).
+// `--no-color --no-ext-diff --no-textconv` on the diff itself: color.diff=always / diff.external
+// override a `-c color.ui=never` and would hide the `+` lines from the regex (fail-closed, but
+// needless); a textconv driver (`.gitattributes` diff=X + diff.X.textconv) would reshape the
+// rows the #62 append-only check reads (#62 r1 adversary).
+const git = (...args) => execFileSync('git', args, { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 16 * 1024 * 1024 });
+const diff = (...args) => git('diff', '--no-color', '--no-ext-diff', '--no-textconv', ...args);
+// Membership in the tree a PLAIN commit creates from the index — not the raw index: an
+// intent-to-add entry (`git add -N`) sits in the index but is not committed, and
+// `git diff --cached` already reports exactly that.
+const inIndexTree = (rel) => {
+  const status = diff('--cached', '--name-status', '--', rel).trim().split(/\s+/)[0] ?? '';
+  if (status === 'A') return true;
+  if (status === 'D') return false;
+  return git('ls-tree', '--name-only', 'HEAD', '--', rel).trim() !== '';
+};
+
 // Closeout landing (#48-1): closeout_contract.md §3 puts the seed `approved -> done` transition
 // (a), the current-scope.md retirement (b) and the `task_closed` audit row (c) IN THE SAME
 // COMMIT as the code that completed the task (d). At pre-commit time the seed on disk already
@@ -214,24 +238,49 @@ const seedStatus = (raw) => {
   const v = seedScalar(raw, 'status');
   return typeof v === 'string' ? v.toLowerCase() : v;
 };
+// The object-form AC ids of a seed (#122): what `thread-scope open` writes at the head of each
+// checkbox it generates. Read with the SAME grammar as thread-scope.mjs `parseAC`, so the scope it
+// generates from a seed is a scope this gate accepts for that seed (the tests run the real
+// thread-scope): the block under a top-level `acceptance_criteria:` line up to the next top-level
+// key (comment lines skipped, a leading tab counted as two spaces), items at the block's FIRST
+// list indent only (deeper `-` lines are must/verify sub-bullets), and an id only where `id:` is
+// the item's first key. Flat string items, an item whose id is not its first key, a flow-style
+// list and a seed without the block yield no id — such a seed keeps the checkbox-only judgement
+// (the fail-open boundary, pinned by tests). A repeated block (invalid YAML) adds its ids rather
+// than being ignored. Like every seed reader here this is a line reader, not a YAML parser.
+// Ids are compared bare: surrounding quotes / backticks / `*` and a trailing colon are dropped on
+// both sides, so `- id: "AC1"` is met by `"AC1" — …` (thread-scope's output) and by `AC1: …`.
+const bareId = (token) => token.replace(/^["'`*]+/, '').replace(/["'`*:]+$/, '');
+function seedAcIds(raw) {
+  const ids = [];
+  let indent = null; // null = outside the block, -1 = inside it before the first item
+  for (const rawLine of stripBom(raw).split(/\r\n|[\n\r\u2028\u2029]/)) {
+    const line = rawLine.replace(/^\t+/, (tabs) => '  '.repeat(tabs.length));
+    if (/^acceptance_criteria:\s*$/.test(line)) { indent = -1; continue; }
+    if (indent === null || /^\s*#/.test(line)) continue;
+    if (/^\S.*:/.test(line) && !/^\s*-/.test(line)) { indent = null; continue; }
+    const dash = line.match(/^(\s*)-\s/);
+    if (!dash) continue;
+    if (indent === -1) indent = dash[1].length;
+    if (dash[1].length !== indent) continue;
+    const id = line.match(/^\s*-\s+id:\s*(\S+)/);
+    if (id && bareId(id[1]) !== '') ids.push(bareId(id[1]));
+  }
+  return [...new Set(ids)];
+}
 // Returns 'closeout' (all three parts present and HEAD's AC record is fully checked), a string
 // naming the FIRST missing part when the seed transition is there but the closeout is incomplete
 // (surfaced in the backstop so a hasty `git commit -am` that silently left an untracked
 // audit.jsonl behind is pointed at the file, not at reopen/WIP), `{ falseCloseout, unchecked }`
 // when the seed transition is there but HEAD's AC record cannot prove the task done (#56: unmet
-// `- [ ]`, or no scope / no checkboxes at HEAD — blocked outright by the caller, never routed
+// `- [ ]`, or no scope / no checkboxes at HEAD; #122: a record that does not list every AC id of
+// HEAD's seed, flagged `partial` — blocked outright by the caller, never routed
 // through the risk backstop, which would wave a docs-only closeout commit through with a
 // warning), or null when this is not a closeout attempt at all.
 function closeoutState() {
   if (isTestMode) return null;
-  const form = hookForm ?? parseCommitForm(command);
+  const form = commitForm;
   if (!form.verifiable) return null;
-  // `--no-color --no-ext-diff --no-textconv` on the diff itself: color.diff=always / diff.external
-  // override a `-c color.ui=never` and would hide the `+` lines from the regex (fail-closed, but
-  // needless); a textconv driver (`.gitattributes` diff=X + diff.X.textconv) would reshape the
-  // rows the #62 append-only check reads (#62 r1 adversary).
-  const git = (...args) => execFileSync('git', args, { cwd, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 16 * 1024 * 1024 });
-  const diff = (...args) => git('diff', '--no-color', '--no-ext-diff', '--no-textconv', ...args);
   const tracked = (rel) => git('ls-files', '--', rel).trim() !== '';
   // What the commit will carry for `rel`: the index blob (plain), or the worktree file when it is
   // tracked (-a stages tracked edits/deletions, never an untracked copy). null = absent; a git
@@ -240,15 +289,8 @@ function closeoutState() {
     if (form.all) return tracked(rel) && existsSync(join(cwd, rel)) ? readFileSync(join(cwd, rel), 'utf-8') : null;
     return tracked(rel) ? git('show', `:${rel}`) : null;
   };
-  // Membership in the COMMITTED TREE, not the raw index: an intent-to-add entry (`git add -N`)
-  // sits in the index but is not committed, and `git diff --cached` already reports exactly that.
-  const inCommittedTree = (rel) => {
-    if (form.all) return tracked(rel) && existsSync(join(cwd, rel));
-    const status = diff('--cached', '--name-status', '--', rel).trim().split(/\s+/)[0] ?? '';
-    if (status === 'A') return true;
-    if (status === 'D') return false;
-    return git('ls-tree', '--name-only', 'HEAD', '--', rel).trim() !== '';
-  };
+  // Membership in the COMMITTED TREE: what -a stages from the worktree, or the index tree.
+  const inCommittedTree = (rel) => (form.all ? tracked(rel) && existsSync(join(cwd, rel)) : inIndexTree(rel));
   let transition = false;
   // A git failure while reading the committed seed of an APPROVED task is fail-closed whatever
   // the worktree says (r4/r5 review: `committed()` used to swallow it into "not staged" ->
@@ -322,6 +364,19 @@ function closeoutState() {
     const unchecked = record.filter((i) => !i.checked).map((i) => i.text);
     if (unchecked.length > 0) {
       return falseCloseout(`HEAD docs/harness/current-scope.md still has ${unchecked.length} unchecked acceptance criteria:`, unchecked);
+    }
+    // (d′, #122) …and the record must cover the WHOLE seed (contract §2 ii): every object-form AC
+    // id of the seed heads a checkbox of the retiring scope — its first token, the position
+    // thread-scope writes it in. A match anywhere in the text would let `AC2 — lands after AC1`
+    // stand in for AC1, and a prefix test would let `AC10` / `AC1-suffix` stand in for `AC1`. A
+    // `thread-scope open --ac <subset>` thread that is all `[x]` is a finished thread, not a
+    // finished task. The ids are HEAD's seed's, not the committed one's: the closeout commit must
+    // not be able to shrink the list it is judged by.
+    const seedIds = seedAcIds(headSeed);
+    const listed = new Set(record.map((i) => bareId(i.text.split(/\s/, 1)[0])));
+    const missing = seedIds.filter((id) => !listed.has(id));
+    if (missing.length > 0) {
+      return { ...falseCloseout(`HEAD docs/harness/current-scope.md does not list ${missing.length} of the ${seedIds.length} acceptance criteria of the seed being closed: ${missing.join(', ')} (closeout_contract.md §2 ii) — every criterion needs a checkbox that starts with its id`), partial: true };
     }
     // (a′) the value itself: the contract's closure state is exactly `done`.
     if (committedStatus !== 'done') {
@@ -410,10 +465,10 @@ if (closeout === 'closeout') {
   process.exit(0);
 }
 // False closeout (#56): the seed is being closed (approved -> done in this commit) but HEAD's
-// AC record cannot prove the task done — unmet `- [ ]`, no scope / no checkboxes at HEAD, or a
-// git failure while verifying. Blocked here, before the closed-seed branch — its backstop allows
-// low-risk commits, and a closeout commit is typically docs-only. The acceptance-done override
-// (Check 1) already ran.
+// AC record cannot prove the task done — unmet `- [ ]`, no scope / no checkboxes at HEAD, a
+// record that does not list every AC id of the seed (#122), or a git failure while verifying.
+// Blocked here, before the closed-seed branch — its backstop allows low-risk commits, and a
+// closeout commit is typically docs-only. The acceptance-done override (Check 1) already ran.
 if (closeout?.falseCloseout) {
   const items = closeout.unchecked;
   log(`BLOCKED: false closeout — ${closeout.falseCloseout} (${items.length} unchecked)`);
@@ -425,6 +480,9 @@ if (closeout?.falseCloseout) {
   console.error(closeout.undo
     ? `  1. Undo the staged closeout: \`git restore --staged --worktree -- ${closeout.undo.join(' ')}\` (only the paths this commit changed; they go back to HEAD, so an UNSTAGED edit in them — or an untracked next-task scope at that path — is lost as well; stash or move it first if you need it), keep seed.yaml \`status: approved\` (\`thread-scope open\` regenerates a missing scope), check off the met criteria in docs/harness/current-scope.md and COMMIT that first (the record must reach HEAD before the closeout), then redo the closeout`
     : '  1. Undo the staged closeout by hand (git could not list what this commit changed — `git status` and `git restore --staged --worktree -- <path>` for the seed/scope/audit paths it touched), keep seed.yaml `status: approved`, check off the met criteria in docs/harness/current-scope.md and COMMIT that first, then redo the closeout');
+  if (closeout.partial) {
+    console.error('     The scope at HEAD does not cover the seed: after the undo, reopen ALL of it — `node .omp/extensions/harness/thread-scope.mjs open` (no --ac; it regenerates current-scope.md with every criterion unchecked) — re-verify and check off every criterion, COMMIT that, then redo the closeout. If the scope already lists every criterion and only lacks the ids, start each checkbox with its id instead (`- [x] AC1 — …`) and commit that. To end just this thread, record `thread-scope.mjs close --verdict …` and leave the seed `approved`.');
+  }
   console.error('  2. If the task is not complete, stop after that undo — keep `status: approved` and the scope; a closeout is not a checkpoint');
   console.error('  3. Create docs/harness/acceptance-done to override (valid 24h from its mtime)');
   process.exit(2);
@@ -462,8 +520,35 @@ if (existsSync(seedPath)) {
   }
 }
 
-// Check 3: Scope file exists (checkbox-based completion tracking)
-if (!existsSync(scopeFilePath)) {
+// Check 3: the scope's checkboxes (completion tracking), judged on the copy THIS COMMIT carries
+// (#61). Reading the worktree file let a scope staged with `- [ ]` and checked off only on disk
+// pass a staged code commit and leave the unchecked record at HEAD:
+//   plain commit, hook mode -> the index blob (in hook mode git's temporary index already holds
+//                              what `-a` / a pathspec captures);
+//   -a (standalone path)    -> the worktree file, which is what -a stages;
+//   unverifiable form       -> whichever of the two has more unchecked boxes.
+// The on-disk file is still the one judged when the commit carries no scope (untracked,
+// intent-to-add, staged deletion), outside a repository, when git cannot answer, and in test mode
+// (custom paths) — the pre-#61 judgement for those cases.
+// Returns { text, staged }; text null = no scope anywhere. A failed on-disk read throws.
+function scopeForCommit() {
+  const onDisk = () => (existsSync(scopeFilePath) ? readFileSync(scopeFilePath, 'utf-8') : null);
+  if (isTestMode || (commitForm.verifiable && commitForm.all)) return { text: onDisk(), staged: false };
+  let staged = null;
+  try {
+    if (inIndexTree('docs/harness/current-scope.md')) staged = git('show', ':docs/harness/current-scope.md');
+  } catch { /* not a repository, or git cannot answer: the on-disk file is all there is to judge */ }
+  if (staged === null) return { text: onDisk(), staged: false };
+  if (commitForm.verifiable) return { text: staged, staged: true };
+  const disk = onDisk();
+  const open = (text) => (acceptanceRecord(text) ?? []).filter((i) => !i.checked).length;
+  return disk !== null && open(disk) > open(staged) ? { text: disk, staged: false } : { text: staged, staged: true };
+}
+let scope;
+try { scope = scopeForCommit(); }
+catch { log('current-scope.md read failed (race), allowing'); process.exit(0); }
+
+if (scope.text === null) {
   if (existsSync(seedPath)) {
     log('seed.yaml has AC but no current-scope.md for checkbox tracking, allowing with warning');
     console.error('HARNESS WARNING: AC defined in seed.yaml but no current-scope.md for completion tracking.');
@@ -473,11 +558,7 @@ if (!existsSync(scopeFilePath)) {
   console.error('HARNESS WARNING: No scope file. Run /kickoff to define acceptance criteria.');
   process.exit(0);
 }
-
-// Read scope file
-let scopeContent;
-try { scopeContent = readFileSync(scopeFilePath, 'utf-8'); }
-catch { log('current-scope.md read failed (race), allowing'); process.exit(0); }
+const scopeContent = scope.text;
 
 // Extract the acceptance record (same parser as the closeout landing)
 const checkboxes = acceptanceRecord(scopeContent);
@@ -532,6 +613,10 @@ if (uncheckedItems.length > 3) {
 console.error('');
 console.error('Options:');
 console.error('  1. Check off completed criteria in docs/harness/current-scope.md');
+if (scope.staged) {
+  console.error('     (judged: the STAGED copy — the commit carries the index blob, not the worktree file;');
+  console.error('      `git add docs/harness/current-scope.md` if the check-offs are only on disk)');
+}
 console.error('  2. Create docs/harness/acceptance-done to override (valid 24h from its mtime)');
 if (isHookMode) {
   console.error('  3. WIP checkpoint: create .omp/harness-state/commit-wip or run OMP_COMMIT_WIP=1 git commit …');
