@@ -23,6 +23,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeBackpressure } from '../gates/state-origin.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 const GATE = join(ROOT, '.omp', 'extensions', 'harness', 'gates', 'archive-guard.mjs');
@@ -190,11 +191,7 @@ test('non-git cwd is silent (exit 0, fail-open)', () => {
 
 // Backpressure PASS + no scope file + low-risk docs files: the other three gates all
 // allow (same fixture recipe as commit-gates.test.mjs), isolating archive-guard's verdict.
-function setStatus(dir, status) {
-  const sd = join(dir, '.omp', 'harness-state');
-  mkdirSync(sd, { recursive: true });
-  writeFileSync(join(sd, 'backpressure-status'), status);
-}
+const setStatus = writeBackpressure;
 
 test('dispatcher: staged archive blocks through commit-gates.mjs (exit 2)', () => {
   withRepo({ 'docs/notes.md': '# notes\nprose\n', 'docs/sum/session.md': '# session\n' }, (dir) => {

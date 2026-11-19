@@ -23,10 +23,11 @@
 // Repo identity is the physical common git dir (repo-root.mjs): a linked worktree of the session
 // repo (an Orca card, `git worktree add`) is the SAME repo and never trips either rail.
 
-import { existsSync, readFileSync, realpathSync } from 'fs';
+import { existsSync, realpathSync } from 'fs';
 import { basename, dirname, join } from 'path';
 import { absolutize, isGitCommit, isGitPush, shellWriteTargets } from './git-commit-detect.mjs';
 import { repoIdentity, repoToplevel } from './repo-root.mjs';
+import { readLedger } from './state-origin.mjs';
 
 export const DISCIPLINE_FILES = ['AGENTS.md', 'CLAUDE.md', '.cursorrules'];
 const HARNESS_DIR = join('.omp', 'extensions', 'harness');
@@ -41,12 +42,6 @@ export function disciplineFile(top) {
     if (existsSync(join(top, name))) return name;
   }
   return null;
-}
-
-/** Lines of the session's read ledger (read-tracker/write-tracker format), as a Set. */
-function readLedger(sessionCwd) {
-  const path = join(sessionCwd, '.omp', 'harness-state', 'read-log.txt');
-  try { return new Set(readFileSync(path, 'utf-8').split('\n').map((l) => l.trim()).filter(Boolean)); } catch { return new Set(); }
 }
 
 /** True when the ledger holds a read of the discipline file `name` at the toplevel of ANY

@@ -155,19 +155,21 @@ test('index.ts records ast_edit only on the real apply, not the preview (F2, v17
 test('parity: write-tracker normalizes paths identically to read-tracker', () => {
   // context-gate matches EITHER tracker's entry, so write-tracker MUST normalize exactly like
   // read-tracker. Use a Windows-style raw path (drive letter + backslashes) that the shared
-  // transform rewrites to `/proj/mod.ts`, and compare write-tracker's full log output to
-  // read-tracker's for the same input. They must be byte-identical AND must contain the
+  // transform rewrites to `/proj/mod.ts`, and compare write-tracker's ledger entries to
+  // read-tracker's for the same input (everything after line 1, the origin header, which names
+  // each temp dir). They must be byte-identical AND must contain the
   // normalized form — so the test fails if write-tracker's normalization drifts or is dropped
   // (it is non-tautological precisely because the raw and normalized spellings differ).
   // Trackers don't stat the path, so this synthetic path need not exist on disk.
   const winPath = 'C:\\proj\\mod.ts';
+  const entries = (cwd) => readLog(cwd).split('\n').slice(1).join('\n');
   const viaWrite = withTmp((cwd) => {
     run(WRITE_TRACKER, { tool_input: { file_path: winPath }, session_state: { cwd } }, cwd);
-    return readLog(cwd);
+    return entries(cwd);
   });
   const viaRead = withTmp((cwd) => {
     run(READ_TRACKER, { tool_input: { file_path: winPath }, session_state: { cwd } }, cwd);
-    return readLog(cwd);
+    return entries(cwd);
   });
   assert.equal(viaWrite, viaRead, 'write-tracker must produce the same log entries as read-tracker');
   assert.ok(viaWrite.split('\n').includes('/proj/mod.ts'),

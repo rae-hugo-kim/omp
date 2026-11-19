@@ -113,17 +113,33 @@ test('(e) --amend replaces HEAD (parent unchanged) -> still counts as a landed c
   });
 });
 
-test('(f) unresolvable target (`cd B && git commit`) -> no snapshot: exit code decides the note, breadcrumb never guesses a hash', async () => {
+test('(f) no single target (commits into two repos in one call) -> no snapshot: exit code decides the note, breadcrumb never guesses a hash', async () => {
   await withRoot(async (root) => {
     const a = repo(root, 'A');
     const b = repo(root, 'B');
-    const ok = await drive({ cwd: a, command: `cd ${b} && git commit --allow-empty -m x`, act: () => git(b, 'commit', '-q', '--allow-empty', '-m', 'x') });
+    const both = `git commit --allow-empty -m x && git -C ${b} commit --allow-empty -m x`;
+    const ok = await drive({ cwd: a, command: both, act: () => { git(a, 'commit', '-q', '--allow-empty', '-m', 'x'); git(b, 'commit', '-q', '--allow-empty', '-m', 'x'); } });
     assert.equal(ok.note, true, 'exit 0 fallback keeps the note');
     assert.equal(ok.last.result, 'UNVERIFIED');
-    assert.equal(ok.last.hash, undefined, 'the session repo HEAD must not be attributed (#22)');
-    const failed = await drive({ cwd: a, command: `cd ${b} && git commit -m x`, exitCode: 1 });
+    assert.equal(ok.last.hash, undefined, 'neither repo\'s HEAD is attributed to a call that names two (#22)');
+    const failed = await drive({ cwd: a, command: both, exitCode: 1 });
     assert.equal(failed.note, false);
     assert.equal(failed.last.result, 'FAIL');
+  });
+});
+
+test('(f2) `cd B && git commit` is judged in B (#111 F8): a landed commit carries B\'s hash, a masked block is BLOCKED', async () => {
+  await withRoot(async (root) => {
+    const a = repo(root, 'A');
+    const b = repo(root, 'B');
+    const sessionHead = git(a, 'rev-parse', '--short', 'HEAD');
+    const ok = await drive({ cwd: a, command: `cd ${b} && git commit --allow-empty -m x`, act: () => git(b, 'commit', '-q', '--allow-empty', '-m', 'x') });
+    assert.equal(ok.note, true);
+    assert.equal(ok.last.hash, git(b, 'rev-parse', '--short', 'HEAD'));
+    assert.notEqual(ok.last.hash, sessionHead);
+    const masked = await drive({ cwd: a, command: `cd ${b}; git commit -m x 2>&1 | tail -1` });
+    assert.equal(masked.note, false, 'exit 0 must not read as a landed commit');
+    assert.deepEqual({ result: masked.last.result, hash: masked.last.hash }, { result: 'BLOCKED', hash: undefined });
   });
 });
 

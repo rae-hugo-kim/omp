@@ -378,9 +378,10 @@ test('isWipCommit: scoped to the commit segment — no whole-line false-positive
 
 // --- commitTargetDir (index.ts HEAD snapshot; #22 / #48-6) -------------------------
 // The repo whose HEAD a commit moves: plain -> base, -C -> resolved (chained like git),
-// bash -c recursed; null whenever the target cannot be trusted (cwd shift, substitution,
-// --git-dir/--work-tree/GIT_DIR=, two repos in one line) — the caller then falls back to
-// the exit code instead of snapshotting the wrong HEAD.
+// bash -c recursed, ONE literal `cd <existing dir>` followed — the same single-cwd model as
+// shellWriteTargets (#111 F8); null whenever the target cannot be trusted (any other cwd shift,
+// substitution, --git-dir/--work-tree/GIT_DIR=, two repos in one line) — the caller then falls
+// back to the exit code instead of snapshotting the wrong HEAD.
 
 test('commitTargetDir: plain commit -> base dir; -C resolves relative to base and chains', () => {
   assert.equal(commitTargetDir('git commit -m x', '/base'), '/base');
@@ -396,14 +397,14 @@ test('commitTargetDir: plain commit -> base dir; -C resolves relative to base an
 });
 
 test('commitTargetDir: null when the target repo cannot be trusted or there is no commit', () => {
-  for (const cmd of ['cd other && git commit -m x', 'pushd x && git commit', 'git -C $(pwd) commit',
+  for (const cmd of ['pushd x && git commit', 'git -C $(pwd) commit',
                      'git --git-dir=/x commit', 'git --work-tree /x commit', 'GIT_DIR=/x git commit',
                      'git -c core.worktree=/x commit', 'git -C /a commit && git -C /b commit',
                      // review round 1 (#48 cycle ①): values the shell would still expand, and cwd
                      // shifters hidden behind wrappers / builtins / exported retargeting.
                      'git -C ~/repo commit', 'git -C $REPO commit', 'git -C "$REPO" commit', 'git -C "$(pwd)" commit',
                      'git -C /tmp/r* commit', 'for d in a b; do git -C $d commit; done',
-                     'command cd x && git commit', 'builtin cd x; git commit', 'eval "cd x" && git commit',
+                     'eval "cd x" && git commit',
                      'source env.sh && git commit', '. env.sh && git commit', 'env -C /x git commit', 'env --chdir=/x git commit',
                      'export GIT_DIR=/x && git commit',
                      // review round 2: builtin runners around source/., attached/abbreviated env chdir,
@@ -416,6 +417,25 @@ test('commitTargetDir: null when the target repo cannot be trusted or there is n
   }
   assert.equal(commitTargetDir('git commit', ''), null);
   assert.equal(commitTargetDir(undefined, '/base'), null);
+});
+
+test('commitTargetDir: ONE literal cd into an existing directory is followed; any other cd stays unknown (#111 F8)', () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'ctd-cd-')));
+  try {
+    const wt = join(root, 'wt'), other = join(root, 'other');
+    mkdirSync(wt);
+    mkdirSync(other);
+    for (const cmd of ['cd wt && git commit -m x', 'cd wt; git commit -m x', 'cd wt && git add -A && git commit -m x | tail -3',
+                       `cd ${wt} && git commit -m x`, "bash -c 'cd wt && git commit -m x'", 'command cd wt && git commit']) {
+      assert.equal(commitTargetDir(cmd, root), wt, cmd);
+    }
+    assert.equal(commitTargetDir('cd wt && git -C ../other commit -m x', root), other, '-C resolves from the cd target');
+    for (const cmd of ['cd missing && git commit -m x', 'cd wt && cd ../other && git commit', '(cd wt && git commit -m x)',
+                       'cd "$D" && git commit', 'cd - && git commit', 'pushd wt && git commit', 'eval "cd wt" && git commit',
+                       'cd wt && git commit -m a && git -C ../other commit -m b']) {
+      assert.equal(commitTargetDir(cmd, root), null, cmd);
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test('commitTargetDir: -C chaining follows symlinks like git chdir (physical, not lexical)', { skip: skipUnless('symlink') }, () => {

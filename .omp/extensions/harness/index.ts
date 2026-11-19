@@ -653,7 +653,7 @@ export default function harness(pi: HarnessExtensionApi): void {
 				const tracker = bashRunFailed(event) ? "backpressure-failure-tracker.mjs" : "backpressure-tracker.mjs";
 				await trackBackpressure(tracker, { command }, target);
 				// A commit "succeeded" only if the repo it targeted gained a commit; without a
-				// snapshot (unresolvable target, e.g. `cd x && git commit`) the exit code decides.
+				// snapshot (no single trusted target, e.g. commits into two repos) the exit code decides.
 				const commit = isGitCommit(command) ? await commitOutcome(event) : null;
 				const landed = commit ? (commit.landed ?? !bashRunFailed(event)) : false;
 				await runGate("breadcrumb-tracker.mjs", {

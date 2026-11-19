@@ -809,16 +809,16 @@ export function isWipCommit(command) {
 //   `git -C <dir> commit`    -> <dir>, chained -C resolved relative to the previous (like git)
 //   plain `git commit`       -> baseDir (the bash tool's cwd input, else the session cwd)
 //   `bash -c "git … commit"` -> recursed with the same base
-// Returns null when the target cannot be trusted — a `cd`/`pushd`/`eval` token anywhere, a -C
-// value the shell would still expand (`~`, `$VAR`, `$(…)`, glob), `env -C`/`--chdir`,
-// --git-dir/--work-tree/GIT_DIR= retargeting, or two commit segments naming different repos.
-// Callers treat null as "unknown" and fall back to the exit code rather than guessing a HEAD.
-// A token that moves the cwd or re-executes text makes the commit's target unknowable
-// statically. `cd`/`pushd`/`popd`/`eval`/`source` are matched as ANY token so `command cd x`,
-// `builtin source e.sh`, `eval "cd x"` are caught; `.` (the source builtin) only at the program
-// position or right after `command`/`builtin` — it is also the everyday pathspec in `git add .`.
-// A quoted message stays ONE token, so `-m "cd x"` does not over-match; an unquoted over-match
-// only costs the exit-code fallback, never a wrong repo.
+//   `cd <dir> && git commit` -> <dir>, for ONE literal cd into an existing directory (#111 F8)
+// The answer is read off shellWriteTargets (below), so the snapshot and the cross-repo guard
+// follow the same single-cwd model and cannot disagree about where a commit lands. Returns null
+// when that model has no single trusted target: anything it reports as `unknown` (a second
+// `cd`, a missing or `$VAR` directory, a subshell, `pushd`/`eval`/`source`, `env -C`,
+// --git-dir/--work-tree/GIT_DIR=, a -C value the shell would still expand), commits into two
+// different repos, or no commit it attributes at all (`git commit --help`). Callers treat null
+// as "unknown" and fall back to the exit code rather than guessing a HEAD.
+// `cd`/`pushd`/`popd`/`eval`/`source` move the cwd or re-execute text; verificationCwd and
+// scanWriteTargets stop following at any of them except the one literal `cd` each models.
 const CWD_SHIFTERS = new Set(['cd', 'pushd', 'popd', 'eval', 'source']);
 const BUILTIN_RUNNERS = new Set(['command', 'builtin']);
 // A wrapper's own chdir option — GNU env `-C dir` / `-Cdir` / `--chdir=dir` and its unambiguous
@@ -876,50 +876,16 @@ function gitInvocationTarget(rest, baseDir) {
   return unknown ? { unknown, verb: rest[i], index: i } : { target, verb: rest[i], index: i };
 }
 
-function scanCommitTarget(command, baseDir, depth) {
-  if (depth > MAX_DEPTH) return { unknown: true };
-  let dir = null;
-  const merge = (d) => { if (dir !== null && dir !== d) return false; dir = d; return true; };
-  for (const seg of lexSegments(command)) {
-    const toks = tokenize(seg);
-    if (toks.length === 0) continue;
-    if (toks.some((t, i) => CWD_SHIFTERS.has(basename(t)) || GIT_REPO_REDIRECT_ENV.test(t)
-      || (t === '.' && i > 0 && BUILTIN_RUNNERS.has(toks[i - 1])))) return { unknown: true };
-    const cands = programCandidates(toks);
-    if (cands.length === 0) continue;
-    if (toks[cands[0]] === '.') return { unknown: true };
-    for (const pi of cands) {
-      // Anything before THIS program position is wrapper territory (`sudo -u git env -C /o git …`).
-      if (toks.slice(0, pi).some((t) => WRAPPER_CHDIR.test(t))) return { unknown: true };
-      const rest = toks.slice(pi);
-      const b = basename(rest[0]);
-      if (b === 'bash' || b === 'sh') {
-        const inner = bashDashCPayload(rest);
-        if (inner === null) continue;
-        const r = scanCommitTarget(inner, baseDir, depth + 1);
-        if (r === null) continue;
-        if (r.unknown || !merge(r.dir)) return { unknown: true };
-        continue;
-      }
-      if (b !== 'git') continue;
-      const r = gitInvocationTarget(rest, baseDir);
-      if (r.unknown) return { unknown: true };
-      if (r.verb !== 'commit') continue;
-      if (!merge(r.target)) return { unknown: true };
-    }
-  }
-  return dir === null ? null : { dir };
-}
-
 export function commitTargetDir(command, baseDir) {
-  if (!command || typeof command !== 'string' || !baseDir) return null;
-  const r = scanCommitTarget(command, baseDir, 0);
-  return r && !r.unknown ? r.dir : null;
+  const { git, unknown } = shellWriteTargets(command, baseDir);
+  if (unknown) return null;
+  const dirs = new Set(git.filter((g) => g.verb === 'commit').map((g) => g.dir));
+  return dirs.size === 1 ? dirs.values().next().value : null;
 }
 
 // --- shell write targets (cross-repo guard, #15 ①②) -------------------------------
 // What a command line WRITES, statically: the repos its `git commit` / `git push` invocations
-// target and the files its mutators name. Unlike commitTargetDir (which refuses any `cd`), the
+// target and the files its mutators name. commitTargetDir (above) reads its answer here. The
 // running cwd is TRACKED through ONE literal `cd <dir>` segment — `cd ../other && git commit` is
 // the everyday cross-repo spelling the guard must attribute. The model is a single cwd, so every
 // form it cannot follow makes the cwd UNKNOWN from that segment on (fail-closed): a second `cd`
