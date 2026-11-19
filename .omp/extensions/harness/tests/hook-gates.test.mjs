@@ -338,9 +338,10 @@ test('U9: pathspec commit exposes exactly the partial content to the gates', () 
   assert.match(r.stderr, /HARNESS BLOCK/);
 });
 
-// U9s (#61): acceptance Check 3 judges the scope in the index git hands the hook — the plain
-// index for `git commit`, the TEMPORARY index for `-a` / a pathspec — not the worktree file.
-test('U9s: the scope is judged from the index the commit captures (plain, -a, pathspec)', () => {
+// U9s (#61): acceptance Check 3 judges the scope by the index git hands the hook — the plain
+// index for `git commit`, the TEMPORARY index for `-a` / a pathspec — AND by the worktree file,
+// whichever has more unchecked boxes.
+test('U9s: the scope is judged from the index the commit captures and from disk (plain, -a, pathspec, reverse)', () => {
   const MET = '# Current Scope: fixture\n\n## Acceptance Criteria\n\n- [x] AC1 fixture criterion\n';
   const UNMET = MET.replace('- [x]', '- [ ]');
   const scope = (dir) => join(dir, 'docs', 'harness', 'current-scope.md');
@@ -367,6 +368,15 @@ test('U9s: the scope is judged from the index the commit captures (plain, -a, pa
   const all = commit(dir, '-a', '-m', 'docs: note');
   assert.equal(all.status, 0, `-a commits the checked copy: ${all.stderr}`);
   assert.equal(headScope(dir), MET);
+  // Reverse: HEAD and the index hold the checked scope, the worktree copy is unmet again -> blocked.
+  writeFileSync(scope(dir), UNMET);
+  writeFileSync(join(dir, 'note.md'), 'c\n');
+  sh(dir, 'git', ['add', 'note.md']);
+  const afterAll = head(dir);
+  const reverse = commit(dir, '-m', 'docs: note again');
+  assert.notEqual(reverse.status, 0, `an unmet scope on disk must block even when the staged copy is met: ${reverse.stderr}`);
+  assert.match(reverse.stderr, /acceptance criteria not met/);
+  assert.equal(head(dir), afterAll, 'HEAD must be unchanged');
 
   // Pathspec commit: the temporary index holds HEAD's unmet scope, whatever is staged or on disk.
   const partial = makeRepo();

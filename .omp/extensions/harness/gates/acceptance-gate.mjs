@@ -520,17 +520,17 @@ if (existsSync(seedPath)) {
   }
 }
 
-// Check 3: the scope's checkboxes (completion tracking), judged on the copy THIS COMMIT carries
-// (#61). Reading the worktree file let a scope staged with `- [ ]` and checked off only on disk
-// pass a staged code commit and leave the unchecked record at HEAD:
-//   plain commit, hook mode -> the index blob (in hook mode git's temporary index already holds
-//                              what `-a` / a pathspec captures);
-//   -a (standalone path)    -> the worktree file, which is what -a stages;
-//   unverifiable form       -> whichever of the two has more unchecked boxes.
-// The on-disk file is still the one judged when the commit carries no scope (untracked,
-// intent-to-add, staged deletion), outside a repository, when git cannot answer, and in test mode
-// (custom paths) — the pre-#61 judgement for those cases.
-// Returns { text, staged }; text null = no scope anywhere. A failed on-disk read throws.
+// Check 3: the scope's checkboxes (completion tracking), judged on BOTH copies — the one THIS
+// COMMIT carries and the one on disk — whichever is STRICTER (#61): unchecked boxes (more beats
+// fewer) > no usable record (absent, unreadable, no AC heading, no checkbox — the backstop) > every
+// box checked. Reading the worktree file alone let a scope staged with `- [ ]` and checked off only
+// on disk pass a staged code commit; reading the index alone let a scope `thread-scope open` rewrote
+// on disk go ungated until staged (user decision, 2026-11-19). So neither reading alone is stricter.
+//   plain commit, hook mode, unverifiable form -> the index blob vs the worktree file (in hook
+//                              mode git's temporary index already holds what -a / a pathspec captures);
+//   -a (standalone path)    -> the worktree file, which IS what -a stages.
+// With no scope in the commit (untracked, intent-to-add, staged deletion), outside a repository, when
+// git cannot answer, and in test mode the on-disk file is judged alone; a tie goes to the staged copy.
 function scopeForCommit() {
   const onDisk = () => (existsSync(scopeFilePath) ? readFileSync(scopeFilePath, 'utf-8') : null);
   if (isTestMode || (commitForm.verifiable && commitForm.all)) return { text: onDisk(), staged: false };
@@ -539,10 +539,10 @@ function scopeForCommit() {
     if (inIndexTree('docs/harness/current-scope.md')) staged = git('show', ':docs/harness/current-scope.md');
   } catch { /* not a repository, or git cannot answer: the on-disk file is all there is to judge */ }
   if (staged === null) return { text: onDisk(), staged: false };
-  if (commitForm.verifiable) return { text: staged, staged: true };
-  const disk = onDisk();
-  const open = (text) => (acceptanceRecord(text) ?? []).filter((i) => !i.checked).length;
-  return disk !== null && open(disk) > open(staged) ? { text: disk, staged: false } : { text: staged, staged: true };
+  let disk = null;
+  try { disk = onDisk(); } catch { /* an unreadable on-disk copy counts as "no usable record": it never unblocks the staged one */ }
+  const strictness = (text) => { const r = text === null ? null : acceptanceRecord(text); const open = (r ?? []).filter((i) => !i.checked).length; return open > 0 ? 1 + open : (r && r.length > 0 ? 0 : 1); };
+  return strictness(disk) > strictness(staged) ? { text: disk, staged: false, overStaged: true } : { text: staged, staged: true };
 }
 let scope;
 try { scope = scopeForCommit(); }
@@ -613,9 +613,9 @@ if (uncheckedItems.length > 3) {
 console.error('');
 console.error('Options:');
 console.error('  1. Check off completed criteria in docs/harness/current-scope.md');
-if (scope.staged) {
-  console.error('     (judged: the STAGED copy — the commit carries the index blob, not the worktree file;');
-  console.error('      `git add docs/harness/current-scope.md` if the check-offs are only on disk)');
+if (scope.staged || scope.overStaged) {
+  console.error(`     (judged: the ${scope.staged ? 'STAGED' : 'on-disk'} copy — of the staged blob and the worktree file, the one with more unchecked boxes gates;`);
+  console.error(scope.staged ? '      `git add docs/harness/current-scope.md` if the check-offs are only on disk)' : '      e.g. a scope `thread-scope open` just rewrote — it gates before it is staged)');
 }
 console.error('  2. Create docs/harness/acceptance-done to override (valid 24h from its mtime)');
 if (isHookMode) {

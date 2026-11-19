@@ -1544,9 +1544,12 @@ test('#122 the ids come from HEAD\'s seed: dropping criteria from the seed in th
   });
 });
 
-// --- #61: Check 3 judges the scope THE COMMIT CARRIES. It used to read the worktree file, so a
-// scope staged with `- [ ]` and checked off only on disk let a staged code commit through and left
-// the unchecked record at HEAD. ---
+// --- #61: Check 3 judges the scope by BOTH copies — the one the commit carries and the one on
+// disk — and the copy with more unchecked boxes wins, in every commit form. It used to read the
+// worktree file only, so a scope staged with `- [ ]` and checked off only on disk let a staged
+// code commit through and left the unchecked record at HEAD; reading the index only (the first
+// fix) opened the reverse: a scope rewritten on disk by `thread-scope open` did not gate until
+// it was staged (user decision B, 2026-11-19). ---
 
 const CHECKED_SCOPE = '# Scope\n\n## Acceptance Criteria\n\n- [x] not done yet\n';
 
@@ -1570,16 +1573,92 @@ test('#61 staged `- [ ]` + worktree `- [x]` + staged code -> BLOCK (plain, hook)
   });
 });
 
-test('#61 staged `- [x]` + worktree `- [ ]`: a plain commit lands what it carries, -a blocks on the worktree copy', () => {
+test('#61 reverse: a committed all-[x] scope + an unchecked scope on disk only (`thread-scope open`) + staged code -> BLOCK (plain, hook, -a); staging it still blocks; checking it off lands', () => {
+  withDir({}, (dir) => {
+    const git = repoAtCheckedScope(dir, SEED_3AC, { openArgs: ['--ac', 'AC1'] }); // HEAD: tracked scope, all [x]
+    openThread(dir, '--ac', 'AC2,AC3');                                            // rewrites the scope on disk only
+    writeFileSync(join(dir, 'a.js'), 'y\n');
+    git('add', 'a.js');
+    assert.match(git('show', ':docs/harness/current-scope.md').toString(), /- \[x\] AC1/, 'the index still holds the old checked scope');
+    const plain = runGateHermetic(dir, 'git commit -m "feat: x"', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(plain.status, 2, plain.stderr);
+    assert.match(plain.stderr, /2 acceptance criteria not met/);
+    assert.match(plain.stderr, /- \[ \] AC2 — second thing/);
+    assert.match(plain.stderr, /judged: the on-disk copy/);
+    const hook = hookGate(dir, { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(hook.status, 2, hook.stderr);
+    assert.match(hook.stderr, /2 acceptance criteria not met/);
+    assert.equal(runGateHermetic(dir, 'git commit -am "feat: x"', { TEST_RISK_LEVEL: 'medium' }).status, 2);
+    git('add', 'docs/harness/current-scope.md');                                   // staged now, still unchecked
+    assert.equal(runGateHermetic(dir, 'git commit -m "feat: x"', { TEST_RISK_LEVEL: 'medium' }).status, 2);
+    checkAll(dir);
+    git('add', 'docs/harness/current-scope.md');
+    assert.equal(runGateHermetic(dir, 'git commit -m "feat: x"', { TEST_RISK_LEVEL: 'medium' }).status, 0);
+    assert.equal(hookGate(dir, { TEST_RISK_LEVEL: 'medium' }).status, 0);
+  });
+  // the bare mismatch, without thread-scope: staged `[x]`, unchecked again on disk only
   withDir({}, (dir) => {
     const git = gitRepoWithTask(dir, { scope: UNCHECKED_SCOPE });
     writeFileSync(scopePath(dir), CHECKED_SCOPE);
     writeFileSync(join(dir, 'a.js'), 'y\n');
     git('add', '-A');
-    writeFileSync(scopePath(dir), UNCHECKED_SCOPE);          // unchecked again on disk only
-    assert.equal(runGateHermetic(dir, 'git commit -m "feat: x"', { TEST_RISK_LEVEL: 'medium' }).status, 0);
-    assert.equal(hookGate(dir, { TEST_RISK_LEVEL: 'medium' }).status, 0);
+    writeFileSync(scopePath(dir), UNCHECKED_SCOPE);
+    assert.equal(runGateHermetic(dir, 'git commit -m "feat: x"', { TEST_RISK_LEVEL: 'medium' }).status, 2);
+    assert.equal(hookGate(dir, { TEST_RISK_LEVEL: 'medium' }).status, 2);
     assert.equal(runGateHermetic(dir, 'git commit -am "feat: x"', { TEST_RISK_LEVEL: 'medium' }).status, 2);
+  });
+});
+
+// r4 review: "more unchecked boxes" alone let a disk copy WITHOUT a usable record (no AC heading,
+// no checkbox, deleted, unreadable) lose to a fully checked staged copy, so a code commit passed
+// where reading the worktree file alone used to send it to the risk backstop. The stricter copy
+// is judged: unchecked boxes > no usable record > every box checked.
+test('#61 a disk copy without a usable record outranks a fully checked staged copy -> backstop (code BLOCK, docs-only allow); a tie and an unreadable disk copy leave the staged copy in charge', () => {
+  // HEAD and the index: a fully checked scope; then the on-disk copy degenerates and code is staged
+  const withDisk = (mutate, fn) => withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir);
+    mutate(dir);
+    writeFileSync(join(dir, 'a.js'), 'y\n');
+    git('add', 'a.js');
+    return fn(dir);
+  });
+  const degenerate = {
+    'an unrecognized heading hiding real unchecked boxes': (dir) => writeFileSync(scopePath(dir), '# S\n\n## Acceptance criteria (draft)\n\n- [ ] one\n- [ ] two\n'),
+    'an AC heading with no checkbox': (dir) => writeFileSync(scopePath(dir), '# S\n\n## Acceptance Criteria\n\nnothing yet\n'),
+    'the file deleted on disk only': (dir) => unlinkSync(scopePath(dir)),
+    'a directory where the file was (unreadable)': (dir) => { unlinkSync(scopePath(dir)); mkdirSync(scopePath(dir)); },
+  };
+  for (const [name, mutate] of Object.entries(degenerate)) {
+    withDisk(mutate, (dir) => {
+      for (const r of [runGateHermetic(dir, 'git commit -m "feat: x"', { TEST_RISK_LEVEL: 'medium' }), hookGate(dir, { TEST_RISK_LEVEL: 'medium' })]) {
+        assert.equal(r.status, 2, `${name}: ${r.stderr}`);
+        assert.match(r.stderr, /HARNESS BACKSTOP/, name);
+      }
+      assert.equal(runGateHermetic(dir, 'git commit -m "docs: x"', { TEST_RISK_LEVEL: 'low' }).status, 0, `${name}: docs-only`);
+    });
+  }
+  // a tie on unchecked boxes: the staged copy is the one named
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { scope: UNCHECKED_SCOPE });
+    writeFileSync(scopePath(dir), '# Scope\n\n## Acceptance Criteria\n\n- [ ] reworded on disk\n');
+    writeFileSync(join(dir, 'a.js'), 'y\n');
+    git('add', 'a.js');
+    const r = runGateHermetic(dir, 'git commit -m "feat: x"', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /- \[ \] not done yet/);
+    assert.match(r.stderr, /judged: the STAGED copy/);
+  });
+  // an unreadable disk copy does not unblock a staged copy that still has unchecked boxes
+  withDir({}, (dir) => {
+    const git = gitRepoWithTask(dir, { scope: UNCHECKED_SCOPE });
+    unlinkSync(scopePath(dir));
+    mkdirSync(scopePath(dir));
+    writeFileSync(join(dir, 'a.js'), 'y\n');
+    git('add', 'a.js');
+    const r = runGateHermetic(dir, 'git commit -m "feat: x"', { TEST_RISK_LEVEL: 'medium' });
+    assert.equal(r.status, 2, r.stderr);
+    assert.match(r.stderr, /1 acceptance criteria not met/);
+    assert.equal(hookGate(dir, { TEST_RISK_LEVEL: 'medium' }).status, 2);
   });
 });
 
