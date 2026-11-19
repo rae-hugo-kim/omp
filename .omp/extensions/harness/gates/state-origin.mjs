@@ -52,11 +52,13 @@ export function readLedger(cwd) {
 /** Record `paths` in the ledger of `cwd`. Each path is stored as given and in its drive-less,
  *  forward-slash form — the two spellings context-gate looks up. The file is only ever appended
  *  to (one write per call), so trackers running at the same time cannot erase each other; lines
- *  recorded for another directory stay in the file and stay untrusted. */
+ *  recorded for another directory stay in the file and stay untrusted. A path containing a line
+ *  break is not recorded: it would write ledger lines of its own, an `#origin` line included. */
 export function recordReads(cwd, paths) {
   const { entries: seen, opener } = loadLedger(cwd);
   let out = '';
   for (const p of paths) {
+    if (/[\r\n]/.test(p)) continue;
     const normalized = p.replace(/^[A-Za-z]:/, '').replace(/\\/g, '/');
     if (seen.has(p) || seen.has(normalized)) continue;
     out += `${p}\n${normalized}\n`;

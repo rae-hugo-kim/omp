@@ -152,6 +152,17 @@ test('recording over a cloned ledger only appends, so trackers running at once c
   assert.deepEqual([ledger.has(mine), ledger.has(seed)], [true, false], 'B trusts its own entry and not the cloned one');
 });
 
+test('a path with a line break cannot write ledger lines of its own, an origin line included', (t) => {
+  const { root, A, B } = fixture(t);
+  const smuggled = join(root, 'smuggled.ts'), shared = join(root, 'shared.ts');
+  recordRead(A, join(root, 'plain.ts'));
+  recordRead(A, `${join(root, 'x')}\n${smuggled}`);
+  recordRead(A, `${join(root, 'y')}\n#origin ${B}\n${shared}`);
+  assert.equal(readLedger(A).has(smuggled), false, 'not an entry where it was recorded');
+  clone(A, B);
+  assert.equal(readLedger(B).has(shared), false, 'and not a section opened for the clone');
+});
+
 test('a cloned ledger does not prove the other repo\'s discipline file was read (cross-repo guard)', (t) => {
   const { root, A, B } = fixture(t);
   const external = join(root, 'external');
