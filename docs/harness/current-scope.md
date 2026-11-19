@@ -1,11 +1,11 @@
 # Current Scope: read-path-remirror-109
 
 **Created**: 2026-11-19
-**Seed**: docs/harness/seed.yaml (task_id 20261118-162627-109a, v3)
+**Seed**: docs/harness/seed.yaml (task_id 20261118-162627-109a, v4)
 **Issue**: #109
 
 ## MUST
-- 읽은 파일은 omp가 결과에 싣는 경로(`details.resolvedPath` / `details.meta.source`, 목록은 `details.displayReadTargetLinks`)로 기록합니다. 실패한 목록 부분과 URL로 주소를 준 읽기는 기록하지 않습니다.
+- 읽은 파일은 omp가 결과에 싣는 경로로 기록합니다: 단일 읽기는 `details.meta.source`가 `path`일 때만 `details.resolvedPath`(없으면 소스 값), 목록은 `details.displayReadTargetLinks`. 실패한 목록 부분, URL로 주소를 준 읽기, 소스가 `path`가 아닌 결과는 기록하지 않습니다.
 - 결과에 경로가 없을 때의 문법 해석을 omp 18.22.0에 맞춥니다: `?` 쿼리, 콤마 꼬리·콜론 반복, 대소문자 무시, 컨테이너 멤버. 디스크상 더 긴 해석이 가능하면 기록하지 않습니다.
 - `write`의 해시라인 래퍼를 omp와 같은 규칙으로 벗기고, 내장 스킴 6종과 경로 내 `#`을 반영합니다.
 - `index.ts`의 `tool_result` `read` 분기가 read-tracker에 `file_paths`로 넘깁니다.
@@ -20,7 +20,7 @@
 - [x] AC2 — F2 `write` 래퍼 언래핑과 차단(`read-path.test.mjs` "#109 F2: write unwraps a copied [path#TAG] wrapper to the real file", "forms omp does NOT unwrap stay literal", "a wrapped xd://ast_edit address still gates the paths in its body"; 종단: `read-ledger-wiring.test.mjs` "write through a copied [path#TAG] wrapper is gated as the real file" — 읽기 전 `block: true`, 읽은 뒤 통과)
 - [x] AC3 — F3·D5 스킴 6종 양쪽 슬래시(`read-path.test.mjs` "#109 F3: attachment / cfg / security / vault / out / mr are virtual in both slash forms")
 - [x] AC4 — F4 경로 내 `#`과 `:RAW`/`:IMG`/`:-60+10`(`read-path.test.mjs` "#109 F4: [path#TAG] headers accept # inside the path", "#109: READ_SELECTOR is case-insensitive and strips :-N+C"; `read-selector-oracle.test.mjs`가 업스트림 splitter 포팅본과의 차이를 알려진 두 부류로 제한)
-- [x] AC5 — C2·C3·아카이브 멤버(`read-path.test.mjs` "#109 C2: strips comma lists with a tail chunk and a repeated colon", "#109: container selectors resolve to the container file", "a reported <archive>:<member> path records the archive"; 종단: "a comma-tail read and an archive member query record the file, not a phantom")
-- [x] AC6 — `a.md;b.md`와 `a.md:1-5;b.md:3-9`의 두 파일이 read-log에 기록(`read-ledger-wiring.test.mjs` "a ; list read records every member in read-log", "a list part that failed is not marked read", "a ; that omp did not fan out (a SQL query) records only what was read"; 단위: `read-path.test.mjs` "#109: a list read records the backing file of every part that was read", "a list result without links, or a ; that omp did not fan out, is not split here")
+- [x] AC5 — C2·C3·아카이브 멤버(`read-path.test.mjs` "#109 C2: strips comma lists with a tail chunk and a repeated colon", "#109: container selectors resolve to the container file", "a reported <archive>:<member> path records the archive", "a ? in a reported path does not hide the archive"; 종단: "a comma-tail read and an archive member query record the file, not a phantom")
+- [x] AC6 — `a.md;b.md`와 `a.md:1-5;b.md:3-9`의 두 파일이 read-log에 기록(`read-ledger-wiring.test.mjs` "a ; list read records every member in read-log", "a list part that failed is not marked read", "a ; that omp did not fan out (a SQL query) records only what was read"; 단위: `read-path.test.mjs` "#109: a list read records the backing file of every part that was read", "a list result without links, or a ; that omp did not fan out, is not split here", "only a result whose source is a path is attributed to a file")
 - [x] AC7 — D5 기준 버전 18.22.0·기준 주소(`read-path.mjs` 머리말과 READ_SELECTOR 주석, `harness-harness_integration_contract.md` §1 "Ledger path normalization"·Helper modules)
-- [x] AC8 — `node --test .omp/extensions/harness/tests/*.test.mjs`와 `node scripts/docs-drift` 통과(RED 18건 → GREEN, r1·r2 리뷰 지적 회귀 테스트 포함), `CHANGELOG.md` `[Unreleased]`에 #109 항목
+- [x] AC8 — `node --test .omp/extensions/harness/tests/*.test.mjs`와 `node scripts/docs-drift` 통과(RED 18건 → GREEN, r1·r2·r3 리뷰 지적 회귀 테스트 포함), `CHANGELOG.md` `[Unreleased]`에 #109 항목
