@@ -23,6 +23,9 @@
 // omp update probe (#31): at a session start that has a UI context (payload `has_ui: true`),
 // `omp --version` is compared with the version recorded in .omp/state/omp-version.json; a change
 // emits one HARNESS NOTE (emitIfOmpChanged).
+//
+// Selective-commit probe (#139): on every call, `omp config get commit.enabled` is read in the session root;
+// `true` emits HARNESS SELECTIVE COMMIT ON with the `.omp/config.yml` fix (emitIfSelectiveCommitEnabled).
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, renameSync, realpathSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
@@ -52,6 +55,10 @@ const OMP_VERSION_MAX_LENGTH = 64;   // longer than any real version; bounds wha
 // SIGTERM would otherwise hold the gate) keeps a hung omp from eating the caller's 15s gate budget,
 // which the ls-remote probe (10s) further down also draws on.
 const OMP_VERSION_TIMEOUT_MS = 2000;
+// `omp config get` loads the settings layers before answering (0.13 s measured 2026-11-18); the bound is
+// a hard kill for the same reason as above. Worst case at a UI session start is then 2 + 2 + 10 s, inside
+// the caller's 15 s gate budget (review r1).
+const OMP_CONFIG_TIMEOUT_MS = 2000;
 let linkedMemo;   // detectLinkedWorktree(cwd) result, computed at most once and only when something needs it
 function getLinked() {
   if (linkedMemo === undefined) linkedMemo = detectLinkedWorktree(cwd);
@@ -93,6 +100,10 @@ emitIfHooksInactive(cwd);
 // AGENTS.md at the same depth when a non-empty `.omp/AGENTS.md` exists, so the harness
 // policy is silently absent from the session. Runs before the source-repo skip.
 emitIfPolicyShadowed(cwd);
+// Selective-commit probe (#139): while omp's `/commit` / eval `commit` path is on in this checkout, the
+// system prompt routes commits around the harness command layer. Runs before the source-repo skip and
+// on every call (same channel and cadence as HARNESS STALE).
+emitIfSelectiveCommitEnabled(cwd);
 // omp update probe (#31): only for a session start that has a UI context. index.ts passes
 // `has_ui: true` from session_start when the session has one (pinned by
 // tests/drift-recheck-wiring.test.mjs). Every other call leaves the one-shot note alone: the
@@ -404,6 +415,42 @@ function emitIfPolicyShadowed(root) {
   writeNoticeMarker(markerPath, { file: '.omp/AGENTS.md' });
 
   console.log('HARNESS POLICY SHADOWED: `.omp/AGENTS.md` exists, so OMP\'s native provider (priority 100) replaces `AGENTS.md` at the same depth — the harness policy is NOT in this session\'s context. Move its content to `.omp/rules/<project>-context.md` (frontmatter `alwaysApply: true`), delete `.omp/AGENTS.md`, then restart the session (/new) so the policy loads (AGENTS.md "Consumer extension points").');
+}
+
+// Selective-commit probe (#139). omp 18.20.1 added `/commit` and the eval `commit` namespace, on by
+// default (`commit.enabled: true`). While it is on, the system prompt tells the agent to commit through
+// eval `commit` instead of bash `git commit`, which contradicts compr/compush and lands commits that never
+// pass the `tool_call bash` layer: the bypass tripwire, the cross-repo guard and the post-commit
+// follow-ups (breadcrumb, drift recheck, cycle note) stay silent, the pre-commit hook's pass-time warnings
+// are dropped, a `no_verify` commit lands without a session-visible trace, and the reviewer's diff hash
+// cannot be computed before the commit (measured 2026-11-18 on 18.22.0 — handoff
+// 2026-11-17 §1 C1-C2, §9). Decision (user, 2026-11-18): the harness keeps ONE commit path, bash
+// `git commit`, and every checkout switches the feature off (`.omp/config.yml`: `commit.enabled: false`;
+// init/migrate write it, this probe reminds). The effective value is read with `omp config get` IN the
+// session root: native project settings are `<cwd>/.omp/config.yml` with no ancestor walk (omp
+// settings.md), so the probe sees exactly what a session started here sees. While it reads `true` the fix
+// is emitted on EVERY call — session start, each turn start, after a commit — like HARNESS STALE:
+// resolution beats reporting, and a reminder that stops the moment the file is fixed needs no marker.
+// Silent when the value is `false`, the key is unknown (omp < 18.20.1 exits 1 with `Unknown setting`),
+// omp is not on PATH, or the call fails or times out — none of those is a state to fix here. The value is
+// read through `--json` (`{"key","value","type",…}`, `value` a real boolean): the plain form is ANSI-wrapped
+// under FORCE_COLOR (`\e[32mtrue\e[39m`, measured — NO_COLOR does not undo it), which a text compare would
+// read as silence (review r1). Any answer that is not a JSON object with `value: true` stays silent. Known
+// limit: a `--config` overlay that re-enables the feature for one session is invisible to a separate
+// `omp config get` process (residual surface in harness-harness_integration_contract). Never throws.
+function emitIfSelectiveCommitEnabled(root) {
+  let enabled;
+  try {
+    const answer = execFileSync('omp', ['config', 'get', 'commit.enabled', '--json'],
+      { cwd: root, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'], timeout: OMP_CONFIG_TIMEOUT_MS, killSignal: 'SIGKILL' });
+    enabled = JSON.parse(answer)?.value;
+  } catch { return; }
+  if (enabled !== true) return;
+
+  // The fix names the KEY, not a block to add: a `.omp/config.yml` that already has a `commit:` mapping
+  // (other keys under it) must get `enabled: false` inside it — a second top-level `commit:` would be
+  // last-key-wins and silently drop the first mapping's keys (review r1).
+  console.log('HARNESS SELECTIVE COMMIT ON: `omp config get commit.enabled` reads `true` in this checkout, so the system prompt routes commits through the eval `commit` namespace instead of bash `git commit` (compr/compush) — that path skips the harness command-layer guards (bypass tripwire, cross-repo guard, post-commit follow-ups) and the reviewer diff hash. Fix: in `.omp/config.yml` of this checkout set `enabled: false` under the top-level `commit:` key (create the key only if it is absent — a second `commit:` mapping would replace the first), then start a new session (/new) so the prompt sentence and the namespace drop out.');
 }
 
 // omp update probe (#31). A harness defect that only a NEW omp exposes cannot be caught by reading

@@ -179,6 +179,21 @@ bootstrap/migrate와 동일한 명령:
 git config --get core.hooksPath   # → .githooks
 ```
 
+**선택 커밋 끄기(#139)**: omp `18.20.1`+의 `/commit`·eval `commit` 경로는 `bash` 도구 밖에서 커밋해 명령 계층 가드(커밋 우회 트립와이어·cross-repo 가드·커밋 뒤 후속 처리)가 침묵하고 리뷰 해시를 커밋 전에 계산할 수 없으므로, 하네스의 커밋 경로는 `bash`의 `git commit`(compr/compush) 하나로 둔다(사용자 결정 2026-11-18). 템플릿의 `.omp/config.yml`이 이미 `commit.enabled: false`를 싣고 있다 — 파일이 없거나(구 템플릿) 블록이 빠졌으면 **키만 추가**한다(파일의 다른 설정은 그대로). 켜진 채 세션을 열면 `harness-version-check.mjs`가 매 턴 `HARNESS SELECTIVE COMMIT ON`으로 같은 수정을 요구한다.
+
+```bash
+# commit 키가 어느 표기로든 이미 있거나(따옴표 키 포함) 파일이 플로우 매핑({…})이면 append하지 않는다 —
+# 두 번째 commit: 매핑은 첫 매핑을 덮어쓰고(last-key-wins), {…}에 append하면 파싱이 깨진다(리뷰 r3).
+if [ -f .omp/config.yml ] && grep -qE "^[[:space:]]*[\"']?commit[\"']?[[:space:]]*:" .omp/config.yml; then
+  echo "commit 키가 이미 있음(템플릿 기본) — 아래 확인이 false면 할 일 없음, true면 그 매핑 안의 enabled를 false로 손으로 맞춘다"
+elif [ -f .omp/config.yml ] && grep -vE '^[[:space:]]*(#|$)' .omp/config.yml | head -1 | grep -q '^[[:space:]]*{'; then
+  echo ".omp/config.yml이 플로우 매핑({…}) — commit: {enabled: false}를 손으로 넣는다"
+else
+  printf '\n# Selective commit (/commit, eval `commit`; omp 18.20.1+) is off: the harness commit path is bash `git commit` (#139).\ncommit:\n  enabled: false\n' >> .omp/config.yml
+fi
+omp config get commit.enabled   # → false (아니면 위 안내대로 손으로 고친다; `Unknown setting`이면 omp가 18.20.1 미만이라 그대로 둔다)
+```
+
 ### Phase 5: 초기 커밋
 
 ```bash
