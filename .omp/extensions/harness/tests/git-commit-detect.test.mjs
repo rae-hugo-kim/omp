@@ -417,6 +417,7 @@ test('commitTargetDir: null when the target repo cannot be trusted or there is n
   }
   assert.equal(commitTargetDir('git commit', ''), null);
   assert.equal(commitTargetDir(undefined, '/base'), null);
+  assert.equal(commitTargetDir('git commit', '/base', { GIT_DIR: '/x' }), null, 'a retargeting call env is unknown, as it is for the cross-repo guard');
 });
 
 test('commitTargetDir: ONE literal cd into an existing directory is followed; any other cd stays unknown (#111 F8)', () => {

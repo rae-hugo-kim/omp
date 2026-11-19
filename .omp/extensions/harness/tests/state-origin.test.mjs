@@ -17,10 +17,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { crossRepoMutationVerdict } from '../gates/cross-repo.mjs';
+import { readLedger } from '../gates/state-origin.mjs';
 import { skipUnless } from './helpers/capabilities.mjs';
 import { mkdtempReal } from './helpers/real-tmpdir.mjs';
 
@@ -41,16 +42,17 @@ function repo(dir, files = {}) {
   git(dir, 'commit', '-q', '--allow-empty', '-m', 'init');
 }
 
-/** Worktree A (main checkout) and B (a linked worktree of it), each with a staged >100-line code
- *  file so backpressure-gate assesses the pending commit as high risk. */
-function fixture(t) {
+/** Worktree A (main checkout) and B (a linked worktree of it), each with a staged code file:
+ *  >100 lines by default, so backpressure-gate assesses the pending commit as high risk
+ *  (no verification = BLOCK); a short one is medium risk (no verification = WARN, allowed). */
+function fixture(t, lines = 120) {
   const root = mkdtempReal('state-origin-');
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const A = join(root, 'A'), B = join(root, 'B');
   repo(A);
   git(A, 'worktree', 'add', '-q', B, '-b', 'card');
   for (const dir of [A, B]) {
-    writeFileSync(join(dir, 'big.ts'), 'export const x = 1;\n'.repeat(120));
+    writeFileSync(join(dir, 'big.ts'), 'export const x = 1;\n'.repeat(lines));
     git(dir, 'add', 'big.ts');
   }
   return { root, A, B };
@@ -89,6 +91,24 @@ test('a status file with no origin (pre-#111 writer, or a clone of one) is not a
   assert.equal(commitGate(A).status, 2, 'an unbound PASS cannot be told apart from a cloned one');
 });
 
+test('a FAIL needs no origin to block: one from a pre-#111 writer or carried by a clone still stands', (t) => {
+  const { A, B } = fixture(t, 1);
+  assert.equal(commitGate(B).status, 0, 'medium risk with no record at all is only warned about');
+  mkdirSync(stateDir(A), { recursive: true });
+  writeFileSync(join(stateDir(A), 'backpressure-status'), 'FAIL');
+  assert.equal(commitGate(A).status, 2, 'an unbound FAIL is still a failed verification');
+
+  assert.equal(hook('backpressure-failure-tracker.mjs', A, { command: 'npm test' }).status, 0);
+  clone(A, B);
+  assert.equal(commitGate(B).status, 2, 'a FAIL recorded in A is not downgraded to "no record" in B');
+});
+
+test('a status file the gate cannot read is not "no record"', (t) => {
+  const { A } = fixture(t, 1);
+  mkdirSync(join(stateDir(A), 'backpressure-status'), { recursive: true });   // EISDIR, whatever the uid
+  assert.notEqual(commitGate(A).status, 0, 'an unreadable status must not downgrade to a warning');
+});
+
 test('a cloned read ledger does not prove a read in the new worktree', (t) => {
   const { root, A, B } = fixture(t);
   const shared = join(root, 'shared.ts'), other = join(root, 'other.ts');
@@ -101,11 +121,11 @@ test('a cloned read ledger does not prove a read in the new worktree', (t) => {
 
   recordRead(B, other);
   assert.equal(editGate(B, other).status, 0, 'a read in B itself is accepted');
-  assert.equal(editGate(B, shared).status, 2, 'recording in B drops the cloned entries instead of adopting them');
+  assert.equal(editGate(B, shared).status, 2, 'recording in B does not adopt the cloned entries');
   assert.equal(editGate(A, shared).status, 0, 'A is untouched by what B recorded');
 });
 
-test('a ledger with no origin is not trusted, and write-tracker starts a fresh one over it', (t) => {
+test('a ledger with no origin is not trusted, and write-tracker records beside it without adopting it', (t) => {
   const { root, A } = fixture(t);
   const legacy = join(root, 'legacy.ts'), mine = join(root, 'mine.ts');
   for (const f of [legacy, mine]) writeFileSync(f, 'export const y = 1;\n');
@@ -115,7 +135,21 @@ test('a ledger with no origin is not trusted, and write-tracker starts a fresh o
 
   assert.equal(hook('write-tracker.mjs', A, { file_path: mine }).status, 0);
   assert.equal(editGate(A, mine).status, 0, 'a write in this worktree is accepted');
-  assert.equal(editGate(A, legacy).status, 2, 'the unbound entries are dropped, not adopted');
+  assert.equal(editGate(A, legacy).status, 2, 'the unbound entries are not adopted');
+});
+
+test('recording over a cloned ledger only appends, so trackers running at once cannot erase each other', (t) => {
+  const { root, A, B } = fixture(t);
+  const seed = join(root, 'seed.ts'), mine = join(root, 'mine.ts');
+  recordRead(A, seed);
+  clone(A, B);
+  const log = join(stateDir(B), 'read-log.txt');
+  const before = readFileSync(log, 'utf8');
+  recordRead(B, mine);
+  const after = readFileSync(log, 'utf8');
+  assert.ok(after.length > before.length && after.startsWith(before), 'the bytes already in the file are never rewritten');
+  const ledger = readLedger(B);
+  assert.deepEqual([ledger.has(mine), ledger.has(seed)], [true, false], 'B trusts its own entry and not the cloned one');
 });
 
 test('a cloned ledger does not prove the other repo\'s discipline file was read (cross-repo guard)', (t) => {

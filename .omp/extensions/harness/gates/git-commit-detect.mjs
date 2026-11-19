@@ -810,13 +810,16 @@ export function isWipCommit(command) {
 //   plain `git commit`       -> baseDir (the bash tool's cwd input, else the session cwd)
 //   `bash -c "git … commit"` -> recursed with the same base
 //   `cd <dir> && git commit` -> <dir>, for ONE literal cd into an existing directory (#111 F8)
-// The answer is read off shellWriteTargets (below), so the snapshot and the cross-repo guard
-// follow the same single-cwd model and cannot disagree about where a commit lands. Returns null
-// when that model has no single trusted target: anything it reports as `unknown` (a second
+// The answer is read off shellWriteTargets (below) with the same command, cwd and call env the
+// cross-repo guard is given, so the snapshot watches the directory the guard judged. Returns
+// null when that model has no single trusted target: anything it reports as `unknown` (a second
 // `cd`, a missing or `$VAR` directory, a subshell, `pushd`/`eval`/`source`, `env -C`,
 // --git-dir/--work-tree/GIT_DIR=, a -C value the shell would still expand), commits into two
 // different repos, or no commit it attributes at all (`git commit --help`). Callers treat null
-// as "unknown" and fall back to the exit code rather than guessing a HEAD.
+// as "unknown" and fall back to the exit code rather than guessing a HEAD. Where the single-cwd
+// model is wrong about a `cd` (one that fails, runs in a pipeline or background, is skipped by
+// `&&`/`||`, hides behind `time`, or resolves through CDPATH) the snapshot watches the wrong
+// directory — an advisory misreport, enumerated in harness_integration_contract §3.
 // `cd`/`pushd`/`popd`/`eval`/`source` move the cwd or re-execute text; verificationCwd and
 // scanWriteTargets stop following at any of them except the one literal `cd` each models.
 const CWD_SHIFTERS = new Set(['cd', 'pushd', 'popd', 'eval', 'source']);
@@ -876,8 +879,8 @@ function gitInvocationTarget(rest, baseDir) {
   return unknown ? { unknown, verb: rest[i], index: i } : { target, verb: rest[i], index: i };
 }
 
-export function commitTargetDir(command, baseDir) {
-  const { git, unknown } = shellWriteTargets(command, baseDir);
+export function commitTargetDir(command, baseDir, env = {}) {
+  const { git, unknown } = shellWriteTargets(command, baseDir, env);
   if (unknown) return null;
   const dirs = new Set(git.filter((g) => g.verb === 'commit').map((g) => g.dir));
   return dirs.size === 1 ? dirs.values().next().value : null;

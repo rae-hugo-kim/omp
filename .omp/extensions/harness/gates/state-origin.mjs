@@ -6,15 +6,15 @@
 // `backpressure-status=PASS` and read ledger. The two files that UNLOCK a gate therefore carry
 // the physical path of the directory that owns the state dir:
 //
-//   read-log.txt         line 1 `#origin <path>`, then one path per line (as before)
+//   read-log.txt         append-only sections, each opened by `#origin <path>`, one path per line
 //   backpressure-status  line 1 PASS | FAIL | UNKNOWN (as before), line 2 `<path>`
 //
-// A reader that finds another origin — or none: a file left by a pre-#111 writer cannot be told
-// apart from a clone of one — treats the evidence as absent, and a writer replaces it instead of
-// extending it. The cost is one re-read / re-run after an upgrade or after the directory moves;
-// it is never a foreign PASS. One-shot flags a human creates by hand (`commit-wip`,
-// `docs/harness/*-skip`) cannot carry an origin and stay a documented residual
-// (harness_integration_contract "Worktree clones").
+// Evidence under another origin — or under none: a file left by a pre-#111 writer cannot be told
+// apart from a clone of one — does not unlock anything. The cost is one re-read / re-run after
+// an upgrade or after the directory moves; it is never a foreign PASS. The origin is a path, not
+// a repository identity: a copy mounted at the SAME path is indistinguishable. One-shot flags a
+// human creates by hand (`commit-wip`, `docs/harness/*-skip`) cannot carry an origin and stay a
+// documented residual (harness_integration_contract "Worktree clones").
 
 import { appendFileSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
@@ -25,29 +25,36 @@ function origin(cwd) {
   try { return realpathSync.native(cwd); } catch { return cwd; }
 }
 const statePath = (cwd, name) => join(cwd, '.omp', 'harness-state', name);
-function readText(file) {
-  try { return readFileSync(file, 'utf-8'); } catch { return null; }
+
+/** The ledger as `cwd` may trust it: `entries` are the lines of the sections opened for this
+ *  directory. Lines before any origin line (a pre-#111 ledger) or under another origin (a clone)
+ *  are not entries. `opener` is what a writer must append first so that its lines land in a
+ *  section of its own — empty when the last section already is. */
+function loadLedger(cwd) {
+  let text = '';
+  try { text = readFileSync(statePath(cwd, 'read-log.txt'), 'utf-8'); } catch { /* missing or unreadable: no entries */ }
+  const header = LEDGER_ORIGIN + origin(cwd);
+  const entries = new Set();
+  let own = false;
+  for (const line of text.split('\n')) {
+    if (line.startsWith(LEDGER_ORIGIN)) own = line === header;
+    else if (own && line) entries.add(line);
+  }
+  return { entries, opener: own ? '' : `${text && !text.endsWith('\n') ? '\n' : ''}${header}\n` };
 }
 
-/** Ledger lines recorded for `cwd`, or null when the ledger is missing or foreign. */
-function ownLedgerLines(cwd) {
-  const lines = (readText(statePath(cwd, 'read-log.txt')) ?? '').split('\n');
-  return lines[0] === LEDGER_ORIGIN + origin(cwd) ? lines.slice(1).filter(Boolean) : null;
-}
-
-/** Paths recorded as read or written for `cwd` (read-log.txt). Empty when the ledger is missing
- *  or was recorded for another directory. */
+/** Paths recorded as read or written for `cwd` (read-log.txt). Empty when the ledger is missing,
+ *  unreadable, or holds nothing recorded for this directory. */
 export function readLedger(cwd) {
-  return new Set(ownLedgerLines(cwd) ?? []);
+  return loadLedger(cwd).entries;
 }
 
 /** Record `paths` in the ledger of `cwd`. Each path is stored as given and in its drive-less,
- *  forward-slash form — the two spellings context-gate looks up. A missing or foreign ledger is
- *  replaced, never extended. */
+ *  forward-slash form — the two spellings context-gate looks up. The file is only ever appended
+ *  to (one write per call), so trackers running at the same time cannot erase each other; lines
+ *  recorded for another directory stay in the file and stay untrusted. */
 export function recordReads(cwd, paths) {
-  const file = statePath(cwd, 'read-log.txt');
-  const own = ownLedgerLines(cwd);
-  const seen = new Set(own ?? []);
+  const { entries: seen, opener } = loadLedger(cwd);
   let out = '';
   for (const p of paths) {
     const normalized = p.replace(/^[A-Za-z]:/, '').replace(/\\/g, '/');
@@ -56,19 +63,29 @@ export function recordReads(cwd, paths) {
     seen.add(p);
     seen.add(normalized);
   }
+  if (!out) return;
+  const file = statePath(cwd, 'read-log.txt');
   mkdirSync(dirname(file), { recursive: true });
-  if (own === null) writeFileSync(file, `${LEDGER_ORIGIN}${origin(cwd)}\n${out}`);
-  else if (out) appendFileSync(file, out);
+  appendFileSync(file, opener + out);
 }
 
-/** The verification status recorded for `cwd`: `status` is PASS | FAIL | UNKNOWN, or null when
- *  there is none. `foreign` is true when a status file exists but was recorded for another
- *  directory (its status is then null too). */
+/** The verification status `cwd` must honour: `status` is PASS | FAIL | UNKNOWN, or null when
+ *  there is none. `foreign` is true when the file was recorded for another directory (or carries
+ *  no origin). Provenance is what lets a verdict UNLOCK a commit, so a foreign PASS or UNKNOWN
+ *  is no record at all, while a foreign FAIL still stands until this directory records its own
+ *  result. A file that exists but cannot be read throws: the gate must not mistake it for "no
+ *  record" (which only warns at medium risk). */
 export function readBackpressure(cwd) {
-  const text = readText(statePath(cwd, 'backpressure-status'));
-  if (text === null) return { status: null, foreign: false };
+  let text;
+  try {
+    text = readFileSync(statePath(cwd, 'backpressure-status'), 'utf-8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return { status: null, foreign: false };
+    throw err;
+  }
   const [status, recordedFor] = text.split('\n');
-  return recordedFor === origin(cwd) ? { status, foreign: false } : { status: null, foreign: true };
+  if (recordedFor === origin(cwd)) return { status, foreign: false };
+  return { status: status === 'PASS' || status === 'UNKNOWN' ? null : status, foreign: true };
 }
 
 export function writeBackpressure(cwd, status) {
