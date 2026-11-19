@@ -62,19 +62,7 @@ seed.yaml을 확인하고 유효성을 검증한다. status 판정은 `docs/rule
 
 seed가 `draft`면 착수 전에 사용자에게 seed 승인을 묻습니다. 승인 없이 `approved`로 바꾸지 않습니다.
 
-- **승인**: 승인을 받는 즉시 `status` 한 줄만 `approved`로 바꿔 단독 커밋으로 HEAD에 올린 뒤 진행합니다. kickoff는 산출물을 커밋하지 않으므로 seed가 아직 HEAD에 없으면 이 첫 커밋에 `seed.yaml` 전체(와 kickoff 산출물)가 함께 들어갑니다. "HEAD에 없다"는 HEAD의 `seed.yaml`이 없거나 `task_id`가 다른 경우(직전 작업의 닫힌 seed가 같은 경로에 남아 있는 경우 포함)입니다. kickoff scope의 AC가 모두 미체크라 일반 커밋은 acceptance-gate Check 3가 막으므로 WIP 레인으로 커밋합니다(WIP 면제로 통과한 커밋마다 `acceptance_wip` 감사 행이 1건 남습니다). 이 전이는 `version`을 올리지 않습니다.
-  ```bash
-  git status --short                                         # 다른 변경이 스테이징돼 있지 않은지 확인 (단독 커밋)
-  git show HEAD:docs/harness/seed.yaml | grep '^task_id:'    # 이 seed의 task_id와 같은지 확인 (파일이 없으면 오류 = HEAD에 없음)
-  # (a) task_id가 같을 때: status 한 줄만
-  git add docs/harness/seed.yaml
-  # (b) HEAD에 없을 때: kickoff 산출물만 경로로 지정 (디렉터리 전체를 add하지 않는다 — 무관한 변경이 섞인다)
-  git add docs/harness/seed.yaml docs/harness/current-scope.md docs/harness/kickoff-summary.md docs/harness/rubric-report.md docs/harness/audit.jsonl
-  git add docs/harness/plan-attack-report.md                 # (b) Plan Attack을 실행했을 때만
-  git add README.md README.en.md                             # (b) kickoff Step 8이 placeholder를 채웠을 때만
-  OMP_COMMIT_WIP=1 git commit -m "docs(harness): seed <task_id>를 approved로 승인합니다"
-  ```
-  (a)와 (b)는 둘 중 해당하는 하나만 실행합니다. `kickoff-done`은 gitignore 대상이라 넣지 않습니다.
+- **승인**: 승인을 받는 즉시 `status` 한 줄만 `approved`로 바꿔 단독 커밋으로 HEAD에 올린 뒤 진행합니다. kickoff는 산출물을 커밋하지 않으므로 seed가 아직 HEAD에 없으면 이 첫 커밋에 `seed.yaml` 전체(와 kickoff 산출물)가 함께 들어갑니다. kickoff scope의 AC가 모두 미체크라 일반 커밋은 acceptance-gate Check 3가 막으므로 WIP 레인으로 커밋합니다(`OMP_COMMIT_WIP=1 git commit …` 또는 `.omp/harness-state/commit-wip` — WIP 면제로 통과한 커밋마다 `acceptance_wip` 감사 행이 1건 남습니다). 이 전이는 `version`을 올리지 않습니다.
 - **보류**: 사용자가 승인을 보류하면 `draft`로 진행할 수 있습니다. 다만 closeout은 HEAD seed가 `approved`일 때만 마감하므로 closeout 전에 승인을 받아 같은 방법(그 줄만 단독 커밋, 미체크 AC가 남았으면 WIP 레인)으로 올려야 합니다.
 
 #### 닫힌 seed 재개 (`done`/`superseded`)
