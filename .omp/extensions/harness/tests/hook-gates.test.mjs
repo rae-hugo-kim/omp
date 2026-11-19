@@ -340,7 +340,7 @@ test('U9: pathspec commit exposes exactly the partial content to the gates', () 
 
 // U9s (#61): acceptance Check 3 judges the scope by the index git hands the hook — the plain
 // index for `git commit`, the TEMPORARY index for `-a` / a pathspec — AND by the worktree file,
-// whichever has more unchecked boxes.
+// whichever is stricter (unchecked boxes > no usable record > every box checked).
 test('U9s: the scope is judged from the index the commit captures and from disk (plain, -a, pathspec, reverse)', () => {
   const MET = '# Current Scope: fixture\n\n## Acceptance Criteria\n\n- [x] AC1 fixture criterion\n';
   const UNMET = MET.replace('- [x]', '- [ ]');

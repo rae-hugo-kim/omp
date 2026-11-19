@@ -1545,7 +1545,7 @@ test('#122 the ids come from HEAD\'s seed: dropping criteria from the seed in th
 });
 
 // --- #61: Check 3 judges the scope by BOTH copies — the one the commit carries and the one on
-// disk — and the copy with more unchecked boxes wins, in every commit form. It used to read the
+// disk — and the STRICTER copy wins, in every commit form. It used to read the
 // worktree file only, so a scope staged with `- [ ]` and checked off only on disk let a staged
 // code commit through and left the unchecked record at HEAD; reading the index only (the first
 // fix) opened the reverse: a scope rewritten on disk by `thread-scope open` did not gate until
@@ -1613,7 +1613,7 @@ test('#61 reverse: a committed all-[x] scope + an unchecked scope on disk only (
 // no checkbox, deleted, unreadable) lose to a fully checked staged copy, so a code commit passed
 // where reading the worktree file alone used to send it to the risk backstop. The stricter copy
 // is judged: unchecked boxes > no usable record > every box checked.
-test('#61 a disk copy without a usable record outranks a fully checked staged copy -> backstop (code BLOCK, docs-only allow); a tie and an unreadable disk copy leave the staged copy in charge', () => {
+test('#61 a disk copy without a usable record outranks a fully checked staged copy -> backstop (code BLOCK, docs-only allow); a tie and an unreadable disk copy leave the staged copy in charge; unchecked boxes outrank a copy without a record, and more outrank fewer', () => {
   // HEAD and the index: a fully checked scope; then the on-disk copy degenerates and code is staged
   const withDisk = (mutate, fn) => withDir({}, (dir) => {
     const git = gitRepoWithTask(dir);
@@ -1660,6 +1660,29 @@ test('#61 a disk copy without a usable record outranks a fully checked staged co
     assert.match(r.stderr, /1 acceptance criteria not met/);
     assert.equal(hookGate(dir, { TEST_RISK_LEVEL: 'medium' }).status, 2);
   });
+  // r5 review: the rest of the order. Unchecked boxes on disk outrank a staged copy WITHOUT a
+  // usable record (BLOCK on the criteria whatever the risk, not the backstop's docs-only allow),
+  // and between two unchecked copies the one with more boxes is the one reported.
+  const TWO_OPEN = '# Scope\n\n## Acceptance Criteria\n\n- [ ] disk one\n- [ ] disk two\n';
+  const NO_RECORD = '# Scope\n\n## Acceptance criteria (draft)\n\n- [x] hidden\n';
+  for (const [staged, disk, judged, listed] of [
+    [NO_RECORD, UNCHECKED_SCOPE, /judged: the on-disk copy/, /- \[ \] not done yet/],
+    [UNCHECKED_SCOPE, TWO_OPEN, /judged: the on-disk copy/, /- \[ \] disk two/],
+    [TWO_OPEN, UNCHECKED_SCOPE, /judged: the STAGED copy/, /- \[ \] disk two/],
+  ]) {
+    withDir({}, (dir) => {
+      const git = gitRepoWithTask(dir, { scope: staged });
+      writeFileSync(scopePath(dir), disk);
+      writeFileSync(join(dir, 'a.js'), 'y\n');
+      git('add', 'a.js');
+      for (const r of [runGateHermetic(dir, 'git commit -m "docs: x"', { TEST_RISK_LEVEL: 'low' }), hookGate(dir, { TEST_RISK_LEVEL: 'low' })]) {
+        assert.equal(r.status, 2, r.stderr);
+        assert.match(r.stderr, /acceptance criteria not met/);
+        assert.match(r.stderr, judged);
+        assert.match(r.stderr, listed);
+      }
+    });
+  }
 });
 
 test('#61 an unverifiable form (pathspec, bash -c) is judged by whichever copy has more unchecked boxes', () => {
