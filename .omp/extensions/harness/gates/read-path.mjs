@@ -127,11 +127,16 @@ function reportedTarget(reported, cwd) {
  *
  *  omp does not resolve by grammar alone: it prefers existing literal files and tries
  *  archive / SQLite candidates against the disk, in an order this module does not
- *  reproduce. Every such alternative is a LONGER prefix of the path, ending where a
- *  `:` or `?` starts or at the end (`notes?.md`, `pack.zip:x`, `a.md:1-2,` for
+ *  reproduce. Each of those alternatives is a LONGER prefix of the path, ending where
+ *  a `:` or `?` starts or at the end (`notes?.md`, `pack.zip:x`, `a.md:1-2,` for
  *  `a.md:1-2,:-1`). If one of them exists, the grammar cannot know which file was
- *  read, and nothing is recorded — a false block later, never an unread file. The
- *  scan covers the whole input or does not run: see PATH_MAX. */
+ *  read, and nothing is recorded. The scan covers the whole input or does not run:
+ *  see PATH_MAX.
+ *
+ *  Not covered: resolutions that are NOT a prefix of the input — omp's unique-suffix
+ *  match (`notes?copy.docx` found as `nested/notes?copy.docx`) and `~` / `@`
+ *  expansion. On this path the pick stays a best guess, which is why `readTarget`
+ *  confines it to a result without details. */
 function grammarTarget(path, cwd) {
 	if (path.length > PATH_MAX) return null;
 	const query = path.indexOf("?");

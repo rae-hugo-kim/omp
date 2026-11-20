@@ -470,6 +470,14 @@ test('#109: only a result whose source is a path is attributed to a file', (t) =
   assert.equal(readTarget({ path: 'plan.md' }, {}, root), '');
   assert.equal(readTarget({ path: 'plan.md:1-5' }, { fileSize: 10 }, root), '');
   assert.equal(readTarget({ path: 'invoice?copy.docx' }, { fileSize: 10 }, root), '');
+  // r7 review: only ABSENT details (null / undefined) are "no details". A malformed value never
+  // falls through to the grammar and never throws
+  for (const d of [0, '', false, NaN, 'str', [], { meta: null }, { meta: { source: null } }, { meta: { source: 'path' } }, { meta: { source: { type: 'path', value: 42 } } }, { meta: { source: { type: 'PATH', value: at('plan.md') } } }]) {
+    assert.equal(readTarget({ path: 'plan.md' }, d, root), '', `details ${JSON.stringify(d)}`);
+  }
+  assert.equal(readTarget({ path: 'plan.md' }, null, root), at('plan.md'), 'null is the absence of details');
+  // a non-string resolvedPath is ignored in favour of the validated source value
+  assert.equal(readTarget({ path: 'x' }, { resolvedPath: 42, meta: { source: { type: 'path', value: at('plan.md') } } }, root), at('plan.md'));
 });
 
 // A list read (`a.md;b.md`) records NOTHING (list support was split off to #150). omp marks a
@@ -526,4 +534,7 @@ test('#109 fallback: when a longer reading exists on disk, nothing is recorded',
   for (const p of ['notes?.md', 'notes?.md:1', 'foo.ts:raw', 'foo.ts:raw:2-4', 'pack.zip:x', 'pack.zip:x:1-5', 'a.md:1-2,:-1', 'a?b.zip:m', 'nested/a.tar:inner.zip:f.txt']) {
     assert.equal(readTarget({ path: p }, undefined, root), '', `ambiguous on disk, must record nothing: ${p}`);
   }
+  // r7 review: a longer reading that ends at a `?` with no later `:` — the scan must stop there too
+  const pics = tree(t, ['pic', 'pic?v2.png']);
+  assert.equal(readTarget({ path: 'pic?v2.png?q=describe' }, undefined, pics), '', 'the literal pic?v2.png is a longer reading than pic');
 });
