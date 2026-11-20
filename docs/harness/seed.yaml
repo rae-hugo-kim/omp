@@ -1,5 +1,6 @@
 name: read-path-remirror-109
-status: approved
+status: done
+completed: 2026-11-20
 version: 7
 task_id: "20261118-162627-109a"
 # gh-loop worker Stage 2에 따라 이슈 #109 본문(F1~F4, AC 5개, 범위 밖)과 코디네이터 댓글 두 건
