@@ -30,7 +30,10 @@ import {
 	readTarget,
 } from '../gates/read-path.mjs';
 
-const CWD = '/work';
+// An EMPTY temp dir, not a fixed path: readTarget's grammar fallback consults the disk, so the
+// result must not depend on what a path like /work happens to hold on this host.
+const CWD = mkdtempSync(join(tmpdir(), 'xdev-cwd-'));
+test.after(() => rmSync(CWD, { recursive: true, force: true }));
 // XdevDispatch.mode는 실행 디스패치에서 "execute" (tools/resolve.ts writeDeviceDispatch 계약).
 const env = (tool, inner) => ({ xdev: { tool, mode: 'execute', inner } });
 
@@ -229,9 +232,9 @@ test('mutationCallTargets: 정규화·대소문자 변형 디바이스 경로도
 });
 
 test('read/search 원장 경로도 단일 슬래시 가상 URI를 거부한다 (r3 adversary low)', () => {
-	assert.equal(readTarget({ path: 'xd:/retain' }, CWD), '');
-	assert.equal(readTarget({ path: 'memory:/abc:5-10' }, CWD), '');
-	assert.equal(readTarget({ path: 'src/a.ts:5-10' }, CWD), resolve(CWD, 'src/a.ts'));
+	assert.equal(readTarget({ path: 'xd:/retain' }, undefined, CWD), '');
+	assert.equal(readTarget({ path: 'memory:/abc:5-10' }, undefined, CWD), '');
+	assert.equal(readTarget({ path: 'src/a.ts:5-10' }, undefined, CWD), resolve(CWD, 'src/a.ts'));
 	assert.deepEqual(searchTrackTargets({ files: ['memory:/m', 'src/a.ts'] }, '', CWD),
 		[resolve(CWD, 'src/a.ts')]);
 	assert.deepEqual(searchTrackTargets(undefined, '[xd:/foo#AB12]\n[src/b.ts#CD34]\n', CWD),
@@ -243,7 +246,7 @@ test('스킴 유사 정당 POSIX 경로는 가상으로 오분류하지 않는�
 	// 버리면 read-before-edit와 write-tracker에서 동시에 빠진다(팬텀보다 나쁜 방향).
 	// 단일 슬래시 거부는 알려진 가상 스킴 allowlist로만.
 	assert.equal(localFileTarget('pkg:/danger.ts', CWD), resolve(CWD, 'pkg:/danger.ts'));
-	assert.equal(readTarget({ path: 'src:/app.ts' }, CWD), resolve(CWD, 'src:/app.ts'));
+	assert.equal(readTarget({ path: 'src:/app.ts' }, undefined, CWD), resolve(CWD, 'src:/app.ts'));
 	assert.deepEqual(editTargets('write', { path: 'pkg:/danger.ts' }, CWD), [resolve(CWD, 'pkg:/danger.ts')]);
 	assert.deepEqual(searchTrackTargets({ files: ['pkg:/a.ts'] }, '', CWD), [resolve(CWD, 'pkg:/a.ts')]);
 	// 알려진 가상 스킴의 단일 슬래시 형은 계속 거부 (r2/r3 계약 유지)
