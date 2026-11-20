@@ -1,6 +1,6 @@
 name: read-path-remirror-109
 status: approved
-version: 6
+version: 7
 task_id: "20261118-162627-109a"
 # gh-loop worker Stage 2에 따라 이슈 #109 본문(F1~F4, AC 5개, 범위 밖)과 코디네이터 댓글 두 건
 # (2026-11-13 병합분 C2·C3·D5, 2026-11-18 추가분 아카이브 멤버 `?q=`·추가 AC)을 명세로 삼습니다.
@@ -14,11 +14,11 @@ goal: >
 constraints:
   - "over-strip(읽지 않은 파일을 읽은 것으로 기록)은 under-strip(유령 경로 → 거짓 차단)보다 나쁜 방향입니다. 업스트림과 다르게 둘 수밖에 없는 형태는 덜 벗기는 쪽으로 둡니다."
   - "업스트림 동작은 추측하지 않고 문서(omp://tools/read.md, xd://read/sources, omp://tools/write.md), v18.22.0 소스(`packages/tui/src/tools/read.ts`, `packages/coding-agent/src/tools/{read,read-archive,hashline-header-path}.ts`), 실제 도구 실측으로 확인합니다."
-  - "`readTarget(input, cwd)`은 결과의 details를 받는 `readTarget(input, details, cwd)`로 바뀌고 반환형(문자열, 기록할 것이 없으면 빈 문자열)은 그대로입니다. 이슈 AC의 `readTarget(...) → <cwd>/<file>`은 결과가 소스에 대해 아무것도 말하지 않는 경우의 문법 해석으로 검증합니다."
+  - "`readTarget(input, cwd)`은 결과의 details를 받는 `readTarget(input, details, cwd)`로 바뀌고 반환형(문자열, 기록할 것이 없으면 빈 문자열)은 그대로입니다. 이슈 AC의 `readTarget(...) → <cwd>/<file>`은 결과에 details가 아예 없는 경우의 문법 해석으로 검증하고, 실제 결과 형태는 종단 테스트(read-ledger-wiring)로 검증합니다."
   - "무엇을 읽었는지는 omp가 압니다 — 읽은 파일은 결과가 싣는 경로로 기록합니다. `details.meta.source`가 `path`일 때만 파일로 보고 `details.resolvedPath`(없으면 소스 값)를 씁니다. 입력을 `;`로 쪼개거나 omp의 디스크 의존 우선순위(리터럴 파일, 아카이브·SQLite 후보)를 재현하지 않습니다. 이슈 본문이 비교를 요청한 '결과의 경로 우선, 문자열 해석은 폴백' 안입니다(r1·r2 리뷰: 입력에서 추측한 두 설계가 모두 읽지 않은 파일을 기록했습니다)."
-  - "소스가 `path`가 아닌 결과와, 소스 없이 `resolvedPath`·`suffixResolution`만 실린 결과는 어떤 파일에도 귀속하지 않습니다. omp가 보고한 경로에는 입력 문법의 `?` 컷을 적용하지 않습니다(r3 리뷰 권고 두 가지, 2026-11-19 사용자 결정 A)."
+  - "details가 실린 결과 가운데 소스가 `path`인 것만 파일에 귀속합니다. 소스가 `path`가 아닌 결과, 소스 없이 `resolvedPath`·`suffixResolution`만 실린 결과, 소스에 대해 아무것도 말하지 않는 결과(문서 변환 실패의 `{fileSize}`)는 어떤 파일에도 귀속하지 않습니다. omp가 보고한 경로에는 입력 문법의 `?` 컷을 적용하지 않습니다(r3 리뷰 권고, 2026-11-19 사용자 결정 A; r6 뒤 2026-11-20 사용자 결정 B, nonce 1795065889-17454)."
   - "목록 읽기(`details.displayReadTargets`가 실린 결과)는 아무것도 기록하지 않습니다 — omp가 열기만 하고 보여 주지 않은 부분(`a.md:99999;b.md`)에도 링크를 실어 어느 부분의 내용이 표시됐는지 결과만으로 알 수 없고, 본문 헤더로 가려내는 안은 r4·r5 리뷰에서 계속 틈이 드러났습니다. 목록으로 읽은 파일은 단독으로 다시 읽어야 고칠 수 있으며 이는 #109 이전과 같은 결과입니다(목록 지원은 #150, 2026-11-19 사용자 결정 A, nonce 1795061063-30379)."
-  - "문법 폴백은 결과가 소스에 대해 아무것도 말하지 않을 때만 쓰고, 그 결과보다 긴 접두(`:`나 `?` 앞, 또는 문자열 전체)가 디스크에 있으면 아무것도 기록하지 않습니다."
+  - "문법 해석은 결과에 details가 아예 없을 때만 씁니다(2026-11-20 사용자 결정 B — r1·r2·r6의 결함이 모두 문법 추측 경로에서 나왔고 실제 세션에서 이 경로에 도달한 읽기가 없습니다). 그때도 해석 결과보다 긴 접두(`:`나 `?` 앞, 또는 문자열 전체)가 디스크에 있거나 입력이 4,096자를 넘어 전체를 확인할 수 없으면 아무것도 기록하지 않습니다(r6 high)."
   - "기준 버전 문구는 2026-11-13 AC 후보가 적은 18.18.6이 아니라 실제로 대조·실측한 18.22.0으로 적습니다(2026-11-18 댓글 §4가 기준 주소·버전 문구의 갱신을 지시)."
   - "버전 범프·태그·자동 머지·force-push는 하지 않습니다."
 acceptance_criteria:
@@ -44,21 +44,22 @@ out_of_scope:
   - "`edit.citationTags` 활성화 시의 `HASHLINE_HEADER` 재검(#10)."
   - "`~` 확장·`file://`·`www.` 대상·suffix 해석처럼 이번 감사가 지목하지 않은 기존 경로 형태."
   - "`write`의 컨테이너 대상(`arc.tar:member`, `db.sqlite:table[:key]`)을 컨테이너 파일로 게이트하는 것과 `edit` 직접 경로의 래퍼 언래핑 — r1 리뷰가 지목한 기존 결함으로 이슈 범위 밖입니다(후속 이슈 권고)."
+  - "`write` 게이트가 omp `expandPath`(`@/abs/file`)를 반영하지 않는 것 — r6 리뷰가 지목한 기존 결함입니다. 이 PR에서 고치지 않고 PR 본문의 기존 결함 목록에 적습니다(2026-11-20 사용자 결정: 후속 이슈는 머지 뒤 코디네이터가 만듭니다)."
 assumptions:
   - "시작 HEAD는 main d86a5e1(2026.91 범프)이고 `read-path.mjs`는 3dc461e 이후 변경이 없습니다."
   - "설치된 omp는 18.22.0이며 실측은 이 버전의 `read`/`write` 도구로 했습니다."
-  - "성공한 로컬 단일 `read` 결과는 읽은 파일의 절대 경로를 싣습니다 — 일반 텍스트는 `details.meta.source`(type `path`), 쿼리·SQLite·이미지·아카이브·suffix 해석은 `details.resolvedPath`와 path 소스에. 목록 결과는 `details.displayReadTargets`로 표시됩니다. omp 18.22.0 소스(`readDetailsLinkPath`)와 이 호스트의 최근 세션 기록을 최종 `readTarget`으로 재생해 확인했습니다(2026-11-19, 세션 파일 1,500개에서 입력과 짝지은 성공 read 결과 34,843건: path 소스 단일 읽기 27,139건 중 27,118건이 보고된 파일 그대로 기록되고 나머지 21건은 URL로 주소를 준 읽기라 기록 없음, 불일치 0건·예외 0건, 문법 폴백 도달 0건, 목록 99건과 path가 아닌 소스 7,571건은 기록 0건). JSON·PDF로 읽은 아카이브 멤버만 `<아카이브>:<멤버>`로 보고되고, 범위 밖 셀렉터 안내는 소스 없이 `resolvedPath`만 싣습니다(같은 재생에서 34건, 전부 'beyond end of file' 안내 — 내용을 보여 주지 않은 읽기)."
+  - "성공한 로컬 단일 `read` 결과는 읽은 파일의 절대 경로를 싣습니다 — 일반 텍스트는 `details.meta.source`(type `path`), 쿼리·SQLite·이미지·아카이브·suffix 해석은 `details.resolvedPath`와 path 소스에(PDF 페이지는 소스가 렌더한 스크린샷, `resolvedPath`가 PDF). 목록 결과는 `details.displayReadTargets`로 표시됩니다. omp 18.22.0 소스(`readDetailsLinkPath`, `#readPdfPageScreenshot`)와 이 호스트의 최근 세션 기록을 최종 `readTarget`으로 재생해 확인했습니다(2026-11-20, 세션 파일 1,500개에서 입력과 짝지은 성공 read 결과 34,853건: path 소스 단일 읽기 27,115건 중 27,097건이 보고된 파일 그대로 기록되고 나머지 18건은 URL로 주소를 준 읽기라 기록 없음, 불일치 0건·예외 0건, details가 없는 결과 0건, 소스 정보가 전혀 없는 details 0건, 목록 99건과 path가 아닌 소스 7,605건은 기록 0건). JSON·PDF로 읽은 아카이브 멤버만 `<아카이브>:<멤버>`로 보고되고, 범위 밖 셀렉터 안내는 소스 없이 `resolvedPath`만 싣습니다(같은 재생에서 34건, 전부 'beyond end of file' 안내 — 내용을 보여 주지 않은 읽기)."
   - "`v18.18.9`의 `parseXdUrl`은 확장 런타임 API라 node로 도는 `.mjs` 모듈·테스트에서 쓸 수 없어 스킴 allowlist를 유지합니다."
 risks:
-  - "셀렉터·컨테이너 확장자·스킴 목록은 omp 버전에 묶여 있습니다 — 새 형태는 유령 경로(거짓 차단)로 퇴화하므로 omp 업그레이드마다 재대조합니다."
+  - "스킴 목록은 omp 버전에 묶여 있습니다 — 새 스킴은 유령 경로로 퇴화하므로 omp 업그레이드마다 재대조합니다. 셀렉터·컨테이너 확장자 목록은 details 없는 결과의 문법 해석에만 쓰입니다."
   - "`readTarget`이 `existsSync`를 씁니다(보고된 `<아카이브>:<멤버>`를 아카이브로 줄일 때, 문법 폴백의 모호성 확인) — 모듈이 더는 순수 함수 층이 아닙니다(통합 계약 문서에 반영)."
-  - "읽기 추적은 omp 18.22.0의 결과 형태(`resolvedPath`·`meta.source`·`displayReadTargets`)에 묶여 있습니다 — 형태가 바뀌면 문법 폴백이나 '기록 없음'으로 퇴화합니다(둘 다 거짓 차단 방향). 단, 목록 표시(`displayReadTargets`)가 사라지고 소스 정보도 없으면 목록 입력이 문법 폴백으로 가 유령 경로 하나가 됩니다(이전과 같은 결과)."
+  - "읽기 추적은 omp 18.22.0의 결과 형태(`resolvedPath`·`meta.source`·`displayReadTargets`)에 묶여 있고 닫힌 쪽으로 실패합니다 — omp가 성공한 파일 읽기에 path 소스를 싣지 않게 바뀌면 읽기가 기록되지 않아 기존 파일의 edit/write가 모두 거짓 차단됩니다(읽지 않은 파일이 통과하는 방향은 아닙니다). omp 업그레이드 때 종단 테스트의 픽스처를 실제 결과와 다시 대조해야 합니다."
   - "업스트림 splitter와의 알려진 차이 두 가지: `:-N+C` 상위집합(AC 요구 — 로컬 read는 업스트림에서 오류라 추적되지 않음), 문서에 없는 `N:M` 목록 병합 미반영(덜 벗기는 방향)."
   - "목록 읽기 뒤의 edit/write는 여전히 거짓 차단됩니다(#109 이전과 같음) — #150이 닫힐 때까지 목록으로 읽은 파일은 단독으로 다시 읽어야 합니다."
   - "이 세션에 로드된 확장은 옛 코드입니다 — 실제 게이트 동작은 핸들러 테스트로 검증하고, 새 세션부터 적용됩니다."
 references:
   - path: https://github.com/rae-hugo-kim/pylon/issues/109
-    reason: 명세(F1~F4·AC·범위 밖)와 코디네이터 댓글 두 건(병합분·추가분), 결정 댓글 세 건
+    reason: 명세(F1~F4·AC·범위 밖)와 코디네이터 댓글 두 건(병합분·추가분), 결정 댓글 네 건
   - path: https://github.com/rae-hugo-kim/pylon/issues/150
     reason: 분리한 `;` 목록 지원
   - path: docs/handoff/handoff_2026-10-16_omp-18-11-1-friction-audit.md
