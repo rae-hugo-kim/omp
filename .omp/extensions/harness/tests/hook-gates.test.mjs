@@ -338,6 +338,63 @@ test('U9: pathspec commit exposes exactly the partial content to the gates', () 
   assert.match(r.stderr, /HARNESS BLOCK/);
 });
 
+// U9s (#61): acceptance Check 3 judges the scope by the index git hands the hook — the plain
+// index for `git commit`, the TEMPORARY index for `-a` / a pathspec — AND by the worktree file,
+// whichever is stricter (unchecked boxes > no usable record > every box checked).
+test('U9s: the scope is judged from the index the commit captures and from disk (plain, -a, pathspec, reverse)', () => {
+  const MET = '# Current Scope: fixture\n\n## Acceptance Criteria\n\n- [x] AC1 fixture criterion\n';
+  const UNMET = MET.replace('- [x]', '- [ ]');
+  const scope = (dir) => join(dir, 'docs', 'harness', 'current-scope.md');
+  const commit = (dir, ...args) => spawnSync('git', ['commit', ...args], { cwd: dir, encoding: 'utf-8', env: hermeticEnv() });
+  const headScope = (dir) => sh(dir, 'git', ['show', 'HEAD:docs/harness/current-scope.md']).stdout;
+
+  // Staged `- [ ]`, checked off on disk only: a plain commit carries the unmet copy -> blocked.
+  const dir = makeRepo();
+  installHook(dir);
+  passAcceptance(dir);
+  writeFileSync(join(dir, 'note.md'), 'a\n');
+  sh(dir, 'git', ['add', 'docs', 'note.md']);
+  sh(dir, 'git', ['commit', '-q', '-m', 'docs: base']);
+  writeFileSync(scope(dir), UNMET);
+  writeFileSync(join(dir, 'note.md'), 'b\n');
+  sh(dir, 'git', ['add', 'docs', 'note.md']);
+  writeFileSync(scope(dir), MET);
+  const before = head(dir);
+  const plain = commit(dir, '-m', 'docs: note');
+  assert.notEqual(plain.status, 0, `the staged unmet scope must block: ${plain.stderr}`);
+  assert.match(plain.stderr, /acceptance criteria not met/);
+  assert.equal(head(dir), before, 'HEAD must be unchanged');
+  // -a sweeps the checked worktree copy into the temporary index -> lands, and HEAD records it.
+  const all = commit(dir, '-a', '-m', 'docs: note');
+  assert.equal(all.status, 0, `-a commits the checked copy: ${all.stderr}`);
+  assert.equal(headScope(dir), MET);
+  // Reverse: HEAD and the index hold the checked scope, the worktree copy is unmet again -> blocked.
+  writeFileSync(scope(dir), UNMET);
+  writeFileSync(join(dir, 'note.md'), 'c\n');
+  sh(dir, 'git', ['add', 'note.md']);
+  const afterAll = head(dir);
+  const reverse = commit(dir, '-m', 'docs: note again');
+  assert.notEqual(reverse.status, 0, `an unmet scope on disk must block even when the staged copy is met: ${reverse.stderr}`);
+  assert.match(reverse.stderr, /acceptance criteria not met/);
+  assert.equal(head(dir), afterAll, 'HEAD must be unchanged');
+
+  // Pathspec commit: the temporary index holds HEAD's unmet scope, whatever is staged or on disk.
+  const partial = makeRepo();
+  installHook(partial);
+  mkdirSync(join(partial, 'docs', 'harness'), { recursive: true });
+  writeFileSync(scope(partial), UNMET);
+  writeFileSync(join(partial, 'note.md'), 'a\n');
+  sh(partial, 'git', ['add', 'docs', 'note.md']);
+  sh(partial, 'git', ['commit', '-q', '--no-verify', '-m', 'docs: base with an unmet scope']);
+  writeFileSync(scope(partial), MET);
+  sh(partial, 'git', ['add', 'docs']);                  // staged AND on disk: checked
+  writeFileSync(join(partial, 'note.md'), 'b\n');
+  const only = commit(partial, '-m', 'docs: note only', '--', 'note.md');
+  assert.notEqual(only.status, 0, `a pathspec commit leaves HEAD's unmet scope in place: ${only.stderr}`);
+  assert.match(only.stderr, /acceptance criteria not met/);
+  assert.equal(headScope(partial), UNMET);
+});
+
 // Hermetic shim environment (test-attack B-1 recipe): a bin dir with ONLY the named tools,
 // run through env -i — models a human/GUI commit with no session and a bare PATH.
 // The symlinks ARE the fixture here (the bare PATH is built from links to the real tools), so the

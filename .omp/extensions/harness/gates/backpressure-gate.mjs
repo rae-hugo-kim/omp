@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// backpressure-gate.mjs - PreToolUse hook for Bash (git commit)
+// backpressure-gate.mjs - commit gate: .githooks/pre-commit -> gates/commit-gates.mjs spawns it in hook mode (not an OMP `tool_call` hook; the `tool_input.command` path serves a standalone run and the tests)
 // Purpose: Block commits if build/test/lint not verified
 // Risk-aware: docs-only changes skip test requirement
 // Exit 0 = allow, Exit 2 = block
