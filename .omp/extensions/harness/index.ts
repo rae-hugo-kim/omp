@@ -618,7 +618,8 @@ export default function harness(pi: HarnessExtensionApi): void {
 		try {
 			const session_state = { cwd: ctx.cwd };
 			if (event.toolName === "read" && !event.isError) {
-				const filePath = readTarget(event.input, ctx.cwd);
+				// The file comes from the RESULT (omp reports what it read), not from the input string.
+				const filePath = readTarget(event.input, event.details, ctx.cwd);
 				if (filePath) await runGate("read-tracker.mjs", { tool_name: "Read", tool_input: { file_path: filePath }, session_state });
 				return;
 			}
