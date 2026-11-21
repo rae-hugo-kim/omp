@@ -38,7 +38,7 @@ function session(t, files) {
 /** Distinct read-log entries (read-tracker logs each path raw AND slash-normalised). */
 const readLog = (root) => {
   const p = join(root, '.omp', 'harness-state', 'read-log.txt');
-  return existsSync(p) ? [...new Set(readFileSync(p, 'utf8').split('\n').filter(Boolean))] : [];
+  return existsSync(p) ? [...new Set(readFileSync(p, 'utf8').split('\n').filter((l) => l && !l.startsWith('#origin ')))] : [];
 };
 const readEvent = (root, path, details) =>
   result({ toolName: 'read', input: { path }, isError: false, details, content: [{ type: 'text', text: '1:x' }] }, ctxFor(root));
