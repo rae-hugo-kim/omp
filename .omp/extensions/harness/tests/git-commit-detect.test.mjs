@@ -427,7 +427,8 @@ test('commitTargetDir: ONE literal cd into an existing directory is followed; an
     mkdirSync(wt);
     mkdirSync(other);
     for (const cmd of ['cd wt && git commit -m x', 'cd wt; git commit -m x', 'cd wt && git add -A && git commit -m x | tail -3',
-                       `cd ${wt} && git commit -m x`, "bash -c 'cd wt && git commit -m x'", 'command cd wt && git commit']) {
+                       `cd ${wt} && git commit -m x`, "bash -c 'cd wt && git commit -m x'", 'command cd wt && git commit',
+                       'builtin cd wt; git commit']) {
       assert.equal(commitTargetDir(cmd, root), wt, cmd);
     }
     assert.equal(commitTargetDir('cd wt && git -C ../other commit -m x', root), other, '-C resolves from the cd target');

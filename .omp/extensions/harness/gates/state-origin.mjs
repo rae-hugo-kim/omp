@@ -21,26 +21,35 @@ import { dirname, join } from 'path';
 
 const LEDGER_ORIGIN = '#origin ';
 
+/** The physical path evidence is bound to, or null when that path contains a line break. Both
+ *  files are line-based, so such a path would spill onto a line of its own — one that can read
+ *  as ANOTHER directory's origin. A directory like that therefore holds no evidence: nothing is
+ *  recorded in its ledger, and its status carries no origin (never a PASS, still a FAIL). */
 function origin(cwd) {
-  try { return realpathSync.native(cwd); } catch { return cwd; }
+  let dir = cwd;
+  try { dir = realpathSync.native(cwd); } catch { /* keep the spelling given */ }
+  return /[\r\n]/.test(dir) ? null : dir;
 }
 const statePath = (cwd, name) => join(cwd, '.omp', 'harness-state', name);
 
 /** The ledger as `cwd` may trust it: `entries` are the lines of the sections opened for this
  *  directory. Lines before any origin line (a pre-#111 ledger) or under another origin (a clone)
- *  are not entries. `opener` is what a writer must append first so that its lines land in a
- *  section of its own — empty when the last section already is. */
+ *  are not entries. `opener` is what a writer must append first so that its lines start on a
+ *  line of their own, inside a section of its own — or null when `cwd` can hold no evidence. */
 function loadLedger(cwd) {
+  const dir = origin(cwd);
+  if (dir === null) return { entries: new Set(), opener: null };
   let text = '';
   try { text = readFileSync(statePath(cwd, 'read-log.txt'), 'utf-8'); } catch { /* missing or unreadable: no entries */ }
-  const header = LEDGER_ORIGIN + origin(cwd);
+  const header = LEDGER_ORIGIN + dir;
   const entries = new Set();
   let own = false;
   for (const line of text.split('\n')) {
     if (line.startsWith(LEDGER_ORIGIN)) own = line === header;
     else if (own && line) entries.add(line);
   }
-  return { entries, opener: own ? '' : `${text && !text.endsWith('\n') ? '\n' : ''}${header}\n` };
+  const gap = text && !text.endsWith('\n') ? '\n' : '';          // a last line cut off mid-write
+  return { entries, opener: gap + (own ? '' : `${header}\n`) };
 }
 
 /** Paths recorded as read or written for `cwd` (read-log.txt). Empty when the ledger is missing,
@@ -56,6 +65,7 @@ export function readLedger(cwd) {
  *  break is not recorded: it would write ledger lines of its own, an `#origin` line included. */
 export function recordReads(cwd, paths) {
   const { entries: seen, opener } = loadLedger(cwd);
+  if (opener === null) return;
   let out = '';
   for (const p of paths) {
     if (/[\r\n]/.test(p)) continue;
@@ -93,5 +103,5 @@ export function readBackpressure(cwd) {
 export function writeBackpressure(cwd, status) {
   const file = statePath(cwd, 'backpressure-status');
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, `${status}\n${origin(cwd)}\n`);
+  writeFileSync(file, `${status}\n${origin(cwd) ?? ''}\n`);
 }

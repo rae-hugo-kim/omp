@@ -17,11 +17,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { crossRepoMutationVerdict } from '../gates/cross-repo.mjs';
-import { readLedger } from '../gates/state-origin.mjs';
+import { readBackpressure, readLedger } from '../gates/state-origin.mjs';
 import { skipUnless } from './helpers/capabilities.mjs';
 import { mkdtempReal } from './helpers/real-tmpdir.mjs';
 
@@ -154,13 +154,51 @@ test('recording over a cloned ledger only appends, so trackers running at once c
 
 test('a path with a line break cannot write ledger lines of its own, an origin line included', (t) => {
   const { root, A, B } = fixture(t);
+  const plain = join(root, 'plain.ts'), good = join(root, 'good.ts');
   const smuggled = join(root, 'smuggled.ts'), shared = join(root, 'shared.ts');
-  recordRead(A, join(root, 'plain.ts'));
+  recordRead(A, plain);
   recordRead(A, `${join(root, 'x')}\n${smuggled}`);
   recordRead(A, `${join(root, 'y')}\n#origin ${B}\n${shared}`);
-  assert.equal(readLedger(A).has(smuggled), false, 'not an entry where it was recorded');
+  assert.equal(hook('read-tracker.mjs', A, { file_paths: [`${join(root, 'z')}\n${smuggled}`, good] }).status, 0);
+  const ledger = readLedger(A);
+  assert.deepEqual([ledger.has(plain), ledger.has(good)], [true, true], 'plain paths, alone or beside a refused one, are recorded');
+  assert.equal(ledger.has(smuggled), false, 'not an entry where it was recorded');
   clone(A, B);
   assert.equal(readLedger(B).has(shared), false, 'and not a section opened for the clone');
+});
+
+test('appending to a ledger whose last line was cut off does not glue the new entry onto it', (t) => {
+  const { A } = fixture(t);
+  recordRead(A, 'C:\\proj\\a.ts');                              // stored as given and as /proj/a.ts
+  const log = join(stateDir(A), 'read-log.txt');
+  writeFileSync(log, readFileSync(log, 'utf8').trimEnd());      // the final newline never reached the disk
+  recordRead(A, 'C:\\proj\\b.ts');
+  assert.deepEqual([...readLedger(A)].sort(), ['/proj/a.ts', '/proj/b.ts', 'C:\\proj\\a.ts', 'C:\\proj\\b.ts']);
+});
+
+const NO_LINE_BREAK_NAMES = process.platform === 'win32' && 'a directory name cannot contain a line break on Windows';
+
+test('a ledger written from a directory whose path holds a line break opens no section for another directory', { skip: NO_LINE_BREAK_NAMES }, (t) => {
+  const { root, B } = fixture(t);
+  const shared = join(root, 'shared.ts');
+  writeFileSync(shared, 'export const y = 1;\n');
+  const forged = `${join(root, 'x')}\n#origin ${B}`;            // its origin header would end in a line reading `#origin <B>`
+  mkdirSync(forged, { recursive: true });
+  recordRead(forged, shared);
+  if (existsSync(stateDir(forged))) clone(forged, B);
+  assert.equal(editGate(B, shared).status, 2, 'B has not read the file');
+});
+
+test('a status written from a directory whose path holds a line break is nobody\'s PASS, and still its own FAIL', { skip: NO_LINE_BREAK_NAMES }, (t) => {
+  const { B } = fixture(t);
+  const twin = `${B}\nold`;                                     // line 2 of its status file would read `<B>`
+  mkdirSync(twin);
+  recordPass(twin);
+  assert.equal(readBackpressure(twin).status, null, 'such a directory cannot hold a PASS');
+  clone(twin, B);
+  assert.equal(commitGate(B).status, 2, 'and B cannot inherit one from it');
+  assert.equal(hook('backpressure-failure-tracker.mjs', twin, { command: 'npm test' }).status, 0);
+  assert.equal(readBackpressure(twin).status, 'FAIL', 'a failed verification there still stands');
 });
 
 test('a cloned ledger does not prove the other repo\'s discipline file was read (cross-repo guard)', (t) => {
