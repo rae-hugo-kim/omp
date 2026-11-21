@@ -1,7 +1,6 @@
 name: worktree-clone-state-origin-111
-status: done
-completed: 2026-11-19
-version: 1
+status: approved
+version: 3
 task_id: "20261118-164328-111a"
 # gh-loop worker Stage 2에 따라 이슈 #111 본문(마찰 지점 F8·F9, 해결 방향, AC 4개)을 명세로 삼습니다.
 # 이슈 본문이 사용자 승인 명세이므로 처음부터 approved로 씁니다. 직전 완료 seed(bootstrap-source-only-skills-134)는 git 이력에 보존합니다.
@@ -24,6 +23,8 @@ acceptance_criteria:
     title: "harness-harness_integration_contract.md에 CoW 복제·worktree.onStart 주의가 기록됩니다."
   - id: AC4
     title: "node --test .omp/extensions/harness/tests/*.test.mjs 전 항목이 통과합니다."
+  - id: AC5
+    title: "리뷰 r3 지적(사용자 결정 B, 2026-11-21)이 반영됩니다: 워크트리 경로 자체에 줄바꿈이 있으면 그 디렉터리의 증거가 다른 경로의 것으로 읽히지 않고(회귀 테스트), 통합 계약의 backpressure-gate 요약이 '남의 FAIL은 계속 차단'과 일치하며, 개행 없이 끝난 장부에 덧붙여도 항목이 온전하고(테스트), 줄바꿈 경로 테스트에 양성 대조가 있고, builtin cd 형태의 commitTargetDir 동작이 테스트로 고정됩니다."
 out_of_scope:
   - "#51(같은 워크트리 서브에이전트의 harness-state 오염) — 같은 경로 안의 세션 격리라 경로 결속과 축이 다릅니다."
   - "경로를 담지 않는 일회성 플래그(commit-wip, docs/harness/*-skip, acceptance-done)와 cycle-estimate·session-log.jsonl의 복제 방어 — 통합 계약 잔존면으로 기록만 합니다."
