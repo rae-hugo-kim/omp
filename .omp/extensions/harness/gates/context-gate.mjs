@@ -5,6 +5,7 @@
 
 import { readFileSync, existsSync, appendFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import { readLedger } from './state-origin.mjs';
 
 const input = readFileSync(0, 'utf-8');
 
@@ -45,17 +46,8 @@ if (!existsSync(filePath)) {
 }
 
 const normalizedPath = filePath.replace(/^[A-Za-z]:/, '').replace(/\\/g, '/');
-const readLogPath = join(stateDir, 'read-log.txt');
-
-if (!existsSync(readLogPath)) {
-  log('No read log, blocking');
-  console.error(`HARNESS BLOCK: You must read '${filePath}' before editing it.`);
-  process.exit(2);
-}
-
-const readLog = readFileSync(readLogPath, 'utf-8');
-
-const readPaths = new Set(readLog.split('\n').map(l => l.trim()).filter(Boolean));
+// Empty when the ledger is missing or was recorded for another worktree (a CoW clone, #111).
+const readPaths = readLedger(cwd);
 if (readPaths.has(filePath) || readPaths.has(normalizedPath)) {
   log('File was read, allowing');
   process.exit(0);

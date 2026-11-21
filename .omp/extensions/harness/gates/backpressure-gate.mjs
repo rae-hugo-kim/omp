@@ -8,6 +8,7 @@ import { readFileSync, existsSync, appendFileSync, mkdirSync, unlinkSync, writeF
 import { join } from 'path';
 import { assessRisk } from './risk-assess.mjs';
 import { isGitCommit, parseCommitForm } from './git-commit-detect.mjs';
+import { readBackpressure } from './state-origin.mjs';
 
 const input = readFileSync(0, 'utf-8');
 
@@ -86,9 +87,12 @@ if (risk.level === 'unknown') {
   process.exit(2);
 }
 
-const statusFile = join(stateDir, 'backpressure-status');
+// The status recorded for THIS worktree. A file recorded for another one (a CoW worktree clone
+// copies `.omp/harness-state/`, #111) or by a pre-#111 writer is no verification at all.
+const { status, foreign } = readBackpressure(cwd);
 
-if (!existsSync(statusFile)) {
+if (status === null) {
+  if (foreign) console.error('HARNESS NOTE: .omp/harness-state/backpressure-status was recorded for another worktree (or by an older harness) and is ignored.');
   if (risk.level === 'critical' || risk.level === 'high') {
     log('No status file + high risk, blocking');
     console.error('HARNESS BLOCK: No build/test verification for high-risk changes.');
@@ -100,7 +104,6 @@ if (!existsSync(statusFile)) {
   process.exit(0);
 }
 
-const status = readFileSync(statusFile, 'utf-8').trim();
 log(`Status: ${status}`);
 
 if (status === 'PASS') {

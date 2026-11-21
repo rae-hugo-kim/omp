@@ -16,13 +16,14 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, rmSync, writeFileSync, appendFileSync, symlinkSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync, symlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, posix, win32 } from 'node:path';
 import { physicalResolve, repoIdentity, repoToplevel } from '../gates/repo-root.mjs';
 import { absolutize, shellWriteTargets, isGitPush } from '../gates/git-commit-detect.mjs';
 import { crossRepoBashVerdict, crossRepoMutationVerdict } from '../gates/cross-repo.mjs';
+import { recordReads } from '../gates/state-origin.mjs';
 import { loadHarness, ctxFor } from './helpers/harness-handlers.mjs';
 import { mkdtempReal } from './helpers/real-tmpdir.mjs';
 import { hasCapability, skipUnless } from './helpers/capabilities.mjs';
@@ -51,10 +52,7 @@ async function withFixture(fn) {
     const vault = repo(root, 'vault', { 'note.md': 'n\n' });
     const worktree = join(root, 'card');
     git(session, 'worktree', 'add', '-q', worktree, '-b', 'card');
-    const markRead = (file) => {
-      mkdirSync(join(session, '.omp', 'harness-state'), { recursive: true });
-      appendFileSync(join(session, '.omp', 'harness-state', 'read-log.txt'), `${file}\n`);
-    };
+    const markRead = (file) => recordReads(session, [file]);
     return await fn({ root, session, external, vault, worktree, markRead });
   } finally {
     rmSync(root, { recursive: true, force: true });

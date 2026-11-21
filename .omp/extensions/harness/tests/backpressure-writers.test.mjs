@@ -27,9 +27,10 @@ const INVALIDATOR = join(HOOKS, 'backpressure-invalidator.mjs');
 const FAILURE = join(HOOKS, 'backpressure-failure-tracker.mjs');
 
 const stateDir = (dir) => join(dir, '.omp', 'harness-state');
+// Line 1 is the status; line 2 names the directory it was recorded for (state-origin.mjs).
 const statusOf = (dir) => {
   const f = join(stateDir(dir), 'backpressure-status');
-  return existsSync(f) ? readFileSync(f, 'utf-8').trim() : null;
+  return existsSync(f) ? readFileSync(f, 'utf-8').split('\n')[0] : null;
 };
 const lastFailOf = (dir) => {
   const f = join(stateDir(dir), 'backpressure-last-fail');

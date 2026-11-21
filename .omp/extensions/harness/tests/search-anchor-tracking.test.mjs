@@ -82,7 +82,7 @@ test('read-tracker: non-string / empty batch entries are skipped, empty batch is
     const ok = join(cwd, 'ok.ts');
     run(READ_TRACKER, { tool_input: { file_paths: ['', null, 42, ok] }, session_state: { cwd } }, cwd);
     const lines = readLog(cwd).split('\n').filter(Boolean);
-    assert.deepEqual(lines, [ok, ok], 'only the valid entry (raw + normalized) may be logged');
+    assert.deepEqual(lines.slice(1), [ok, ok], 'after the origin header, only the valid entry (raw + normalized) may be logged');
     const before = readLog(cwd);
     run(READ_TRACKER, { tool_input: { file_paths: [] }, session_state: { cwd } }, cwd);
     assert.equal(readLog(cwd), before, 'an empty batch must write nothing');

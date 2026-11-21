@@ -5,6 +5,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, appendFileSync } from 'fs';
 import { join } from 'path';
 import { classifyVerification } from './backpressure-patterns.mjs';
+import { writeBackpressure } from './state-origin.mjs';
 
 const input = readFileSync(0, 'utf-8');
 
@@ -49,7 +50,6 @@ if (isVerification && !passReliable) {
 }
 
 if (isVerification && passReliable) {
-  const statusFile = join(stateDir, 'backpressure-status');
   const now = new Date();
   const timeStr = now.toTimeString().substring(0, 5);
 
@@ -77,7 +77,7 @@ if (isVerification && passReliable) {
   history.lastTime = now.toISOString();
 
   writeFileSync(historyFile, JSON.stringify(history, null, 2));
-  writeFileSync(statusFile, 'PASS');
+  writeBackpressure(cwd, 'PASS');
   try { unlinkSync(join(stateDir, 'backpressure-last-fail')); } catch {}
 
   log(`Added to history: ${JSON.stringify(run)}`);

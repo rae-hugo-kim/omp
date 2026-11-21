@@ -55,7 +55,7 @@ If none of these name a source doc → mark coverage **SKIP (no source doc)** an
 ### Step 4: Harness Gate Status
 Check harness state files:
 ```bash
-cat .omp/harness-state/backpressure-status    # Should be "PASS"
+cat .omp/harness-state/backpressure-status    # Line 1 should be "PASS"; line 2 must be this worktree's path
 cat .omp/harness-state/test-history.json      # Recent test/build/lint runs
 ```
 If backpressure-status ≠ PASS, run the missing verification:

@@ -4,8 +4,9 @@
 // Code files: .ts .tsx .js .jsx .mjs .cjs .py .go .rs .java .rb .php .sql .sh
 // Non-code files (.md .txt .json .yaml etc.) do NOT reset status
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, appendFileSync } from 'fs';
+import { readFileSync, mkdirSync, existsSync, appendFileSync } from 'fs';
 import { join, extname } from 'path';
+import { writeBackpressure } from './state-origin.mjs';
 
 const CODE_EXTENSIONS = new Set([
   '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
@@ -54,8 +55,7 @@ if (!CODE_EXTENSIONS.has(ext)) {
 
 log(`Code file edited (${ext}), resetting backpressure-status to UNKNOWN`);
 
-const statusFile = join(stateDir, 'backpressure-status');
-writeFileSync(statusFile, 'UNKNOWN');
+writeBackpressure(cwd, 'UNKNOWN');
 
 log('backpressure-status reset to UNKNOWN');
 process.exit(0);

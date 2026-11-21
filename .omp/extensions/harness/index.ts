@@ -234,9 +234,11 @@ async function snapshotHead(event: ToolCallEvent, command: string, sessionCwd: s
 	HEAD_SNAPSHOTS.delete(event.toolCallId); // a reused id must never consume an orphaned entry
 	if (event.input?.async === true) return; // the result never carries a verdict
 	// Unnormalized join: realpath inside commitTargetDir must see `link/..` before `..` is folded.
+	// Same command, cwd and env the cross-repo guard judged a moment ago (tool_call handler).
 	const cwdInput = typeof event.input?.cwd === "string" ? event.input.cwd : "";
 	const toolCwd = !cwdInput ? sessionCwd : isAbsolute(cwdInput) ? cwdInput : `${sessionCwd}/${cwdInput}`;
-	const dir = commitTargetDir(command, toolCwd);
+	const toolEnv = event.input?.env && typeof event.input.env === "object" ? (event.input.env as Record<string, string>) : undefined;
+	const dir = commitTargetDir(command, toolCwd, toolEnv);
 	if (!dir) return; // unresolvable target: the result falls back to the exit code
 	const head = await readHead(dir);
 	if (head === undefined) return; // not a repo / git unavailable: nothing to compare against
@@ -653,7 +655,7 @@ export default function harness(pi: HarnessExtensionApi): void {
 				const tracker = bashRunFailed(event) ? "backpressure-failure-tracker.mjs" : "backpressure-tracker.mjs";
 				await trackBackpressure(tracker, { command }, target);
 				// A commit "succeeded" only if the repo it targeted gained a commit; without a
-				// snapshot (unresolvable target, e.g. `cd x && git commit`) the exit code decides.
+				// snapshot (no single trusted target, e.g. commits into two repos) the exit code decides.
 				const commit = isGitCommit(command) ? await commitOutcome(event) : null;
 				const landed = commit ? (commit.landed ?? !bashRunFailed(event)) : false;
 				await runGate("breadcrumb-tracker.mjs", {

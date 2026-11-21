@@ -18,6 +18,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeBackpressure } from '../gates/state-origin.mjs';
 
 const GATE = join(dirname(fileURLToPath(import.meta.url)), '..', 'gates', 'backpressure-gate.mjs');
 
@@ -47,11 +48,7 @@ function makeRepo(files) {
 
 // Write the status file AFTER staging so it stays untracked (it must not perturb assessRisk, which
 // only counts staged/tracked-modified files; the gate reads it directly).
-function setStatus(dir, status) {
-  const sd = join(dir, '.omp', 'harness-state');
-  mkdirSync(sd, { recursive: true });
-  writeFileSync(join(sd, 'backpressure-status'), status);
-}
+const setStatus = writeBackpressure;
 
 function runGate(dir, command = 'git commit -m x') {
   return spawnSync('node', [GATE], {

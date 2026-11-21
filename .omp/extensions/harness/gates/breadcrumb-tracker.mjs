@@ -35,9 +35,9 @@ function entry() {
     // PASS/FAIL in this log: the agent must rerun a backgrounded verification in the
     // foreground for backpressure to see it. `landed: false` means the target repo gained no
     // commit — a gate-blocked (or no-op) commit, whatever the shell exit said (#48-6) — so no
-    // hash is recorded. Without `landed` the target repo could not be resolved (`cd x && git
-    // commit`, `$VAR` in -C …): the exit code decides FAIL vs UNVERIFIED, and NO hash is
-    // guessed — the session cwd's HEAD is exactly the #22 misattribution.
+    // hash is recorded. Without `landed` the call had no single trusted target (commits into
+    // two repos, a git error at snapshot …): the exit code decides FAIL vs UNVERIFIED, and NO
+    // hash is guessed — the session cwd's HEAD is exactly the #22 misattribution.
     if (isGitCommit(command)) {
       const cmd = command.slice(0, 80);
       if (input.pending) return { kind: 'commit', result: 'PENDING', cmd };

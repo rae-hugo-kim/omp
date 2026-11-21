@@ -140,7 +140,7 @@ cd <existing-project>
 
 ## Harness
 
-Mechanisms that operate automatically in the kickoff → startdev flow. There are two enforcement points: **the commit gates run from a git hook (`.githooks/pre-commit`)**, everything else is wired to OMP events by the extension `index.ts`. The gate CLIs are stdin-JSON programs in `.omp/extensions/harness/gates/` (24):
+Mechanisms that operate automatically in the kickoff → startdev flow. There are two enforcement points: **the commit gates run from a git hook (`.githooks/pre-commit`)**, everything else is wired to OMP events by the extension `index.ts`. The gate CLIs are stdin-JSON programs in `.omp/extensions/harness/gates/` (25):
 
 | OMP event | Gate | Role |
 |-----------|------|------|

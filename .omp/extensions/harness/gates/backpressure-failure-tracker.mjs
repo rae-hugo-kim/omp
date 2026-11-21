@@ -12,6 +12,7 @@
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { classifyVerification } from './backpressure-patterns.mjs';
+import { writeBackpressure } from './state-origin.mjs';
 
 const input = readFileSync(0, 'utf-8');
 
@@ -41,11 +42,10 @@ log(`Command: ${command}`);
 log(`Is verification: ${isVerification}, type: ${type}`);
 
 if (isVerification) {
-  const statusFile = join(stateDir, 'backpressure-status');
   const failFile = join(stateDir, 'backpressure-last-fail');
   const short = command.length > 80 ? command.substring(0, 80) + '...' : command;
 
-  writeFileSync(statusFile, 'FAIL');
+  writeBackpressure(cwd, 'FAIL');
   writeFileSync(failFile, `${type}: ${short}`);
   log(`Recorded FAIL (${type}): ${short}`);
 }

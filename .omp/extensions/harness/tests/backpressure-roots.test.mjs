@@ -9,21 +9,18 @@ import { fileURLToPath } from 'node:url';
 import { loadHarness, ctxFor } from './helpers/harness-handlers.mjs';
 import { mkdtempReal } from './helpers/real-tmpdir.mjs';
 import { repoIdentity } from '../gates/repo-root.mjs';
+import { readBackpressure, writeBackpressure } from '../gates/state-origin.mjs';
 import { skipUnless } from './helpers/capabilities.mjs';
 
 const gate = join(dirname(fileURLToPath(import.meta.url)), '..', 'gates', 'backpressure-gate.mjs');
 const { handlers } = await loadHarness();
 const result = handlers.tool_result[0];
 const state = (dir) => join(dir, '.omp', 'harness-state');
-const status = (dir) => existsSync(join(state(dir), 'backpressure-status'))
-  ? readFileSync(join(state(dir), 'backpressure-status'), 'utf8') : null;
+const status = (dir) => readBackpressure(dir).status;
 const snapshot = (dir) => Object.fromEntries(['backpressure-status', 'backpressure-last-fail', 'test-history.json']
   .filter((name) => existsSync(join(state(dir), name)))
   .map((name) => [name, readFileSync(join(state(dir), name), 'utf8')]));
-const seed = (dir, value) => {
-  mkdirSync(state(dir), { recursive: true });
-  writeFileSync(join(state(dir), 'backpressure-status'), value);
-};
+const seed = writeBackpressure;
 function git(dir, ...args) {
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_')));
   const r = spawnSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', '-c', 'core.hooksPath=/dev/null', ...args], { cwd: dir, env, encoding: 'utf8' });

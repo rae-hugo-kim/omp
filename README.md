@@ -140,7 +140,7 @@ cd <기존-프로젝트>
 
 ## 하네스
 
-kickoff → startdev 흐름에서 자동으로 작동하는 장치들. 집행 지점은 두 곳입니다 — **커밋 게이트는 git 훅(`.githooks/pre-commit`)** 에서, 나머지는 OMP 확장 `index.ts`가 이벤트에 배선합니다. 게이트 CLI는 `.omp/extensions/harness/gates/` (24)에 있는 stdin-JSON 프로그램입니다:
+kickoff → startdev 흐름에서 자동으로 작동하는 장치들. 집행 지점은 두 곳입니다 — **커밋 게이트는 git 훅(`.githooks/pre-commit`)** 에서, 나머지는 OMP 확장 `index.ts`가 이벤트에 배선합니다. 게이트 CLI는 `.omp/extensions/harness/gates/` (25)에 있는 stdin-JSON 프로그램입니다:
 
 | OMP 이벤트 | 게이트 | 역할 |
 |-----------|--------|------|
